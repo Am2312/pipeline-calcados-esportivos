@@ -566,12 +566,14 @@ def load_netshoes_to_bq(rows):
 
     client = get_bq_client()
 
-    result = list(client.query(f"SELECT COUNT(*) as cnt FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result())
-    existing = result[0].cnt if result else 0
-
-    if existing > 0:
-        print(f"\n[BQ Netshoes] Partição {TODAY_STR} já existe com {existing} linhas — deletando...")
-        client.query(f"DELETE FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result()
+    try:
+        result = list(client.query(f"SELECT COUNT(*) as cnt FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result())
+        existing = result[0].cnt if result else 0
+        if existing > 0:
+            print(f"\n[BQ Netshoes] Partição {TODAY_STR} já existe com {existing} linhas — deletando...")
+            client.query(f"DELETE FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result()
+    except Exception:
+        pass  # Tabela ainda não existe na primeira execução
 
     job_config = bigquery.LoadJobConfig(
         write_disposition="WRITE_APPEND",
