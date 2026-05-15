@@ -559,6 +559,25 @@ def scrape_netshoes():
     return rows
 
 
+NS_SCHEMA = [
+    bigquery.SchemaField("date", "DATE"),
+    bigquery.SchemaField("source", "STRING"),
+    bigquery.SchemaField("brand", "STRING"),
+    bigquery.SchemaField("sku", "STRING"),
+    bigquery.SchemaField("product_code", "STRING"),
+    bigquery.SchemaField("name", "STRING"),
+    bigquery.SchemaField("department", "STRING"),
+    bigquery.SchemaField("product_type", "STRING"),
+    bigquery.SchemaField("list_price", "FLOAT64"),
+    bigquery.SchemaField("sale_price", "FLOAT64"),
+    bigquery.SchemaField("pct_discount", "FLOAT64"),
+    bigquery.SchemaField("is_available", "INT64"),
+    bigquery.SchemaField("review_stars", "FLOAT64"),
+    bigquery.SchemaField("review_count", "INT64"),
+    bigquery.SchemaField("product_url", "STRING"),
+]
+
+
 def load_netshoes_to_bq(rows):
     if not rows:
         print("\n[BQ Netshoes] Nenhum dado para carregar.")
@@ -566,6 +585,11 @@ def load_netshoes_to_bq(rows):
 
     client = get_bq_client()
 
+    # Cria a tabela se não existir
+    table_ref = bigquery.Table(NS_TABLE, schema=NS_SCHEMA)
+    client.create_table(table_ref, exists_ok=True)
+
+    # Remove partição de hoje se já existir
     try:
         result = list(client.query(f"SELECT COUNT(*) as cnt FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result())
         existing = result[0].cnt if result else 0
@@ -573,27 +597,11 @@ def load_netshoes_to_bq(rows):
             print(f"\n[BQ Netshoes] Partição {TODAY_STR} já existe com {existing} linhas — deletando...")
             client.query(f"DELETE FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result()
     except Exception:
-        pass  # Tabela ainda não existe na primeira execução
+        pass
 
     job_config = bigquery.LoadJobConfig(
         write_disposition="WRITE_APPEND",
-        schema=[
-            bigquery.SchemaField("date", "DATE"),
-            bigquery.SchemaField("source", "STRING"),
-            bigquery.SchemaField("brand", "STRING"),
-            bigquery.SchemaField("sku", "STRING"),
-            bigquery.SchemaField("product_code", "STRING"),
-            bigquery.SchemaField("name", "STRING"),
-            bigquery.SchemaField("department", "STRING"),
-            bigquery.SchemaField("product_type", "STRING"),
-            bigquery.SchemaField("list_price", "FLOAT64"),
-            bigquery.SchemaField("sale_price", "FLOAT64"),
-            bigquery.SchemaField("pct_discount", "FLOAT64"),
-            bigquery.SchemaField("is_available", "INT64"),
-            bigquery.SchemaField("review_stars", "FLOAT64"),
-            bigquery.SchemaField("review_count", "INT64"),
-            bigquery.SchemaField("product_url", "STRING"),
-        ],
+        schema=NS_SCHEMA,
     )
 
     job = client.load_table_from_json(rows, NS_TABLE, job_config=job_config)
