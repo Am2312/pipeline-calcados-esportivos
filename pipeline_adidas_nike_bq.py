@@ -224,6 +224,86 @@ def scrape_nike_direct():
     print(f"  Total Nike: {len(rows)} SKUs únicos")
     return rows
 
+# ── Asics: VTEX Intelligent Search ───────────────────────────────────────────
+
+ASICS_SEARCH_URL = "https://www.asics.com.br/api/io/_v/api/intelligent-search/product_search"
+
+HEADERS_ASICS = {
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    "Accept": "application/json",
+    "Accept-Language": "pt-BR,pt;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.asics.com.br/",
+}
+
+def extract_asics_sport(categories):
+    if not categories:
+        return None
+    longest = max(categories, key=len)
+    parts = [p for p in longest.strip("/").split("/") if p]
+    # /Calçados/Corrida/ → ["Calçados","Corrida"] → parts[1]
+    return parts[1] if len(parts) >= 2 else (parts[-1] if parts else None)
+
+def scrape_asics():
+    print("\n[ASICS] Coletando asics.com.br (calcados)...")
+    rows = []
+    seen = set()
+
+    r0 = session.get(f"{ASICS_SEARCH_URL}?facets=categoria%2Fcalcados&count=1",
+                     headers=HEADERS_ASICS, impersonate="safari17_0", timeout=20)
+    total = r0.json().get("recordsFiltered", 0)
+    total_pages = -(-total // 48)
+    print(f"  Total: {total} produtos | {total_pages} páginas")
+
+    for page_num in range(1, total_pages + 1):
+        url = f"{ASICS_SEARCH_URL}?facets=categoria%2Fcalcados&count=48&page={page_num}"
+        try:
+            r = session.get(url, headers=HEADERS_ASICS, impersonate="safari17_0", timeout=20)
+            if r.status_code != 200:
+                print(f"  ERRO página {page_num}: HTTP {r.status_code}")
+                break
+            products = r.json().get("products", [])
+        except Exception as e:
+            print(f"  ERRO página {page_num}: {e}")
+            break
+
+        for item in products:
+            pid = item.get("productId")
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            pr = item.get("priceRange", {})
+            list_p = (pr.get("listPrice") or {}).get("lowPrice")
+            sale_p = (pr.get("sellingPrice") or {}).get("lowPrice")
+            if not sale_p:
+                continue
+            list_p = list_p or sale_p
+            disc = round((list_p - sale_p) / list_p, 4) if list_p > sale_p else 0.0
+            rows.append({
+                "date": TODAY_STR,
+                "source": "asics_direct",
+                "brand_name": "Asics",
+                "sport": extract_asics_sport(item.get("categories")),
+                "division": "Calçados",
+                "grandparent_id": pid,
+                "parent_id": item.get("productReference"),
+                "parent_name": item.get("productName"),
+                "parent_url": f"https://www.asics.com.br{item.get('link', '')}",
+                "child_list_price": list_p,
+                "child_sale_price": sale_p,
+                "child_pct_discount": disc,
+                "child_is_available": 1 if sale_p and sale_p > 0 else 0,
+                "rating": None,
+                "rating_count": None,
+            })
+
+        if page_num % 10 == 0:
+            print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs até agora")
+        time.sleep(0.3)
+
+    print(f"  Total Asics: {len(rows)} SKUs únicos")
+    return rows
+
 # ── Under Armour: VTEX Intelligent Search ────────────────────────────────────
 
 UA_SEARCH_URL = "https://www.underarmour.com.br/api/io/_v/api/intelligent-search/product_search"
@@ -387,9 +467,10 @@ if __name__ == "__main__":
     adidas_rows = scrape_adidas()
     nike_rows = scrape_nike_direct()
     ua_rows = scrape_ua_direct()
-    all_rows = adidas_rows + nike_rows + ua_rows
+    asics_rows = scrape_asics()
+    all_rows = adidas_rows + nike_rows + ua_rows + asics_rows
 
-    print(f"\nTotal: {len(all_rows)} linhas ({len(adidas_rows)} Adidas + {len(nike_rows)} Nike + {len(ua_rows)} Under Armour)")
+    print(f"\nTotal: {len(all_rows)} linhas ({len(adidas_rows)} Adidas + {len(nike_rows)} Nike + {len(ua_rows)} Under Armour + {len(asics_rows)} Asics)")
 
     load_to_bq(all_rows)
 
