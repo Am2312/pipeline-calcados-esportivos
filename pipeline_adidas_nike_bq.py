@@ -18,6 +18,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 TODAY = date.today()
 TODAY_STR = str(TODAY)
 BQ_TABLE = "aster-data-platform.constellation_vibe_coding.usr_andre_adidas_nike_product_snapshot_2026_05_15"
+NS_TABLE = "aster-data-platform.constellation_vibe_coding.usr_andre_netshoes_product_snapshot_2026_05_15"
 
 HEADERS_ADIDAS = {
     "Accept": "application/json, text/plain, */*",
@@ -457,11 +458,152 @@ def load_to_bq(rows):
     print(f"\n[BQ] {len(rows)} linhas carregadas na particao {TODAY_STR}")
     print(f"     Tabela: {BQ_TABLE}")
 
+# ── Netshoes: __INITIAL_STATE__ (React/Redux) ────────────────────────────────
+
+NS_URL = "https://www.netshoes.com.br/tenis"
+HEADERS_NS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+    "Accept-Language": "pt-BR,pt;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.netshoes.com.br",
+}
+
+def get_ns_state(html):
+    idx = html.find("__INITIAL_STATE__=")
+    if idx < 0:
+        return None
+    text = html[idx + len("__INITIAL_STATE__="):]
+    depth = 0
+    for i, c in enumerate(text):
+        if c == '{': depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[:i+1])
+                except:
+                    return None
+    return None
+
+def scrape_netshoes():
+    print("\n[NETSHOES] Coletando netshoes.com.br/tenis...")
+    rows = []
+    seen = set()
+
+    r0 = session.get(NS_URL, headers=HEADERS_NS, impersonate="chrome124", timeout=30)
+    state0 = get_ns_state(r0.text)
+    if not state0:
+        print("  ERRO: __INITIAL_STATE__ não encontrado na página 1")
+        return rows
+
+    sp0 = state0['SearchPage']
+    total = sp0.get('total', 0)
+    total_pages = sp0.get('totalPages', 1)
+    print(f"  Total: {total} produtos | {total_pages} páginas")
+
+    def process_skus(skus):
+        for item in skus:
+            sku = item.get('sku')
+            if not sku or sku in seen:
+                continue
+            seen.add(sku)
+            list_cents = item.get('listPrice')
+            sale_cents = item.get('salePrice')
+            if not sale_cents:
+                continue
+            list_p = (list_cents / 100) if list_cents else (sale_cents / 100)
+            sale_p = sale_cents / 100
+            disc = round((list_p - sale_p) / list_p, 4) if list_p > sale_p else 0.0
+            rows.append({
+                "date": TODAY_STR,
+                "source": "netshoes",
+                "brand": item.get('brand'),
+                "sku": sku,
+                "product_code": item.get('productCode'),
+                "name": item.get('name'),
+                "department": item.get('department'),
+                "product_type": item.get('productType'),
+                "list_price": list_p,
+                "sale_price": sale_p,
+                "pct_discount": disc,
+                "is_available": 1 if item.get('available') else 0,
+                "review_stars": item.get('reviewStars'),
+                "review_count": int(item.get('reviewCount') or 0) or None,
+                "product_url": f"https://www.netshoes.com.br{item.get('productSlug', '')}",
+            })
+
+    process_skus(sp0.get('parentSkus', []))
+    print(f"  Página 1/{total_pages} — {len(seen)} SKUs")
+
+    for page_num in range(2, total_pages + 1):
+        time.sleep(0.5)
+        try:
+            r = session.get(f"{NS_URL}?page={page_num}", headers=HEADERS_NS, impersonate="chrome124", timeout=30)
+            if r.status_code != 200:
+                print(f"  ERRO página {page_num}: HTTP {r.status_code}")
+                break
+            state = get_ns_state(r.text)
+            if not state:
+                print(f"  ERRO página {page_num}: sem __INITIAL_STATE__")
+                break
+            process_skus(state['SearchPage'].get('parentSkus', []))
+        except Exception as e:
+            print(f"  ERRO página {page_num}: {e}")
+            break
+
+        if page_num % 50 == 0:
+            print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs")
+
+    print(f"  Total Netshoes: {len(rows)} SKUs únicos")
+    return rows
+
+
+def load_netshoes_to_bq(rows):
+    if not rows:
+        print("\n[BQ Netshoes] Nenhum dado para carregar.")
+        return
+
+    client = get_bq_client()
+
+    result = list(client.query(f"SELECT COUNT(*) as cnt FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result())
+    existing = result[0].cnt if result else 0
+
+    if existing > 0:
+        print(f"\n[BQ Netshoes] Partição {TODAY_STR} já existe com {existing} linhas — deletando...")
+        client.query(f"DELETE FROM `{NS_TABLE}` WHERE date = '{TODAY_STR}'").result()
+
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND",
+        schema=[
+            bigquery.SchemaField("date", "DATE"),
+            bigquery.SchemaField("source", "STRING"),
+            bigquery.SchemaField("brand", "STRING"),
+            bigquery.SchemaField("sku", "STRING"),
+            bigquery.SchemaField("product_code", "STRING"),
+            bigquery.SchemaField("name", "STRING"),
+            bigquery.SchemaField("department", "STRING"),
+            bigquery.SchemaField("product_type", "STRING"),
+            bigquery.SchemaField("list_price", "FLOAT64"),
+            bigquery.SchemaField("sale_price", "FLOAT64"),
+            bigquery.SchemaField("pct_discount", "FLOAT64"),
+            bigquery.SchemaField("is_available", "INT64"),
+            bigquery.SchemaField("review_stars", "FLOAT64"),
+            bigquery.SchemaField("review_count", "INT64"),
+            bigquery.SchemaField("product_url", "STRING"),
+        ],
+    )
+
+    job = client.load_table_from_json(rows, NS_TABLE, job_config=job_config)
+    job.result()
+    print(f"\n[BQ Netshoes] {len(rows)} linhas carregadas na partição {TODAY_STR}")
+    print(f"     Tabela: {NS_TABLE}")
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     print("=" * 60)
-    print(f"PIPELINE ADIDAS + NIKE + UNDER ARMOUR -> BIGQUERY ({TODAY_STR})")
+    print(f"PIPELINE ADIDAS + NIKE + UA + ASICS + NETSHOES -> BIGQUERY ({TODAY_STR})")
     print("=" * 60)
 
     adidas_rows = scrape_adidas()
@@ -470,8 +612,11 @@ if __name__ == "__main__":
     asics_rows = scrape_asics()
     all_rows = adidas_rows + nike_rows + ua_rows + asics_rows
 
-    print(f"\nTotal: {len(all_rows)} linhas ({len(adidas_rows)} Adidas + {len(nike_rows)} Nike + {len(ua_rows)} Under Armour + {len(asics_rows)} Asics)")
-
+    print(f"\nBrand-direct: {len(all_rows)} linhas ({len(adidas_rows)} Adidas + {len(nike_rows)} Nike + {len(ua_rows)} Under Armour + {len(asics_rows)} Asics)")
     load_to_bq(all_rows)
+
+    ns_rows = scrape_netshoes()
+    print(f"\nNetshoes: {len(ns_rows)} linhas")
+    load_netshoes_to_bq(ns_rows)
 
     print("\nPIPELINE CONCLUIDO.")
