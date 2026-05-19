@@ -124,17 +124,15 @@ def scrape_adidas():
 
 # ── Nike: direct scrape nike.com.br via _next/data (mobile Safari TLS) ───────
 
-NIKE_CORRIDA_URL = "https://www.nike.com.br/nav/esportes/corrida/genero/masculino/tipodeproduto/calcados"
+NIKE_BUILDID_URL = "https://www.nike.com.br/api/products"  # 404 page with __NEXT_DATA__ (bypasses Akamai)
 NIKE_NAV_PATH = "nav/tipodeproduto/calcados"
 
 def get_nike_build_id():
-    """Fetches buildId from a reliably accessible Nike page."""
-    r = session.get(NIKE_CORRIDA_URL, headers=HEADERS_NIKE, impersonate="safari17_0", timeout=30)
-    if r.status_code != 200:
-        raise RuntimeError(f"Falha ao obter buildId: HTTP {r.status_code}")
+    """Fetches buildId from Nike 404 page (not blocked by Akamai unlike nav pages)."""
+    r = session.get(NIKE_BUILDID_URL, headers=HEADERS_NIKE, impersonate="chrome124", timeout=30)
     nd = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.DOTALL)
     if not nd:
-        raise RuntimeError("__NEXT_DATA__ não encontrado na página de corrida")
+        raise RuntimeError("__NEXT_DATA__ não encontrado — Nike mudou estrutura novamente")
     data = json.loads(nd.group(1))
     build_id = data.get("buildId")
     if not build_id:
@@ -148,7 +146,7 @@ def fetch_nike_page(build_id, page_num):
         params = f"page={page_num}&{params}"
     url = f"{base}?{params}"
     h_json = {**HEADERS_NIKE, "Accept": "application/json", "x-nextjs-data": "1"}
-    r = session.get(url, headers=h_json, impersonate="safari17_0", timeout=30)
+    r = session.get(url, headers=h_json, impersonate="chrome124", timeout=30)
     if r.status_code != 200:
         return None, None
     try:
