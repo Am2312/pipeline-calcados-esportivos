@@ -544,7 +544,7 @@ def query_oly_disc(client, date_str: str, table: str = OLY_TABLE,
         MAX(child_pct_discount) AS max_disc
       FROM `{table}`
       WHERE date = '{date_str}'
-        AND subcategory_name IN {repr(tuple(include_subcats))}
+        AND subcategory_name IN ({', '.join(f"'{s}'" for s in include_subcats)})
         AND child_is_available = 1
       GROUP BY 1,2
     )
@@ -570,7 +570,7 @@ def query_oly_avgdisc(client, date_str: str, table: str = OLY_TABLE,
         MAX(child_pct_discount) AS max_disc
       FROM `{table}`
       WHERE date = '{date_str}'
-        AND subcategory_name IN {repr(tuple(include_subcats))}
+        AND subcategory_name IN ({', '.join(f"'{s}'" for s in include_subcats)})
         AND child_is_available = 1
       GROUP BY 1,2
     )
