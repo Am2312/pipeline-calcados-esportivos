@@ -235,6 +235,14 @@ HEADERS_ASICS = {
     "Referer": "https://www.asics.com.br/",
 }
 
+# Subcategorias de calçado válidas na Asics. A Asics coloca meias e acessórios
+# dentro do departamento "Calçados" no VTEX, então precisamos filtrar por sport.
+ASICS_FOOTWEAR_SPORTS = {
+    "Running", "Corrida", "Caminhada", "Trail Running", "Trilha",
+    "SportStyle", "Tennis", "Quadra", "Vôlei", "Volei",
+    "Skateboarding", "Infantil", "Calçados",
+}
+
 def extract_asics_sport(categories):
     if not categories:
         return None
@@ -247,6 +255,7 @@ def scrape_asics():
     print("\n[ASICS] Coletando asics.com.br (calcados)...")
     rows = []
     seen = set()
+    skipped = 0
 
     r0 = session.get(f"{ASICS_SEARCH_URL}?facets=categoria%2Fcalcados&count=1",
                      headers=HEADERS_ASICS, impersonate="safari17_0", timeout=20)
@@ -271,6 +280,13 @@ def scrape_asics():
             if not pid or pid in seen:
                 continue
             seen.add(pid)
+
+            # Filtrar apenas calçados — a Asics inclui meias/acessórios em "Calçados"
+            sport = extract_asics_sport(item.get("categories"))
+            if sport not in ASICS_FOOTWEAR_SPORTS:
+                skipped += 1
+                continue
+
             pr = item.get("priceRange", {})
             list_p = (pr.get("listPrice") or {}).get("lowPrice")
             sale_p = (pr.get("sellingPrice") or {}).get("lowPrice")
@@ -282,7 +298,7 @@ def scrape_asics():
                 "date": TODAY_STR,
                 "source": "asics_direct",
                 "brand_name": "Asics",
-                "sport": extract_asics_sport(item.get("categories")),
+                "sport": sport,
                 "division": "Calçados",
                 "grandparent_id": pid,
                 "parent_id": item.get("productReference"),
@@ -297,10 +313,10 @@ def scrape_asics():
             })
 
         if page_num % 10 == 0:
-            print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs até agora")
+            print(f"  Página {page_num}/{total_pages} — {len(seen)} vistos, {len(rows)} calçados, {skipped} ignorados")
         time.sleep(0.3)
 
-    print(f"  Total Asics: {len(rows)} SKUs únicos")
+    print(f"  Total Asics: {len(rows)} calçados ({skipped} ignorados — roupa/meia/acessório)")
     return rows
 
 # ── Under Armour: VTEX Intelligent Search ────────────────────────────────────
@@ -308,22 +324,29 @@ def scrape_asics():
 UA_SEARCH_URL = "https://www.underarmour.com.br/api/io/_v/api/intelligent-search/product_search"
 
 def extract_ua_sport(categories):
+    """Extrai sport do path /Genero/Calcados/Sport/. Retorna None se não for calçado."""
     if not categories:
         return None
-    longest = max(categories, key=len)
-    parts = [p for p in longest.strip("/").split("/") if p]
-    return parts[2] if len(parts) >= 3 else (parts[-1] if parts else None)
+    # Preferir o path que tem "Calçados" em parts[1]
+    for cat in categories:
+        parts = [p for p in cat.strip("/").split("/") if p]
+        if len(parts) >= 3 and parts[1] == "Calçados":
+            return parts[2]
+    return None  # não é calçado
 
 def scrape_ua_direct():
     print("\n[UNDER ARMOUR] Coletando underarmour.com.br (calcados)...")
     rows = []
     seen = set()
+    skipped = 0
 
+    # Nota: o facet categoria/calcados é ignorado pelo VTEX da UA — retorna tudo.
+    # A filtragem real é feita via extract_ua_sport() que verifica o path /Genero/Calcados/.
     r0 = session.get(f"{UA_SEARCH_URL}?facets=categoria%2Fcalcados&count=1",
                      headers=HEADERS_UA, impersonate="safari17_0", timeout=20)
     total = r0.json().get("recordsFiltered", 0)
     total_pages = -(-total // 48)
-    print(f"  Total: {total} produtos | {total_pages} páginas")
+    print(f"  Total na API: {total} produtos | {total_pages} páginas (inclui roupa — será filtrado)")
 
     for page_num in range(1, total_pages + 1):
         url = f"{UA_SEARCH_URL}?facets=categoria%2Fcalcados&count=48&page={page_num}"
@@ -342,6 +365,13 @@ def scrape_ua_direct():
             if not pid or pid in seen:
                 continue
             seen.add(pid)
+
+            # Filtrar apenas calçados — o VTEX da UA ignora o facet de categoria
+            sport = extract_ua_sport(item.get("categories", []))
+            if sport is None:
+                skipped += 1
+                continue
+
             pr = item.get("priceRange", {})
             list_p = (pr.get("listPrice") or {}).get("lowPrice")
             sale_p = (pr.get("sellingPrice") or {}).get("lowPrice")
@@ -353,7 +383,7 @@ def scrape_ua_direct():
                 "date": TODAY_STR,
                 "source": "ua_direct",
                 "brand_name": "Under Armour",
-                "sport": extract_ua_sport(item.get("categories")),
+                "sport": sport,
                 "division": "Calçados",
                 "grandparent_id": pid,
                 "parent_id": item.get("productReference"),
@@ -368,10 +398,10 @@ def scrape_ua_direct():
             })
 
         if page_num % 10 == 0:
-            print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs até agora")
+            print(f"  Página {page_num}/{total_pages} — {len(seen)} vistos, {len(rows)} calçados, {skipped} ignorados")
         time.sleep(0.3)
 
-    print(f"  Total Under Armour: {len(rows)} SKUs únicos")
+    print(f"  Total Under Armour: {len(rows)} calçados ({skipped} ignorados — roupa/meia/acessório)")
     return rows
 
 # ── BigQuery: verifica se data ja existe e faz append ─────────────────────────
