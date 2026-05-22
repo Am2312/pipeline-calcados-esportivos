@@ -993,6 +993,17 @@ def main():
         print(f"  ⚠ Passthrough regen failed: {e}")
         print("    (Continuing — other arrays already saved.)")
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # calcados-franchise-data.js (full regen — franchise pass-through)
+    # ══════════════════════════════════════════════════════════════════════════
+    print("── calcados-franchise-data.js (full regen) ────────────────────────")
+    try:
+        from generate_franchise_history import regenerate as regen_franchise
+        regen_franchise(client)
+    except Exception as e:
+        print(f"  ⚠ Franchise regen failed: {e}")
+        print("    (Continuing — other arrays already saved.)")
+
     print("✅ Dashboard update complete.")
     print(f"   Week {week_label} data added to docs/ JS files.")
     print("   Commit + push handled by GitHub Actions workflow.\n")

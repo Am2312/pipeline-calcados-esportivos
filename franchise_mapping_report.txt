@@ -1,0 +1,54 @@
+============================================================
+FRANCHISE MAPPING DRAFT — Cleaning report
+============================================================
+
+Pipeline stats:
+  Raw rows pulled:            15786
+  Dropped non-footwear:         361
+  Dropped 3rd-party brand:       49
+  Brand mismatch dropped:         0
+  Cross-brand fixed (BQ->nm):     82
+  Typo fixed:                     3
+  Kept after cleaning:        15376
+
+Franchise filter (≥3 SKUs AND ≥28 days):
+  Auto-detected franchises:  4212
+  Passing filter:            3079
+  Dropped (low volume):      1133
+  Final CSV rows:            14159
+
+Per-brand (after cleaning + filter):
+  Adidas          1080 franchises   3659 grandparent_names
+  Asics            260 franchises   2599 grandparent_names
+  Mizuno           481 franchises   2684 grandparent_names
+  Nike             495 franchises   1759 grandparent_names
+  Olympikus        398 franchises   2026 grandparent_names
+  Under Armour     365 franchises   1432 grandparent_names
+
+Coverage by top-N franchises per brand (volume-weighted):
+  Adidas          1080 total | 307 w/≥25 SKUs | 178 w/≥50 SKUs | top50 covers   47% | top100 covers   63%
+  Asics            260 total | 109 w/≥25 SKUs |  76 w/≥50 SKUs | top50 covers   84% | top100 covers   94%
+  Mizuno           481 total | 192 w/≥25 SKUs | 123 w/≥50 SKUs | top50 covers   69% | top100 covers   83%
+  Nike             495 total | 215 w/≥25 SKUs | 158 w/≥50 SKUs | top50 covers   53% | top100 covers   72%
+  Olympikus        398 total | 180 w/≥25 SKUs | 143 w/≥50 SKUs | top50 covers   63% | top100 covers   83%
+  Under Armour     365 total | 135 w/≥25 SKUs |  85 w/≥50 SKUs | top50 covers   67% | top100 covers   83%
+
+Sample of NON-FOOTWEAR dropped:
+  Olympikus      Meia Performance Olympikus Feminina
+  Under Armour   Bota Hunt Masculina Under Armour Project Rock x HOVR DAWN
+  Under Armour   Bota Militar Under Armour Charged Valsetz Mid
+  Under Armour   Bota Militar Under Armour Charged Valsetz
+  Under Armour   Bota Feminina Under Armour Micro G Valsetz Mid
+  Under Armour   Kit Feminino Tênis Under Armour Tribase Reps 2 Se E Meia
+  Asics          Kit Tênis ASICS GEL-Rocket 12 E Meia - Masculino
+  Under Armour   Kit Under Armour: Tênis Tribase Reps + Meia - Masculino
+
+Sample of 3RD-PARTY brand dropped:
+  Nike           Tênis Masculino Jordan Luka 77
+  Nike           Air Jordan XXXVIII Low - Unissex
+  Nike           Chinelo Slide Jordan Super Play
+  Olympikus      Tênis Oakley Evzero Orbit - Feminino
+  Nike           Tênis Jordan One Take 4 - Masculino
+  Under Armour   Tênis Fila Step Masculino
+  Asics          Tênis Feminino New Balance Fresh Foam X 1080 V14
+  Asics          Tênis Masculino New Balance 1080 V14

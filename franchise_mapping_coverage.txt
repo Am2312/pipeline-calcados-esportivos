@@ -1,0 +1,144 @@
+================================================================
+FRANCHISE MAPPING — Coverage report
+================================================================
+
+  Adidas           39594/ 46720 SKUs ( 84.7%)   118 franchises mapped
+  Asics            26422/ 28296 SKUs ( 93.4%)    62 franchises mapped
+  Mizuno           30730/ 38567 SKUs ( 79.7%)    60 franchises mapped
+  Nike             21738/ 32297 SKUs ( 67.3%)    66 franchises mapped
+  Olympikus        30619/ 38020 SKUs ( 80.5%)    91 franchises mapped
+  Under Armour     14521/ 19274 SKUs ( 75.3%)    61 franchises mapped
+
+Unmapped sample by brand (high-volume first, top 20):
+
+  ─── Adidas ───
+  ( 40 SKUs) Tênis Masculino Adidas Astrastar
+  ( 22 SKUs) Tênis Masculino adidas Astrastar
+  ( 15 SKUs) Tênis Feminino Adidas Astrastar
+  ( 13 SKUs) Tênis adidas Avaflash - Feminino
+  ( 13 SKUs) Tênis adidas AvaFlash - Feminino
+  ( 12 SKUs) Tênis Feminino adidas Astrastar
+  ( 12 SKUs) Tênis Feminino adidas Avaflash
+  ( 12 SKUs) Tênis adidas Avaflash Low - Feminino
+  ( 11 SKUs) Tênis adidas Avaflash Low Tennis - Feminino
+  (  7 SKUs) Tênis adidas Avacourt 3 - Feminino
+  (  7 SKUs) Tênis Feminino adidas AvaFlash
+  (  7 SKUs) Tênis Feminino adidas Avaflash II
+  (  7 SKUs) Tênis Feminino adidas Avaflash Low Tennis
+  (  7 SKUs) Tênis Feminino Avaflash Tennis adidas
+  (  6 SKUs) Tênis Masculino adidas Avaflash Clay
+  (  4 SKUs) Agasalho Moletom adidas Três Listras Masculino
+  (  3 SKUs) Sandália Aquática adidas Disney Mickey Mouse para bebês
+  (  3 SKUs) Sandália Aquática para bebês adidas Disney Minnie Mouse
+  (  3 SKUs) Tênis adidas AvaFlash Tennis - Feminino
+  (  1 SKUs) Tênis adidas AvaFlash - Feminino - Tennis
+
+  ─── Asics ───
+  ( 44 SKUs) Tênis Asics Fuzeblast SE - Masculino
+  ( 21 SKUs) Tênis Asics Forest - Masculino
+  ( 13 SKUs) Tênis Asics Forest - Feminino
+  ( 13 SKUs) Tênis ASICS Forest Feminino
+  ( 12 SKUs) Tênis Asics Ex89 - Masculino
+  ( 12 SKUs) Tênis Feminino Asics Forest
+  ( 11 SKUs) Tênis Asics Forest I - Masculino
+  (  7 SKUs) Chinelo de Dedo Rider R1 Infantil
+  (  7 SKUs) Tênis Feminino Excite 11 Corrida ASICS
+  (  7 SKUs) Tênis Masculino ASICS Forest
+  (  6 SKUs) Chuteira De Society Joma Liga 5 - Adulta
+  (  6 SKUs) Tênis Masculino Asics Excite 11
+  (  6 SKUs) Tênis Masculino Asics Forest
+  (  5 SKUs) Tênis ASICS EX89 Masculino
+  (  4 SKUs) Tênis Asics Excite 10 - Masculino
+  (  4 SKUs) Chuteira Futsal Adulto ASICS Destaque K FF
+  (  3 SKUs) Chinelo Asics Actibreeze Hybrid 3d 2 - Masculino
+  (  3 SKUs) Tênis Feminino Asics Excite 11
+  (  1 SKUs) Chinelo Masculino Asics Actibreeze Hybrid 3d
+  (  1 SKUs) Tênis ASICS EX89
+
+  ─── Mizuno ───
+  ( 28 SKUs) Chuteira Society Masculina Mizuno Alpha Select
+  ( 24 SKUs) Chuteira de Campo Masculina Mizuno Alpha Select
+  ( 16 SKUs) Chuteira de Campo Mizuno Alpha Club MD
+  ( 14 SKUs) Chuteira Society Mizuno Alpha II Select AS
+  ( 14 SKUs) Chuteira Society Adulto Mizuno Alpha II Select AS
+  ( 13 SKUs) Chuteira de Campo Masculina Mizuno Alpha III Japan
+  (  7 SKUs) Chuteira de Campo Masculina Mizuno Alpha Club MD
+  (  7 SKUs) Chuteira de Campo Adulta Alpha Club MD Mizuno
+  (  7 SKUs) Chuteira Society Mizuno Alpha II Select AS Masculina
+  (  7 SKUs) Chuteira Society Masculina Mizuno Alpha II Select AS
+  (  7 SKUs) Chuteira de Campo Masculina Mizuno Alpha II Select MD
+  (  7 SKUs) Chuteira de Campo Mizuno Alpha II Select MD
+  (  7 SKUs) Chuteira de Campo Adulto Mizuno Alpha II Select MD
+  (  7 SKUs) Chuteira de Campo Adulto Mizuno Alpha III Japan
+  (  7 SKUs) Chuteira de Campo Mizuno Alpha Select
+  (  7 SKUs) Chuteira Society Mizuno Alpha Select - Adulto
+  (  6 SKUs) Chuteira Society Mizuno Alfa Select - Adulto
+  (  6 SKUs) Chuteira de Campo Adulta Alpha Club Md Mizuno
+  (  6 SKUs) Chuteira de Campo Mizuno Alpha Select - Adulto
+  (  5 SKUs) Chuteira Society Adulto Mizuno Alpha Select
+
+  ─── Nike ───
+  ( 97 SKUs) Tênis Nike Air Zoom Bella 7 - Feminino
+  ( 88 SKUs) Tênis Nike Air Zoom Bella 7 Feminino
+  ( 68 SKUs) Tênis Nike Air Zoom G.T. Jump Academy - Masculino
+  ( 66 SKUs) Tênis Nike Air Zoom G. T. Cut Academy Masculino
+  ( 39 SKUs) Tênis Nike Air Zoom G.T. Academy - Masculino
+  ( 33 SKUs) Tênis Masculino Nike Air Zoom G.T. Academy
+  ( 20 SKUs) Tênis Air Vapormax 2023 FK - Masculino
+  ( 16 SKUs) Tênis Masculino Nike Air Zoom G.T. Academy 2
+  (  9 SKUs) Tênis Nike Air Vapormax 2023
+  (  8 SKUs) Tênis Masculino Nike Air Monarch IV
+  (  8 SKUs) Tênis Masculino Nike Air Monarch SE
+  (  8 SKUs) Tênis Nike Air Zoom G.T. Academy Masculino
+  (  8 SKUs) Tênis Unissex Nike Air Zoom G.T. Hustle 2
+  (  6 SKUs) Tênis Nike Air Monarch IV Masculino
+  (  6 SKUs) Tênis Unissex Nike Air Zoom G.T. Academy
+  (  4 SKUs) Tênis Nike Air Zoom Arcadia 2 - Infantil
+  (  2 SKUs) Tênis Nike Air Vapormax 2023 Flyknit - Feminino
+  (  2 SKUs) Tênis Nike Air Zoom Arcadia 2 GS - Infantil
+  (  1 SKUs) Tênis Nike Air Vapormax 23 FK Oly Masculino
+  (  1 SKUs) Tênis Nike Air Zoom Pegasus 39 Premium - Masculino
+
+  ─── Olympikus ───
+  ( 26 SKUs) Tênis Olympikus Ares Feminino
+  ( 24 SKUs) Tênis Olympikus Atena Feminino
+  ( 20 SKUs) Tênis Masculino Olympikus 5
+  ( 19 SKUs) Tênis Olympikus 130G Ultraleve749 - Feminino
+  ( 17 SKUs) Tênis Olympikus Aros Unissex
+  ( 11 SKUs) Tênis Olympikus Aros - Masculino
+  ( 11 SKUs) Tênis Olympikus Astral Feminino
+  ( 10 SKUs) Tênis Olympikus de Treino
+  ( 10 SKUs) Tênis Masculino Olympikus
+  (  6 SKUs) Tênis Olympikus Ares - Feminino
+  (  4 SKUs) Chinelo Unissex Olympikus Slide
+  (  4 SKUs) Chinelo Slide Olympikus - Masculino
+  (  4 SKUs) Tênis Olympikus Asas Unissex
+  (  3 SKUs) Tênis Olympikus Aros Feminino
+  (  3 SKUs) Tênis Olympikus Aros I - Masculino
+  (  2 SKUs) Tênis Olympikus Asas Feminino
+  (  2 SKUs) Tênis Olympikus Asas Masculino
+  (  2 SKUs) Tênis Olympikus Astro Feminino
+  (  1 SKUs) Tênis Olympikus - Infantil
+  (  1 SKUs) Tênis Olympikus Astro Masculino
+
+  ─── Under Armour ───
+  ( 44 SKUs) Tênis Under Armour Ch.Quicker 2 Masculino
+  ( 33 SKUs) Tênis Under Armour CH.Quicker - Unissex
+  ( 24 SKUs) Tênis de Corrida Unissex Under Armour Charged Advance
+  ( 18 SKUs) Tênis Under Armour CH.Hit Se Masculino
+  ( 14 SKUs) Tênis Under Armour Ch. Great Masculino
+  ( 13 SKUs) Tênis Under Armour Ch.Wing SE Masculino
+  (  7 SKUs) Tênis Unissex Under Armour CH.Quicker 2
+  (  6 SKUs) Tênis Under Armour Ch.Wing - Masculino
+  (  6 SKUs) Tênis Masculino Under Armour Charged Advance
+  (  5 SKUs) Tênis Infantil Under Armour BPS Flash
+  (  5 SKUs) Tênis de Corrida Infantil Under Armour BPS Runplay
+  (  5 SKUs) Tênis Under Armour Brezzy - Unissex
+  (  4 SKUs) Tênis Under Armour Charged Advance - Feminino
+  (  3 SKUs) Tênis Infantil Under Armour Binf Runplay CMS
+  (  3 SKUs) Tênis Infantil Under Armour BPS Runplay CMS
+  (  3 SKUs) Tênis de Treino Feminino Under Armour Breathe Lace
+  (  2 SKUs) Tênis Adulto Under Armour CH.Quicker 2
+  (  1 SKUs) Tênis de Corrida Infantil Under Armour BPS Runplay CMS
+  (  1 SKUs) Tênis Under Armour Ch.Wing Masculino
+  (  1 SKUs) Tênis de Corrida Feminino Under Armour Charged Advance

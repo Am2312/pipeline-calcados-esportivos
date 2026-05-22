@@ -8,7 +8,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="./calcados-price-data.js"></script>
     <script src="./calcados-disc-data.js"></script>
-    <script src="./calcados-passthrough-data.js"></script>
+    <!-- Same-SKU pass-through deprecated 2026-05-22 night; kept in repo for revert.
+         <script src="./calcados-passthrough-data.js"></script> -->
+    <script src="./calcados-franchise-data.js"></script>
     <script>
         tailwind.config = {
             theme: { extend: { colors: {
@@ -342,70 +344,54 @@
         <div id="avgdisc-table" style="margin-top:16px;"></div>
     </section>
 
-    <!-- Price Pass-Through Summary -->
-    <section class="chart-card" id="passthrough-card">
+    <!-- Franchise Pass-Through -->
+    <section class="chart-card" id="franchise-card">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:8px;flex-wrap:wrap;">
             <div><h3 style="margin:0;font-size:0;"></h3></div>
             <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;width:100%;transform:translateY(-34px);margin-bottom:-30px;">
                 <div>
-                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Price Pass-Through Summary</h3>
+                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Franchise Pass-Through</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
                 <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
-                        <div class="control-label">View</div>
-                        <select class="control-select" id="pass-view-mode" onchange="onPassViewModeChange()">
-                            <option value="comparison">Company Comparison</option>
-                            <option value="breakdown">Channel Breakdown</option>
+                        <div class="control-label">Method</div>
+                        <select class="control-select" id="fr-method" onchange="window._frRender && window._frRender()">
+                            <option value="A" selected>A: Média vs Média</option>
+                            <option value="B">B: Geração vs Geração</option>
                         </select>
-                    </div>
-                    <div class="control-block" id="pass-comp-channel-block">
-                        <div class="control-label">Channel</div>
-                        <select class="control-select" id="pass-comp-channel" onchange="onPassCompChannelChange()">
-                            <option value="website">Website</option>
-                            <option value="centauro" selected>Centauro</option>
-                            <option value="netshoes">Netshoes</option>
-                            <option value="free">Free Choice</option>
-                        </select>
-                    </div>
-                    <div class="control-block" id="pass-breakdown-brand-block" style="display:none;">
-                        <div class="control-label">Company</div>
-                        <select class="control-select" id="pass-breakdown-brand" onchange="onPassBreakdownBrandChange()">
-                            <option value="adidas">Adidas</option>
-                            <option value="nike">Nike</option>
-                            <option value="ua">Under Armour</option>
-                            <option value="asics">Asics</option>
-                            <option value="olympikus">Olympikus</option>
-                            <option value="mizuno">Mizuno</option>
-                        </select>
-                    </div>
-                    <div class="control-block" id="pass-series-trigger-block">
-                        <div class="control-label">Series</div>
-                        <div class="series-trigger" id="pass-series-trigger" onclick="togglePassSeriesPanel()">
-                            <span id="pass-series-trigger-label">9 series selected</span>
-                            <span style="font-size:9px;color:#9AA8BB;flex-shrink:0;">▼</span>
-                        </div>
                     </div>
                     <div class="control-block">
                         <div class="control-label">Price</div>
-                        <select class="control-select" id="pass-price" onchange="window._passRender && window._passRender()">
+                        <select class="control-select" id="fr-price" onchange="window._frRender && window._frRender()">
                             <option value="sale" selected>Sale</option>
                             <option value="list">List</option>
                         </select>
                     </div>
                     <div class="control-block">
+                        <div class="control-label">Brand</div>
+                        <select class="control-select" id="fr-brand" onchange="window._frRender && window._frRender()">
+                            <option value="Adidas">Adidas</option>
+                            <option value="Nike">Nike</option>
+                            <option value="Under Armour">Under Armour</option>
+                            <option value="Asics">Asics</option>
+                            <option value="Olympikus" selected>Olympikus</option>
+                            <option value="Mizuno">Mizuno</option>
+                        </select>
+                    </div>
+                    <div class="control-block">
                         <div class="control-label">Window (chart)</div>
-                        <select class="control-select" id="pass-window" onchange="window._passRender && window._passRender()">
+                        <select class="control-select" id="fr-window" onchange="window._frRender && window._frRender()">
                             <option value="1w">Δ WoW</option>
                             <option value="1m">Δ MoM</option>
                             <option value="3m">Δ QoQ</option>
-                            <option value="1y">Δ YoY</option>
-                            <option value="ytd" selected>Δ YTD</option>
+                            <option value="1y" selected>Δ YoY</option>
+                            <option value="ytd">Δ YTD</option>
                         </select>
                     </div>
                     <div class="control-block">
                         <div class="control-label">Granularity</div>
-                        <select class="control-select" id="pass-gran-select" onchange="onPassGranChange()" style="min-width:130px;">
+                        <select class="control-select" id="fr-gran" onchange="window._frRender && window._frRender()" style="min-width:130px;">
                             <option value="weekly" selected>Weekly</option>
                             <option value="monthly">Monthly</option>
                             <option value="quarterly">Quarterly</option>
@@ -414,24 +400,23 @@
                     </div>
                     <div class="control-block">
                         <div class="control-label">From</div>
-                        <select class="control-select" id="pass-from-select" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
+                        <select class="control-select" id="fr-from" onchange="window._frRender && window._frRender()" style="min-width:130px;"></select>
                     </div>
                     <div class="control-block">
                         <div class="control-label">To</div>
-                        <select class="control-select" id="pass-to-select" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
+                        <select class="control-select" id="fr-to" onchange="window._frRender && window._frRender()" style="min-width:130px;"></select>
                     </div>
                 </div>
             </div>
         </div>
         <div style="position:relative;height:500px;margin-top:4px;overflow:hidden;">
-            <div class="chart-legend-inline" id="pass-legend"></div>
-            <canvas id="pass-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas>
+            <div class="chart-legend-inline" id="fr-legend"></div>
+            <canvas id="fr-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas>
         </div>
-        <div id="pass-table" style="margin-top:16px;"></div>
+        <div id="fr-table" style="margin-top:16px;"></div>
     </section>
-    <div id="pass-series-panel"></div>
 
-    <script src="./passthrough-chart.js"></script>
+    <script src="./franchise-chart.js"></script>
 
     <!-- Methodology -->
     <section class="chart-card" id="methodology-card">
@@ -475,22 +460,17 @@
             </div>
 
             <div>
-                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Price Pass-Through</p>
-                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Same-SKU price variation across 5 windows. For each SKU on each date <em>t</em>:</p>
+                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Franchise Pass-Through</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Replaces the previous same-SKU view (deprecated 2026-05-22 night) with two complementary methods at the <strong>franchise</strong> level (e.g. Pegasus, Ultraboost, Corre 4, Gel-Nimbus). Franchises are mapped via a human-curated regex table (<code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">franchise_mapping.py</code>) — ~458 franchises across the 6 brands, with ~80% catalog coverage on average.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Method A — Average vs Average:</strong> for each (brand, franchise) and date <em>t</em>:</p>
                 <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;font-family:Verdana,Geneva,sans-serif;text-align:center;background:#F7F8FA;padding:8px;border-radius:4px;">
-                    var<sub>w</sub>(SKU, t) = (price<sub>t</sub> − AVG(price<sub>SKU, prev_window</sub>)) / AVG(price<sub>SKU, prev_window</sub>)
+                    var<sub>w</sub>(franchise, t) = (AVG(price<sub>franchise, t</sub>) − AVG(price<sub>franchise, prev_window</sub>)) / AVG(price<sub>franchise, prev_window</sub>)
                 </p>
-                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Reference window per metric:</p>
-                <ul style="font-size:12px;color:#344F75;margin:0 0 6px 0;padding-left:18px;line-height:1.8;">
-                    <li><strong>Δ WoW</strong> — previous ISO week (Mon–Sun)</li>
-                    <li><strong>Δ MoM</strong> — previous calendar month</li>
-                    <li><strong>Δ QoQ</strong> — month 3 months back</li>
-                    <li><strong>Δ YoY</strong> — same month previous year</li>
-                    <li><strong>Δ YTD</strong> — December of previous year</li>
-                </ul>
-                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Snapshot dynamic cohort:</strong> a SKU contributes only when it has data in both <em>t</em> and the reference window. New SKUs enter when the window completes; discontinued SKUs drop on the day. Computed independently for <strong>sale</strong> and <strong>list</strong> price.</p>
-                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Aggregation:</strong> cross-SKU simple mean per day &amp; cat → mean of days per Sunday-week. Cross-category aggregation weighted by N SKUs (reconstructs the global cross-SKU mean).</p>
-                <p style="font-size:11px;color:#9AA8BB;margin:0;line-height:1.6;"><strong>Outlier clip</strong> (toggleable, default off): when on, SKU-level variations outside <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">[−50%, +100%]</code> are dropped before the cross-SKU mean. Methodology validated against Aster <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">price_variation_snapshot</code> — max_diff = 0.0 across 5 windows × 5 059 SKUs on 2026-05-17.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Underlying SKU sets in <em>t</em> and the reference window can be different — the comparison is between catalog snapshots of the same franchise label.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Method B — Generation vs Generation:</strong> identifies the most-recent generation of each franchise (e.g. Pegasus 42, Corre 5) by <strong>first-seen date in the catalog</strong> (not by numeric label — handles Adidas Ultraboost 22 → 5 renumbering). Compares the latest gen at <em>t</em> against the gen that was most-recent at the reference window start.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Same 5 windows as before: WoW (prev ISO week) / MoM (prev cal month) / QoQ (month 3 back) / YoY (same month prev year) / YTD (Dec prev year). Computed independently for <strong>sale</strong> and <strong>list</strong>.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Sport scope filter:</strong> uses the curated <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">sport</code> field per franchise (corrida / training / trail / casual / etc.) — divergent from other dashboard cards which filter by raw BQ category. The tradeoff: stable franchise classification at the cost of letting through ~5% of SKUs cadastered with inconsistent categories on the source.</p>
+                <p style="font-size:11px;color:#9AA8BB;margin:0;line-height:1.6;"><strong>Coverage:</strong> Asics 93%, Adidas 85%, Olympikus 80%, Mizuno 80%, Under Armour 75%, Nike 67% (Nike has dispersed Jordan sub-models). Franchises with peak weekly n_SKUs &lt; 100 are excluded for statistical robustness — 171 franchises kept of 458 detected.</p>
             </div>
 
             <div>
@@ -2054,7 +2034,7 @@ function renderAll() {
     buildPriceTable();
     buildDiscAll();
     buildAvgDiscAll();
-    if (window._passRender) window._passRender();
+    if (window._frRender) window._frRender();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
