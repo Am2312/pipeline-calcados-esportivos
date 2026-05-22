@@ -420,6 +420,27 @@
                 <p style="font-size:11px;color:#9AA8BB;margin:6px 0 0 0;line-height:1.6;">Historical note: before 2026-05-21 the Asics and UA scrapers lacked this filter. W20 (2026-05-17) was the first contaminated week; BQ history was cleaned and JS arrays corrected on 2026-05-21.</p>
             </div>
 
+            <div>
+                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Product Scope — Centauro, Olympikus, Mizuno (Aster)</p>
+                <ul style="font-size:12px;color:#344F75;margin:0;padding-left:18px;line-height:1.9;">
+                    <li><strong>Centauro:</strong> filtered to <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">grandparent_group = 'Calçados'</code>. Apparel, accessories, socks and equipment are excluded. EAN-level dedup keeps each product 1× (handles marketplace seller duplicates: Centauro-direct preferred, else lowest-price marketplace listing).</li>
+                    <li><strong>Olympikus:</strong> filtered to <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">subcategory_name IN ('Calçados', 'Tênis')</code>. Model-level dedup by <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">grandparent_id</code>.</li>
+                    <li><strong>Mizuno:</strong> filtered to <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">subcategory_name = 'Calçados'</code>. Model-level dedup by <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">grandparent_id</code>.</li>
+                </ul>
+                <p style="font-size:11px;color:#9AA8BB;margin:6px 0 0 0;line-height:1.6;">Historical note: before 2026-05-22 the Centauro queries lacked the footwear filter and were mixing footwear with apparel/accessories. Impact on the last closed week was up to <strong>+6.8 pp</strong> on Adidas % SKUs discounted (37.3% → 44.0% footwear-only). All historical Centauro weeks were re-run with the new filter on 2026-05-22; for 2022 weeks the source's <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">child_is_available</code> field was not yet populated, so the regen accepted NULL as "available" — a slightly looser definition than 2025+ data.</p>
+            </div>
+
+            <div>
+                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Dedup Granularity by Channel</p>
+                <ul style="font-size:12px;color:#344F75;margin:0;padding-left:18px;line-height:1.9;">
+                    <li><strong>Direct (Adidas/Nike/Asics/UA):</strong> model-level (<code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">grandparent_id</code>)</li>
+                    <li><strong>Netshoes:</strong> model-level (<code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">product_code</code>)</li>
+                    <li><strong>Olympikus / Mizuno:</strong> model-level (<code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">grandparent_id</code>)</li>
+                    <li><strong>Centauro:</strong> EAN-level (<code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">child_ean</code>) — necessary to dedup the same physical product listed by multiple marketplace sellers. Slightly more granular than other channels (sneakers with many sizes/colors weight more in the average), but a unit-comparable definition would require an additional model-level rollup the source does not currently support cleanly.</li>
+                </ul>
+                <p style="font-size:11px;color:#9AA8BB;margin:6px 0 0 0;line-height:1.6;">Verified 2026-05-22 that Olympikus and Mizuno give the same discount to all sizes of the same model 99.77% of the time, so <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">MAX(child_pct_discount)</code> per model is equivalent to MIN or AVG — no bias introduced by aggregating sizes into a model identifier.</p>
+            </div>
+
         </div>
     </section>
 

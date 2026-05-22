@@ -245,6 +245,9 @@ def js_str(s) -> str:
 def price_row(w, brand, cat, p_sale, p_list, n) -> str:
     return f"{{w:'{w}',brand:'{js_str(brand)}',cat:'{js_str(cat)}',p_sale:{flt(p_sale)},p_list:{flt(p_list)},n:{n}}}"
 
+def price_row_no_brand(w, cat, p_sale, p_list, n) -> str:
+    return f"{{w:'{w}',cat:'{js_str(cat)}',p_list:{flt(p_list)},p_sale:{flt(p_sale)},n:{n}}}"
+
 def disc_row_brand(w, brand, cat, pct, n) -> str:
     return f"{{w:'{w}',brand:'{js_str(brand)}',cat:'{js_str(cat)}',pct:{flt(pct)},n:{n}}}"
 
@@ -311,7 +314,9 @@ def query_direct_price(client, monday: str, sunday: str) -> list:
 
 
 def query_ns_price(client, monday: str, sunday: str) -> list:
-    """RAW_NETSHOES: avg price per brand × cat for the week."""
+    """RAW_NETSHOES: avg price per brand × cat for the week.
+    Deduped at sku (colorway) level — sku differs between colors of the same model
+    and prices can differ per color (e.g. Nike Air Max Excee black 459, white 549)."""
     sql = f"""
     WITH ds AS (
       SELECT date, brand, department, sku,
@@ -504,15 +509,52 @@ def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
     return result
 
 
+def query_centauro_price(client, monday: str, sunday: str) -> list:
+    """RAW_CENTAURO: avg list/sale price per brand × cat, EAN-deduped, footwear only.
+    For each EAN, picks Centauro-direct seller if exists else the lowest-price marketplace listing."""
+    sql = f"""
+    WITH ranked AS (
+      SELECT grandparent_brand AS brand, grandparent_category AS cat, child_ean,
+        child_value_list_price AS list_p,
+        child_value_sale_price AS sale_p,
+        ROW_NUMBER() OVER (
+          PARTITION BY child_ean
+          ORDER BY CASE WHEN child_seller_name = 'Centauro' THEN 0 ELSE 1 END,
+                   child_value_sale_price ASC
+        ) AS rn
+      FROM `{CTR_TABLE}`
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND (child_is_available = TRUE OR child_is_available IS NULL)
+        AND UPPER(grandparent_group) IN ('CALÇADOS', 'CALCADOS')
+        AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
+        AND grandparent_category IS NOT NULL
+        AND grandparent_category != ''
+        AND child_value_list_price > 0
+    )
+    SELECT brand, cat,
+      ROUND(AVG(sale_p), 2) AS p_sale,
+      ROUND(AVG(list_p), 2) AS p_list,
+      COUNT(*) AS n
+    FROM ranked
+    WHERE rn = 1
+    GROUP BY 1,2
+    ORDER BY 1,2
+    """
+    rows = bq_rows(client, sql)
+    return [{'brand': r['brand'], 'cat': r['cat'],
+             'p_sale': r['p_sale'], 'p_list': r['p_list'], 'n': r['n']} for r in rows]
+
+
 def query_centauro_disc(client, monday: str, sunday: str) -> list:
-    """RAW_DISC_CENTAURO: % EANs discounted, deduped by EAN."""
+    """RAW_DISC_CENTAURO: % EANs discounted, deduped by EAN, footwear only."""
     sql = f"""
     WITH dedup AS (
       SELECT grandparent_brand AS brand, grandparent_category AS cat, child_ean,
         MAX(CAST(child_pct_discount AS FLOAT64)) AS max_disc
       FROM `{CTR_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
-        AND child_is_available = TRUE
+        AND (child_is_available = TRUE OR child_is_available IS NULL)
+        AND UPPER(grandparent_group) IN ('CALÇADOS', 'CALCADOS')
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
@@ -531,14 +573,15 @@ def query_centauro_disc(client, monday: str, sunday: str) -> list:
 
 
 def query_centauro_avgdisc(client, monday: str, sunday: str) -> list:
-    """RAW_AVGDISC_CENTAURO: avg disc depth, EAN deduped."""
+    """RAW_AVGDISC_CENTAURO: avg disc depth, EAN deduped, footwear only."""
     sql = f"""
     WITH dedup AS (
       SELECT grandparent_brand AS brand, grandparent_category AS cat, child_ean,
         MAX(CAST(child_pct_discount AS FLOAT64)) AS max_disc
       FROM `{CTR_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
-        AND child_is_available = TRUE
+        AND (child_is_available = TRUE OR child_is_available IS NULL)
+        AND UPPER(grandparent_group) IN ('CALÇADOS', 'CALCADOS')
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
@@ -559,9 +602,40 @@ def query_centauro_avgdisc(client, monday: str, sunday: str) -> list:
              'n_disc': r['n_disc'], 'n': r['n']} for r in rows]
 
 
-def query_oly_disc(client, date_str: str, table: str = OLY_TABLE,
+def query_oly_price(client, monday: str, sunday: str, table: str = OLY_TABLE,
+                    include_subcats: set = OLY_INCLUDE_SUBCAT) -> list:
+    """RAW_OLYMPIKUS or RAW_MIZUNO: avg price per cat, Mon-Sun aggregation, footwear only."""
+    sub_list = ', '.join(f"'{s}'" for s in include_subcats)
+    sql = f"""
+    WITH dp AS (
+      SELECT date, COALESCE(subcategory_2_name, subcategory_name, '') AS cat,
+        grandparent_id,
+        AVG(child_sale_price) AS sale_p,
+        AVG(child_list_price) AS list_p
+      FROM `{table}`
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND subcategory_name IN ({sub_list})
+        AND child_is_available = 1
+        AND child_sale_price IS NOT NULL
+      GROUP BY 1,2,3
+    )
+    SELECT cat,
+      ROUND(AVG(sale_p), 2) AS p_sale,
+      ROUND(AVG(list_p), 2) AS p_list,
+      COUNT(DISTINCT grandparent_id) AS n
+    FROM dp
+    GROUP BY 1
+    ORDER BY 1
+    """
+    rows = bq_rows(client, sql)
+    return [{'cat': r['cat'], 'p_sale': r['p_sale'], 'p_list': r['p_list'],
+             'n': r['n']} for r in rows]
+
+
+def query_oly_disc(client, monday: str, sunday: str, table: str = OLY_TABLE,
                    include_subcats: set = OLY_INCLUDE_SUBCAT) -> list:
-    """RAW_DISC_OLYMPIKUS or RAW_DISC_MIZUNO: % models discounted, Sunday snapshot."""
+    """RAW_DISC_OLYMPIKUS or RAW_DISC_MIZUNO: % models discounted, Mon-Sun aggregation."""
+    sub_list = ', '.join(f"'{s}'" for s in include_subcats)
     sql = f"""
     WITH base AS (
       SELECT
@@ -569,8 +643,8 @@ def query_oly_disc(client, date_str: str, table: str = OLY_TABLE,
         grandparent_id,
         MAX(child_pct_discount) AS max_disc
       FROM `{table}`
-      WHERE date = '{date_str}'
-        AND subcategory_name IN ({', '.join(f"'{s}'" for s in include_subcats)})
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
       GROUP BY 1,2
     )
@@ -585,9 +659,10 @@ def query_oly_disc(client, date_str: str, table: str = OLY_TABLE,
     return [{'cat': r['cat'], 'pct': r['pct'], 'n': r['n']} for r in rows]
 
 
-def query_oly_avgdisc(client, date_str: str, table: str = OLY_TABLE,
+def query_oly_avgdisc(client, monday: str, sunday: str, table: str = OLY_TABLE,
                       include_subcats: set = OLY_INCLUDE_SUBCAT) -> list:
-    """RAW_AVGDISC_OLYMPIKUS or RAW_AVGDISC_MIZUNO: avg disc depth, Sunday snapshot."""
+    """RAW_AVGDISC_OLYMPIKUS or RAW_AVGDISC_MIZUNO: avg disc depth, Mon-Sun aggregation."""
+    sub_list = ', '.join(f"'{s}'" for s in include_subcats)
     sql = f"""
     WITH base AS (
       SELECT
@@ -595,8 +670,8 @@ def query_oly_avgdisc(client, date_str: str, table: str = OLY_TABLE,
         grandparent_id,
         MAX(child_pct_discount) AS max_disc
       FROM `{table}`
-      WHERE date = '{date_str}'
-        AND subcategory_name IN ({', '.join(f"'{s}'" for s in include_subcats)})
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
       GROUP BY 1,2
     )
@@ -683,6 +758,45 @@ def main():
         print(f"    ✓ {len(ns_price)} rows added")
     else:
         print("    ⚠ No data found — skipping RAW_NETSHOES")
+
+    # ── RAW_CENTAURO (Centauro brand-level price, footwear only) ─────────────
+    print("  Querying RAW_CENTAURO (Centauro price, footwear-only)...")
+    ctr_price = query_centauro_price(client, monday_str, sunday_str)
+    if ctr_price:
+        price_js = update_js_array(
+            price_js, 'RAW_CENTAURO', week_label, ctr_price,
+            lambda r: price_row(week_label, r['brand'], r['cat'],
+                                r['p_sale'], r['p_list'], r['n'])
+        )
+        print(f"    ✓ {len(ctr_price)} rows added")
+    else:
+        print("    ⚠ No data found — skipping RAW_CENTAURO")
+
+    # ── RAW_OLYMPIKUS (Mon-Sun aggregation) ──────────────────────────────────
+    print("  Querying RAW_OLYMPIKUS (price, Mon-Sun)...")
+    oly_price = query_oly_price(client, monday_str, sunday_str, OLY_TABLE, OLY_INCLUDE_SUBCAT)
+    if oly_price:
+        price_js = update_js_array(
+            price_js, 'RAW_OLYMPIKUS', week_label, oly_price,
+            lambda r: price_row_no_brand(week_label, r['cat'],
+                                         r['p_sale'], r['p_list'], r['n'])
+        )
+        print(f"    ✓ {len(oly_price)} rows added")
+    else:
+        print("    ⚠ No data found — skipping RAW_OLYMPIKUS")
+
+    # ── RAW_MIZUNO (Mon-Sun aggregation) ─────────────────────────────────────
+    print("  Querying RAW_MIZUNO (price, Mon-Sun)...")
+    miz_price = query_oly_price(client, monday_str, sunday_str, MIZ_TABLE, MIZ_INCLUDE_SUBCAT)
+    if miz_price:
+        price_js = update_js_array(
+            price_js, 'RAW_MIZUNO', week_label, miz_price,
+            lambda r: price_row_no_brand(week_label, r['cat'],
+                                         r['p_sale'], r['p_list'], r['n'])
+        )
+        print(f"    ✓ {len(miz_price)} rows added")
+    else:
+        print("    ⚠ No data found — skipping RAW_MIZUNO")
 
     with open(PRICE_JS, 'w', encoding='utf-8') as f:
         f.write(price_js)
@@ -771,52 +885,51 @@ def main():
     else:
         print("    ⚠ No Centauro avgdisc data — skipping")
 
-    # ── Olympikus (Sunday snapshot) ───────────────────────────────────────────
-    # Try Sunday; if missing fall back to latest available day in week
-    oly_date = bq_latest_date_in_week(client, OLY_TABLE, monday_str, sunday_str)
-    if oly_date:
-        print(f"  Querying RAW_DISC_OLYMPIKUS + RAW_AVGDISC_OLYMPIKUS (date={oly_date})...")
-        oly_disc = query_oly_disc(client, oly_date, OLY_TABLE, OLY_INCLUDE_SUBCAT)
-        if oly_disc:
-            disc_js = update_js_array(
-                disc_js, 'RAW_DISC_OLYMPIKUS', week_label, oly_disc,
-                lambda r: disc_row_no_brand(week_label, r['cat'], r['pct'], r['n'])
-            )
-            print(f"    ✓ RAW_DISC_OLYMPIKUS: {len(oly_disc)} rows")
-        oly_avg = query_oly_avgdisc(client, oly_date, OLY_TABLE, OLY_INCLUDE_SUBCAT)
-        if oly_avg:
-            disc_js = update_js_array(
-                disc_js, 'RAW_AVGDISC_OLYMPIKUS', week_label, oly_avg,
-                lambda r: avgdisc_row_no_brand(week_label, r['cat'],
-                                               r['avg_promo'], r['avg_all'],
-                                               r['n_disc'], r['n'])
-            )
-            print(f"    ✓ RAW_AVGDISC_OLYMPIKUS: {len(oly_avg)} rows")
+    # ── Olympikus (Mon-Sun aggregation) ──────────────────────────────────────
+    print(f"  Querying RAW_DISC_OLYMPIKUS + RAW_AVGDISC_OLYMPIKUS (Mon-Sun)...")
+    oly_disc = query_oly_disc(client, monday_str, sunday_str, OLY_TABLE, OLY_INCLUDE_SUBCAT)
+    if oly_disc:
+        disc_js = update_js_array(
+            disc_js, 'RAW_DISC_OLYMPIKUS', week_label, oly_disc,
+            lambda r: disc_row_no_brand(week_label, r['cat'], r['pct'], r['n'])
+        )
+        print(f"    ✓ RAW_DISC_OLYMPIKUS: {len(oly_disc)} rows")
     else:
-        print("    ⚠ No Olympikus data in week — skipping")
+        print("    ⚠ No Olympikus disc data — skipping")
+    oly_avg = query_oly_avgdisc(client, monday_str, sunday_str, OLY_TABLE, OLY_INCLUDE_SUBCAT)
+    if oly_avg:
+        disc_js = update_js_array(
+            disc_js, 'RAW_AVGDISC_OLYMPIKUS', week_label, oly_avg,
+            lambda r: avgdisc_row_no_brand(week_label, r['cat'],
+                                           r['avg_promo'], r['avg_all'],
+                                           r['n_disc'], r['n'])
+        )
+        print(f"    ✓ RAW_AVGDISC_OLYMPIKUS: {len(oly_avg)} rows")
+    else:
+        print("    ⚠ No Olympikus avgdisc data — skipping")
 
-    # ── Mizuno (Sunday snapshot) ──────────────────────────────────────────────
-    miz_date = bq_latest_date_in_week(client, MIZ_TABLE, monday_str, sunday_str)
-    if miz_date:
-        print(f"  Querying RAW_DISC_MIZUNO + RAW_AVGDISC_MIZUNO (date={miz_date})...")
-        miz_disc = query_oly_disc(client, miz_date, MIZ_TABLE, MIZ_INCLUDE_SUBCAT)
-        if miz_disc:
-            disc_js = update_js_array(
-                disc_js, 'RAW_DISC_MIZUNO', week_label, miz_disc,
-                lambda r: disc_row_no_brand(week_label, r['cat'], r['pct'], r['n'])
-            )
-            print(f"    ✓ RAW_DISC_MIZUNO: {len(miz_disc)} rows")
-        miz_avg = query_oly_avgdisc(client, miz_date, MIZ_TABLE, MIZ_INCLUDE_SUBCAT)
-        if miz_avg:
-            disc_js = update_js_array(
-                disc_js, 'RAW_AVGDISC_MIZUNO', week_label, miz_avg,
-                lambda r: avgdisc_row_no_brand(week_label, r['cat'],
-                                               r['avg_promo'], r['avg_all'],
-                                               r['n_disc'], r['n'])
-            )
-            print(f"    ✓ RAW_AVGDISC_MIZUNO: {len(miz_avg)} rows")
+    # ── Mizuno (Mon-Sun aggregation) ─────────────────────────────────────────
+    print(f"  Querying RAW_DISC_MIZUNO + RAW_AVGDISC_MIZUNO (Mon-Sun)...")
+    miz_disc = query_oly_disc(client, monday_str, sunday_str, MIZ_TABLE, MIZ_INCLUDE_SUBCAT)
+    if miz_disc:
+        disc_js = update_js_array(
+            disc_js, 'RAW_DISC_MIZUNO', week_label, miz_disc,
+            lambda r: disc_row_no_brand(week_label, r['cat'], r['pct'], r['n'])
+        )
+        print(f"    ✓ RAW_DISC_MIZUNO: {len(miz_disc)} rows")
     else:
-        print("    ⚠ No Mizuno data in week — skipping")
+        print("    ⚠ No Mizuno disc data — skipping")
+    miz_avg = query_oly_avgdisc(client, monday_str, sunday_str, MIZ_TABLE, MIZ_INCLUDE_SUBCAT)
+    if miz_avg:
+        disc_js = update_js_array(
+            disc_js, 'RAW_AVGDISC_MIZUNO', week_label, miz_avg,
+            lambda r: avgdisc_row_no_brand(week_label, r['cat'],
+                                           r['avg_promo'], r['avg_all'],
+                                           r['n_disc'], r['n'])
+        )
+        print(f"    ✓ RAW_AVGDISC_MIZUNO: {len(miz_avg)} rows")
+    else:
+        print("    ⚠ No Mizuno avgdisc data — skipping")
 
     with open(DISC_JS, 'w', encoding='utf-8') as f:
         f.write(disc_js)
