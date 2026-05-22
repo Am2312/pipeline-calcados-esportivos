@@ -363,7 +363,7 @@ def query_ns_price(client, monday: str, sunday: str) -> list:
 
 
 def query_direct_disc(client, monday: str, sunday: str) -> list:
-    """RAW_DISC_DIRECT: % SKUs discounted per brand × raw_cat."""
+    """RAW_DISC_DIRECT: % SKUs discounted per brand × mapped_cat (consistent with RAW_DIRECT)."""
     sql = f"""
     WITH agg AS (
       SELECT brand_name, sport, grandparent_id,
@@ -371,20 +371,34 @@ def query_direct_disc(client, monday: str, sunday: str) -> list:
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND child_is_available = 1
+        AND child_sale_price IS NOT NULL
       GROUP BY 1,2,3
     )
-    SELECT
-      LOWER(brand_name) AS brand,
-      sport AS cat,
-      ROUND(COUNTIF(max_disc > 0) / COUNT(*), 4) AS pct,
+    SELECT brand_name, sport,
+      COUNTIF(max_disc > 0) AS n_disc,
       COUNT(*) AS n
     FROM agg
     GROUP BY 1,2
     ORDER BY 1,2
     """
     rows = bq_rows(client, sql)
-    return [{'brand': r['brand'], 'cat': r['cat'] or '',
-             'pct': r['pct'], 'n': r['n']} for r in rows]
+    # Apply DIRECT_BRAND_KEY and map_direct_cat (same as query_direct_price)
+    agg = defaultdict(lambda: {'disc': 0, 'total': 0})
+    for r in rows:
+        bk  = DIRECT_BRAND_KEY.get(r['brand_name'], r['brand_name'].lower())
+        cat = map_direct_cat(bk, r['sport'] or '')
+        agg[(bk, cat)]['disc']  += r['n_disc'] or 0
+        agg[(bk, cat)]['total'] += r['n'] or 0
+    result = []
+    for (brand, cat), v in sorted(agg.items()):
+        if v['total'] == 0:
+            continue
+        result.append({
+            'brand': brand, 'cat': cat,
+            'pct': round(v['disc'] / v['total'], 4),
+            'n': v['total'],
+        })
+    return result
 
 
 def query_ns_disc(client, monday: str, sunday: str) -> list:
@@ -396,6 +410,7 @@ def query_ns_disc(client, monday: str, sunday: str) -> list:
       FROM `{NS_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND is_available = 1
+        AND sale_price IS NOT NULL
       GROUP BY 1,2,3
     )
     SELECT
@@ -432,7 +447,7 @@ def query_ns_disc(client, monday: str, sunday: str) -> list:
 
 
 def query_direct_avgdisc(client, monday: str, sunday: str) -> list:
-    """RAW_AVGDISC_DIRECT: avg discount depth per brand × raw_cat."""
+    """RAW_AVGDISC_DIRECT: avg discount depth per brand × mapped_cat (consistent with RAW_DIRECT)."""
     sql = f"""
     WITH agg AS (
       SELECT brand_name, sport, grandparent_id,
@@ -440,23 +455,37 @@ def query_direct_avgdisc(client, monday: str, sunday: str) -> list:
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND child_is_available = 1
+        AND child_sale_price IS NOT NULL
       GROUP BY 1,2,3
     )
-    SELECT
-      LOWER(brand_name) AS brand,
-      sport AS cat,
-      ROUND(AVG(IF(max_disc > 0, max_disc, NULL)), 4) AS avg_disc_promo,
-      ROUND(AVG(max_disc), 4) AS avg_disc_all,
-      COUNTIF(max_disc > 0) AS n_disc,
-      COUNT(*) AS n
+    SELECT brand_name, sport, max_disc
     FROM agg
-    GROUP BY 1,2
-    ORDER BY 1,2
     """
     rows = bq_rows(client, sql)
-    return [{'brand': r['brand'], 'cat': r['cat'] or '',
-             'avg_promo': r['avg_disc_promo'], 'avg_all': r['avg_disc_all'] or 0,
-             'n_disc': r['n_disc'], 'n': r['n']} for r in rows]
+    # Apply DIRECT_BRAND_KEY and map_direct_cat (same as query_direct_price)
+    agg = defaultdict(lambda: {'sp_w': 0.0, 'nd': 0, 'sa_w': 0.0, 'n': 0})
+    for r in rows:
+        bk  = DIRECT_BRAND_KEY.get(r['brand_name'], r['brand_name'].lower())
+        cat = map_direct_cat(bk, r['sport'] or '')
+        d = r['max_disc']
+        if d is None:
+            d = 0
+        if d > 0:
+            agg[(bk, cat)]['sp_w'] += d
+            agg[(bk, cat)]['nd']   += 1
+        agg[(bk, cat)]['sa_w'] += d
+        agg[(bk, cat)]['n']    += 1
+    result = []
+    for (brand, cat), v in sorted(agg.items()):
+        if v['n'] == 0:
+            continue
+        result.append({
+            'brand': brand, 'cat': cat,
+            'avg_promo': round(v['sp_w'] / v['nd'], 4) if v['nd'] > 0 else None,
+            'avg_all':   round(v['sa_w'] / v['n'], 4),
+            'n_disc': v['nd'], 'n': v['n'],
+        })
+    return result
 
 
 def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
@@ -468,6 +497,7 @@ def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
       FROM `{NS_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND is_available = 1
+        AND sale_price IS NOT NULL
       GROUP BY 1,2,3
     )
     SELECT
@@ -487,7 +517,7 @@ def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
     agg = defaultdict(lambda: {'sp_w': 0.0, 'nd': 0, 'sa_w': 0.0, 'n': 0})
     for r in rows:
         brand = norm_ns_brand(r['brand'] or '')
-        cat = norm_ns_dept(r['cat'] or '')
+        cat = map_ns_cat(r['cat'] or '')
         nd = r['n_disc'] or 0
         n = r['n'] or 0
         if r['avg_disc_promo'] is not None and nd > 0:
@@ -558,6 +588,7 @@ def query_centauro_disc(client, monday: str, sunday: str) -> list:
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
+        AND child_value_sale_price IS NOT NULL
       GROUP BY 1,2,3
     )
     SELECT brand, cat,
@@ -585,6 +616,7 @@ def query_centauro_avgdisc(client, monday: str, sunday: str) -> list:
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
+        AND child_value_sale_price IS NOT NULL
       GROUP BY 1,2,3
     )
     SELECT brand, cat,
@@ -646,6 +678,7 @@ def query_oly_disc(client, monday: str, sunday: str, table: str = OLY_TABLE,
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
+        AND child_sale_price IS NOT NULL
       GROUP BY 1,2
     )
     SELECT cat,
@@ -673,6 +706,7 @@ def query_oly_avgdisc(client, monday: str, sunday: str, table: str = OLY_TABLE,
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
+        AND child_sale_price IS NOT NULL
       GROUP BY 1,2
     )
     SELECT cat,

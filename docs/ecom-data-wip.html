@@ -467,7 +467,7 @@ const MAX_W = (() => {
 // ─── Sport group descriptions ─────────────────────────────────────────────────
 const SPORT_DESC = {
     corrida:     'Corrida only',
-    performance: 'Corrida + Caminhada + Treino + Academia',
+    performance: 'Corrida + Caminhada + Treino + Trilha',
     all:         'All sport groups'
 };
 
@@ -475,11 +475,12 @@ const SPORT_DESC = {
 // SPORT_CATS — canonical filters per channel.
 // Uniformized 2026-05-22:
 //   * Corrida = running only (Caminhada NOT included where channels list it separately).
-//     Note: Centauro and Netshoes bundle "Corrida / Caminhada" at the source — these 2
-//     channels unavoidably include some Caminhada in "Corrida" because the source does
-//     not separate them.
+//     Note: Centauro bundles "Corrida / Caminhada" at the source — this channel unavoidably
+//     includes some Caminhada in "Corrida" because the source does not separate them.
 //   * Performance = Corrida + Treino + Trilha + Caminhada (uniform across all channels).
 //     "Aventura" in Centauro maps to Trilha (trail-running models like Gel-Trabuco, Gel-Sonoma).
+// All filters use canonical (mapped) category names — Direct and Netshoes queries now
+// emit mapped cats. Centauro uses raw cats since it is not yet mapped at the query layer.
 const SPORT_CATS = {
     olympikus: {
         corrida:     ['Corrida'],
@@ -492,18 +493,21 @@ const SPORT_CATS = {
         all:         null
     },
     centauro: {
-        corrida:     ['Corrida / Caminhada', 'Running'],
-        performance: ['Corrida / Caminhada', 'Running', 'Academia / Fitness', 'Treino', 'Aventura'],
+        // Raw cats from centauro_trusted. "Aventura" = trail-running.
+        corrida:     ['Corrida / Caminhada'],
+        performance: ['Corrida / Caminhada', 'Academia / Fitness', 'Aventura'],
         all:         null
     },
     direct: {
-        corrida:     ['Corrida', 'Running'],
-        performance: ['Corrida', 'Running', 'Caminhada', 'Treino', 'Treino & Academia', 'Training', 'Trilha', 'Trail Running'],
+        // Canonical mapped cats — all 4 Direct brands now emit mapped categories.
+        corrida:     ['Corrida'],
+        performance: ['Corrida', 'Caminhada', 'Treino', 'Trilha'],
         all:         null
     },
     netshoes: {
-        corrida:     ['Corrida', 'Running', 'Corrida / Caminhada'],
-        performance: ['Corrida', 'Running', 'Corrida / Caminhada', 'Academia / Fitness', 'Fitness e Musculação', 'Treino', 'Treino & Academia', 'Training', 'Trilha', 'Trail Running'],
+        // Canonical mapped cats — Netshoes queries already emit mapped categories.
+        corrida:     ['Corrida'],
+        performance: ['Corrida', 'Treino', 'Trilha'],
         all:         null
     }
 };
@@ -704,11 +708,10 @@ function computeWeeklyMap(source, brandKey, catFilter, metric) {
     if (source === 'olympikus') rows = (typeof RAW_OLYMPIKUS !== 'undefined') ? RAW_OLYMPIKUS : [];
     else if (source === 'mizuno') rows = (typeof RAW_MIZUNO !== 'undefined') ? RAW_MIZUNO : [];
     else if (source === 'centauro') {
-        const base = (typeof RAW_CENTAURO          !== 'undefined') ? RAW_CENTAURO          : [];
-        const oly  = (typeof RAW_CENTAURO_OLYMPIKUS !== 'undefined') ? RAW_CENTAURO_OLYMPIKUS : [];
-        const miz  = (typeof RAW_CENTAURO_MIZUNO    !== 'undefined') ? RAW_CENTAURO_MIZUNO    : [];
-        const ua   = (typeof RAW_CENTAURO_UA        !== 'undefined') ? RAW_CENTAURO_UA        : [];
-        rows = [...base, ...oly, ...miz, ...ua].filter(r => r.brand === brandKey);
+        // RAW_CENTAURO now includes all 6 brands (adidas/Nike/Asics/UA/Olympikus/Mizuno).
+        // The legacy auxiliary arrays (RAW_CENTAURO_OLYMPIKUS/MIZUNO/UA) are no longer
+        // concatenated to avoid double-counting Olympikus/Mizuno/UA in price means.
+        rows = (typeof RAW_CENTAURO !== 'undefined') ? RAW_CENTAURO.filter(r => r.brand === brandKey) : [];
     }
     else if (source === 'direct') rows = (typeof RAW_DIRECT !== 'undefined') ? RAW_DIRECT.filter(r => r.brand === brandKey) : [];
     else if (source === 'netshoes') rows = (typeof RAW_NETSHOES !== 'undefined') ? RAW_NETSHOES.filter(r => r.brand === brandKey) : [];
