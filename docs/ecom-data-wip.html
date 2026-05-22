@@ -404,14 +404,6 @@
                         </select>
                     </div>
                     <div class="control-block">
-                        <div class="control-label">Scope</div>
-                        <select class="control-select" id="pass-scope" onchange="window._passRender && window._passRender()" style="min-width:130px;">
-                            <option value="all" selected>All footwear</option>
-                            <option value="performance">Performance</option>
-                            <option value="corrida">Corrida</option>
-                        </select>
-                    </div>
-                    <div class="control-block">
                         <div class="control-label">Granularity</div>
                         <select class="control-select" id="pass-gran-select" onchange="onPassGranChange()" style="min-width:130px;">
                             <option value="weekly" selected>Weekly</option>
@@ -2051,6 +2043,10 @@ function buildAvgDiscAll() {
 }
 
 // ─── Render all ───────────────────────────────────────────────────────────────
+// Expose plugins so external chart scripts (passthrough-chart.js) can reuse them.
+window.priceLabelPlugin   = priceLabelPlugin;
+window.extendedAxisPlugin = extendedAxisPlugin;
+
 function renderAll() {
     document.getElementById('sport-desc').textContent = SPORT_DESC[document.getElementById('sport-filter').value];
     buildPriceLegend();
@@ -2058,6 +2054,7 @@ function renderAll() {
     buildPriceTable();
     buildDiscAll();
     buildAvgDiscAll();
+    if (window._passRender) window._passRender();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

@@ -108,7 +108,7 @@
 
   function getPriceType() { return document.getElementById('pass-price').value; }
   function getChartWindow() { return document.getElementById('pass-window').value; }
-  function getScope()     { return document.getElementById('pass-scope').value; }
+  function getScope()     { return document.getElementById('sport-filter').value; }   // shared with the rest of the dashboard
   function getGran()      { return document.getElementById('pass-gran-select').value; }
   function getFromKey()   { return document.getElementById('pass-from-select').value; }
   function getToKey()     { return document.getElementById('pass-to-select').value; }
@@ -282,55 +282,100 @@
   };
   window._passRender = function() { render(); };
 
-  // ── Chart ──────────────────────────────────────────────────────────────────
+  // ── Chart — same visual language as buildAvgDiscChart ──────────────────────
   let passChart = null;
   function renderChart() {
     const priceType = getPriceType();
     const win = getChartWindow();
     const field = varField(priceType, win);
-    const scope = getScope();
     const gran  = getGran();
     const fromK = getFromKey(), toK = getToKey();
 
-    const datasets = [];
+    const seriesPairs = [];
     const allKeys = new Set();
     for (const s of getActiveSeries()) {
       if (s.missing) continue;
-      const rows = filterBySerieAndScope(s, scope);
+      const rows = filterBySerieAndScope(s, getScope());
       const weekly = weeklyFromRows(rows, field);
       const rolled = rollToGran(weekly, gran).filter(p => p.key >= fromK && p.key <= toK);
       if (rolled.length === 0) continue;
       rolled.forEach(p => allKeys.add(p.key));
-      datasets.push({
-        label: s.label,
-        data: rolled.map(p => ({ x: p.key, y: p.val === null ? null : p.val * 100 })),
-        borderColor: s.color, backgroundColor: s.color + '20',
-        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: true, tension: 0.2,
-      });
+      seriesPairs.push({ s, rolled });
     }
-    const labels = Array.from(allKeys).sort();
-    const ctx = document.getElementById('pass-chart').getContext('2d');
-    if (passChart) passChart.destroy();
-    passChart = new Chart(ctx, {
+    const sortedKeys = Array.from(allKeys).sort();
+
+    // Symmetric % Y-axis with rounded step (allow negatives)
+    const allVals = seriesPairs.flatMap(({ rolled }) => rolled.map(p => p.val)).filter(v => v != null && isFinite(v));
+    const dataMin = allVals.length ? Math.min(...allVals) : -0.05;
+    const dataMax = allVals.length ? Math.max(...allVals) : 0.05;
+    const range   = (dataMax - dataMin) || Math.max(Math.abs(dataMax), Math.abs(dataMin), 0.05);
+    const roughStep = range / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const multipliers = [1, 2, 2.5, 5, 10];
+    let yStep = magnitude * multipliers[multipliers.length - 1];
+    for (const m of multipliers) { const ms = magnitude * m; if (ms >= roughStep) { yStep = ms; break; } }
+    const yMin = Math.floor((dataMin - range * 0.02) / yStep) * yStep;
+    const yMax = Math.ceil((dataMax  + range * 0.02) / yStep) * yStep;
+
+    const datasets = seriesPairs.map(({ s, rolled }) => {
+      const pm = new Map(rolled.map(p => [p.key, p.val]));
+      return {
+        label: s.label,
+        data:  sortedKeys.map(k => pm.get(k) ?? null),
+        borderColor: s.color, backgroundColor: s.color,
+        borderWidth: 2.5, borderDash: s.dash || [],
+        tension: 0.28, pointRadius: 0, pointHoverRadius: 0,
+        spanGaps: false, fill: false,
+      };
+    });
+
+    if (passChart) { passChart.destroy(); passChart = null; }
+    const canvas = document.getElementById('pass-chart');
+    if (!canvas) return;
+    const plugins = [];
+    if (window.priceLabelPlugin)   plugins.push(window.priceLabelPlugin);
+    if (window.extendedAxisPlugin) plugins.push(window.extendedAxisPlugin);
+
+    passChart = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: { labels: labels.map(k => fmtGranLabel(k, gran)), datasets },
+      data: { labels: sortedKeys.map(k => fmtGranLabel(k, gran)), datasets },
+      plugins,
       options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 72, right: 22, bottom: 8, left: 0 } },
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: (it) => `${it.dataset.label}: ${it.parsed.y != null ? it.parsed.y.toFixed(2) + '%' : 'n/a'}` } }
+          tooltip: {
+            backgroundColor: '#021C45', padding: 12,
+            titleColor: '#FFFFFF', bodyColor: '#FFFFFF',
+            titleFont: { size: 12, weight: 'bold', family: 'Verdana' },
+            bodyFont:  { size: 12, family: 'Verdana' },
+            borderWidth: 0, displayColors: true, boxWidth: 10, boxHeight: 10,
+            callbacks: {
+              label: ctx => {
+                const v = ctx.parsed.y;
+                if (v == null) return ` ${ctx.dataset.label}: —`;
+                const pct = Math.round(v * 100);
+                return ` ${ctx.dataset.label}: ${pct > 0 ? '+' : ''}${pct}%`;
+              }
+            }
+          }
         },
         scales: {
-          x: { ticks:{font:{size:10},color:'#667D99',maxTicksLimit:12,autoSkip:true}, grid:{display:false} },
-          y: { ticks:{font:{size:10},color:'#667D99',callback:(v)=>v.toFixed(1)+'%'}, grid:{color:'#EDF0F4'}, border:{display:false} }
+          x: { grid: { display: false }, border: { display: false },
+               ticks: { color:'#667D99', font:{size:9,family:'Verdana',weight:'normal'}, minRotation:90, maxRotation:90, autoSkip:true, maxTicksLimit:52 } },
+          y: { display: true, min: yMin, max: yMax,
+               grid: { display: false },
+               border: { display: true, color: '#CCD4DD', width: 1 },
+               ticks: { color:'#667D99', font:{size:11,family:'Verdana',weight:'normal'}, stepSize: yStep, padding: 10,
+                        callback: v => { const pct = Math.round(v * 100); return (pct > 0 ? '+' : '') + pct + '%'; } } }
         }
-      },
-      plugins: [{
-        id:'zeroLine',
-        afterDraw:(c)=>{ const ctx=c.ctx; const y0=c.scales.y.getPixelForValue(0); ctx.save(); ctx.strokeStyle='#021C45'; ctx.lineWidth=1; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(c.chartArea.left,y0); ctx.lineTo(c.chartArea.right,y0); ctx.stroke(); ctx.restore(); }
-      }]
+      }
     });
+    passChart.$pillFmt = v => { const pct = Math.round(v * 100); return (pct > 0 ? '+' : '') + pct + '%'; };
+    passChart.$ecomExtendedAxis = true;
+    passChart.update('none');
   }
 
   function renderLegend() {
