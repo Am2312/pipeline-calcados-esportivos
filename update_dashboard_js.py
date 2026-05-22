@@ -455,7 +455,7 @@ def query_direct_avgdisc(client, monday: str, sunday: str) -> list:
 
 
 def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
-    """RAW_AVGDISC_NETSHOES: avg disc depth, model level, RAW dept names."""
+    """RAW_AVGDISC_NETSHOES: avg disc depth, model level, mapped dept names."""
     sql = f"""
     WITH agg AS (
       SELECT brand, department, product_code,
@@ -477,10 +477,31 @@ def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
     ORDER BY 1,2
     """
     rows = bq_rows(client, sql)
-    return [{'brand': norm_ns_brand(r['brand'] or ''),
-             'cat': r['cat'] or '',
-             'avg_promo': r['avg_disc_promo'], 'avg_all': r['avg_disc_all'] or 0,
-             'n_disc': r['n_disc'], 'n': r['n']} for r in rows]
+    # Map raw dept names to display cats (Corrida/Treino/etc.) and re-aggregate.
+    # Multiple raw depts can collapse into one cat (e.g. Running + Corrida/Caminhada → Corrida).
+    agg = defaultdict(lambda: {'sp_w': 0.0, 'nd': 0, 'sa_w': 0.0, 'n': 0})
+    for r in rows:
+        brand = norm_ns_brand(r['brand'] or '')
+        cat = norm_ns_dept(r['cat'] or '')
+        nd = r['n_disc'] or 0
+        n = r['n'] or 0
+        if r['avg_disc_promo'] is not None and nd > 0:
+            agg[(brand, cat)]['sp_w'] += r['avg_disc_promo'] * nd
+            agg[(brand, cat)]['nd'] += nd
+        if r['avg_disc_all'] is not None:
+            agg[(brand, cat)]['sa_w'] += r['avg_disc_all'] * n
+        agg[(brand, cat)]['n'] += n
+    result = []
+    for (brand, cat), v in sorted(agg.items()):
+        if v['n'] == 0:
+            continue
+        result.append({
+            'brand': brand, 'cat': cat,
+            'avg_promo': round(v['sp_w'] / v['nd'], 4) if v['nd'] > 0 else None,
+            'avg_all':   round(v['sa_w'] / v['n'], 4),
+            'n_disc': v['nd'], 'n': v['n'],
+        })
+    return result
 
 
 def query_centauro_disc(client, monday: str, sunday: str) -> list:

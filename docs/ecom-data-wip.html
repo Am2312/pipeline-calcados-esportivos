@@ -749,7 +749,7 @@ function mapToSortedPairs(wMap) {
 }
 
 function aggregatePairs(weeklyPairs, gran) {
-    if (gran === 'weekly') return weeklyPairs;
+    if (gran === 'weekly') return weeklyPairs.map(([w, v]) => [w, v, 1]);
     const groups = new Map();
     for (const [w, price] of weeklyPairs) {
         const key = fmtGranKey(w, gran);
@@ -760,7 +760,18 @@ function aggregatePairs(weeklyPairs, gran) {
     }
     return [...groups.entries()]
         .sort((a,b) => a[1].firstW < b[1].firstW ? -1 : 1)
-        .map(([key, { sum, cnt }]) => [key, Math.round(sum / cnt * 100) / 100]);
+        .map(([key, { sum, cnt }]) => [key, Math.round(sum / cnt * 100) / 100, cnt]);
+}
+
+// Minimum weekly samples expected per granularity (below = flagged as thin).
+function thinThreshold(gran) {
+    return gran === 'monthly' ? 3 : gran === 'quarterly' ? 10 : 0;  // 0 = never flag
+}
+function thinMark(cnt, gran) {
+    const t = thinThreshold(gran);
+    return (t > 0 && cnt != null && cnt < t)
+        ? `<sup title="Based on only ${cnt} weekly sample${cnt===1?'':'s'} — may be statistically thin (Centauro has Thursday-only coverage so some months lose weeks)." style="color:#C8102E;font-weight:700;cursor:help;">*</sup>`
+        : '';
 }
 
 // ─── Period labels (From/To dropdowns) ───────────────────────────────────────
@@ -1114,7 +1125,8 @@ function buildPriceTable() {
         const weekly = mapToSortedPairs(getWeeklyMap(s, sport, metric));
         const agg    = aggregatePairs(weekly, gran);
         const capped = toK ? agg.filter(([k]) => k <= toK) : agg;
-        return { s, pairMap: new Map(capped), pairs: capped };
+        const pairMap = new Map(capped.map(([k, v, cnt]) => [k, { v, cnt }]));
+        return { s, pairMap, pairs: capped };
     });
 
     let anchorK = '';
@@ -1160,17 +1172,23 @@ function buildPriceTable() {
         return `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;"><span class="delta-badge ${cls}">${sign}${(d*100).toFixed(1)}%</span></td>`;
     }
 
-    function priceCell(v) {
-        return `<td style="padding:14px 12px;border-bottom:1px solid #EBEBEB;text-align:center;color:${C.azulEscuro};font-weight:700;font-family:Verdana,Geneva,sans-serif;">${v != null ? 'R$ ' + Math.round(v) : '—'}</td>`;
+    function priceCell(entry) {
+        const v = entry?.v ?? null;
+        const mark = entry ? thinMark(entry.cnt, gran) : '';
+        return `<td style="padding:14px 12px;border-bottom:1px solid #EBEBEB;text-align:center;color:${C.azulEscuro};font-weight:700;font-family:Verdana,Geneva,sans-serif;">${v != null ? 'R$ ' + Math.round(v) + mark : '—'}</td>`;
     }
 
     const rows = seriesData.map(({ s, pairMap }) => {
-        const curr = pairMap.get(anchorK) ?? null;
+        const currEntry = pairMap.get(anchorK) ?? null;
+        const curr = currEntry?.v ?? null;
         const dot  = `<span style="display:inline-block;width:10px;height:10px;background:${s.color};margin-right:10px;vertical-align:middle;"></span>`;
-        const refCells = refs.map(r => priceCell(pairMap.get(r.k) ?? null) + deltaBadge(curr, pairMap.get(r.k) ?? null)).join('');
+        const refCells = refs.map(r => {
+            const refEntry = pairMap.get(r.k) ?? null;
+            return priceCell(refEntry) + deltaBadge(curr, refEntry?.v ?? null);
+        }).join('');
         return `<tr>
             <td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:${C.azulEscuro};font-family:Verdana,Geneva,sans-serif;">${dot}${s.label}</td>
-            ${priceCell(curr)}${refCells}
+            ${priceCell(currEntry)}${refCells}
         </tr>`;
     }).join('');
 
@@ -1471,7 +1489,8 @@ function buildDiscTable() {
         const weekly = mapToSortedPairs(getDiscWeeklyMap(s, sport));
         const agg    = aggregatePairs(weekly, gran);
         const capped = toK ? agg.filter(([k]) => k <= toK) : agg;
-        return { s, pairMap: new Map(capped), pairs: capped };
+        const pairMap = new Map(capped.map(([k, v, cnt]) => [k, { v, cnt }]));
+        return { s, pairMap, pairs: capped };
     });
 
     let anchorK = '';
@@ -1509,8 +1528,10 @@ function buildDiscTable() {
     const AZ = C.azulEscuro, CE = '#FF5B76';
     const TH = (bg, txt) => `<th style="padding:12px 12px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:${bg};color:#FFFFFF;">${txt}</th>`;
 
-    function pctCell(v) {
-        return `<td style="padding:14px 12px;border-bottom:1px solid #EBEBEB;text-align:center;color:${C.azulEscuro};font-weight:700;font-family:Verdana,Geneva,sans-serif;">${v != null ? Math.round(v * 100) + '%' : '—'}</td>`;
+    function pctCell(entry) {
+        const v = entry?.v ?? null;
+        const mark = entry ? thinMark(entry.cnt, gran) : '';
+        return `<td style="padding:14px 12px;border-bottom:1px solid #EBEBEB;text-align:center;color:${C.azulEscuro};font-weight:700;font-family:Verdana,Geneva,sans-serif;">${v != null ? Math.round(v * 100) + '%' + mark : '—'}</td>`;
     }
 
     function ppBadge(curr, ref) {
@@ -1522,12 +1543,16 @@ function buildDiscTable() {
     }
 
     const rows = seriesData.map(({ s, pairMap }) => {
-        const curr = pairMap.get(anchorK) ?? null;
+        const currEntry = pairMap.get(anchorK) ?? null;
+        const curr = currEntry?.v ?? null;
         const dot  = `<span style="display:inline-block;width:10px;height:10px;background:${s.color};margin-right:10px;vertical-align:middle;"></span>`;
-        const refCells = refs.map(r => pctCell(pairMap.get(r.k) ?? null) + ppBadge(curr, pairMap.get(r.k) ?? null)).join('');
+        const refCells = refs.map(r => {
+            const refEntry = pairMap.get(r.k) ?? null;
+            return pctCell(refEntry) + ppBadge(curr, refEntry?.v ?? null);
+        }).join('');
         return `<tr>
             <td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:${C.azulEscuro};font-family:Verdana,Geneva,sans-serif;">${dot}${s.label}</td>
-            ${pctCell(curr)}${refCells}
+            ${pctCell(currEntry)}${refCells}
         </tr>`;
     }).join('');
 
@@ -1803,7 +1828,8 @@ function buildAvgDiscTable() {
     const seriesData = activeSeries.map(s => {
         const agg    = aggregatePairs(mapToSortedPairs(getAvgDiscWeeklyMap(s, sport, scope)), gran);
         const capped = toK ? agg.filter(([k]) => k <= toK) : agg;
-        return { s, pairMap: new Map(capped), pairs: capped };
+        const pairMap = new Map(capped.map(([k, v, cnt]) => [k, { v, cnt }]));
+        return { s, pairMap, pairs: capped };
     });
     let anchorK = '';
     seriesData.forEach(({ pairs }) => { if (pairs.length) { const k = pairs[pairs.length - 1][0]; if (k > anchorK) anchorK = k; } });
@@ -1821,7 +1847,11 @@ function buildAvgDiscTable() {
                                [{ k: shiftKey(anchorK, 1), dl: 'Δ YoY' }];
     const AZ = C.azulEscuro, CE = '#FF5B76';
     const TH = (bg, txt) => `<th style="padding:12px 12px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:${bg};color:#FFFFFF;">${txt}</th>`;
-    const pctCell = v => `<td style="padding:14px 12px;border-bottom:1px solid #EBEBEB;text-align:center;color:${C.azulEscuro};font-weight:700;font-family:Verdana,Geneva,sans-serif;">${v != null ? Math.round(v * 100) + '%' : '—'}</td>`;
+    const pctCell = entry => {
+        const v = entry?.v ?? null;
+        const mark = entry ? thinMark(entry.cnt, gran) : '';
+        return `<td style="padding:14px 12px;border-bottom:1px solid #EBEBEB;text-align:center;color:${C.azulEscuro};font-weight:700;font-family:Verdana,Geneva,sans-serif;">${v != null ? Math.round(v * 100) + '%' + mark : '—'}</td>`;
+    };
     const ppBadge = (curr, ref) => {
         if (curr == null || ref == null) return `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;"><span class="delta-badge delta-neu">—</span></td>`;
         const d = (curr - ref) * 100, sign = d >= 0 ? '+' : '';
@@ -1829,9 +1859,10 @@ function buildAvgDiscTable() {
         return `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;"><span class="delta-badge ${cls}">${sign}${d.toFixed(1)} pp</span></td>`;
     };
     const rows = seriesData.map(({ s, pairMap }) => {
-        const curr = pairMap.get(anchorK) ?? null;
+        const currEntry = pairMap.get(anchorK) ?? null;
+        const curr = currEntry?.v ?? null;
         const dot  = `<span style="display:inline-block;width:10px;height:10px;background:${s.color};margin-right:10px;vertical-align:middle;"></span>`;
-        return `<tr><td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:${C.azulEscuro};font-family:Verdana,Geneva,sans-serif;">${dot}${s.label}</td>${pctCell(curr)}${refs.map(r => pctCell(pairMap.get(r.k) ?? null) + ppBadge(curr, pairMap.get(r.k) ?? null)).join('')}</tr>`;
+        return `<tr><td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:${C.azulEscuro};font-family:Verdana,Geneva,sans-serif;">${dot}${s.label}</td>${pctCell(currEntry)}${refs.map(r => { const e = pairMap.get(r.k) ?? null; return pctCell(e) + ppBadge(curr, e?.v ?? null); }).join('')}</tr>`;
     }).join('');
     document.getElementById('avgdisc-table').innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;font-family:Verdana,Geneva,sans-serif;"><thead><tr><th style="padding:12px 16px;text-align:left;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:${AZ};color:#FFFFFF;width:26%;"></th>${TH(AZ, fmtGranLabel(anchorK, gran))}${refs.map(r => TH(AZ, fmtGranLabel(r.k, gran)) + TH(CE, r.dl)).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
