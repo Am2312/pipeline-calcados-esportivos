@@ -481,6 +481,17 @@
             </div>
 
             <div>
+                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Channel = Total (all 4 cards)</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">When <strong>Channel = Total</strong> is selected (or shown as the Total line in Channel Breakdown), the four cards aggregate Website + Centauro + Netshoes using the <strong>same rule</strong>, so numbers can be compared head-to-head across cards.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;font-family:Verdana,Geneva,sans-serif;text-align:center;background:#F7F8FA;padding:8px;border-radius:4px;">
+                    Total<sub>brand, t</sub> = Σ<sub>ch</sub> (value<sub>ch, t</sub> × n_SKUs<sub>ch, t</sub>) / Σ<sub>ch</sub> n_SKUs<sub>ch, t</sub>
+                </p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>SKU-weighted</strong> across channels — sumP and sumN pooled from raw rows before division. A channel with more SKUs in stock that week contributes proportionally more to the Total. Not an arithmetic mean of channel averages.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>All 3 channels required:</strong> a week only enters the Total if it has data in <em>all</em> of Website, Centauro, and Netshoes. Brands without coverage on a channel in a given week are excluded from that week's Total — this keeps Total comparable across brands and time. For Price Pass-Through, "data in a channel" means the brand has at least one franchise with rows there.</p>
+                <p style="font-size:12px;color:#344F75;margin:0;line-height:1.7;">Applied identically to: <strong>Average Price</strong>, <strong>% Discounted SKUs</strong>, <strong>Average Discount</strong>, <strong>Price Pass-Through</strong>. Same sport scope and category filters as the single-channel views.</p>
+            </div>
+
+            <div>
                 <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">% SKUs with Discount</p>
                 <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">COUNTIF(sale_price &lt; list_price) / COUNT(*)</code> at model level, by week and category.</p>
                 <p style="font-size:12px;color:#344F75;margin:0;line-height:1.7;">A model is "discounted" when its sale price is strictly below its listed price.</p>
@@ -792,19 +803,22 @@ function toggleLegendSeries(scope, key) {
     else if (scope === 'avgdisc') { buildAvgDiscLegend(); buildAvgDiscChart(); buildAvgDiscTable(); }
 }
 
+// Total = SKU-weighted mean across channels, pooling raw (sumP, sumN) per week.
+// Week is kept only if ALL 3 channels (Website, Centauro, Netshoes) have data.
 function computeTotalWeekly(brandId, sport, metric) {
-    const maps = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
+    const accs = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
         const s = SERIES_BY_KEY[k];
         if (!s) return new Map();
-        return computeWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport), metric);
+        return _priceAccumulate(s.source, s.brandKey, getCatFilter(s.source, sport), metric);
     });
     const allWeeks = new Set();
-    maps.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
+    accs.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
     const result = new Map();
     for (const w of allWeeks) {
-        const vals = maps.map(m => m.get(w));
-        if (vals.some(v => v == null)) continue; // all channels required
-        result.set(w, Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 100) / 100);
+        if (accs.some(m => !m.has(w))) continue; // all channels required
+        let sumP = 0, sumN = 0;
+        for (const m of accs) { const a = m.get(w); sumP += a.sumP; sumN += a.sumN; }
+        if (sumN > 0) result.set(w, Math.round(sumP / sumN * 100) / 100);
     }
     return result;
 }
@@ -815,7 +829,7 @@ function getWeeklyMap(s, sport, metric) {
 }
 
 // ─── Discount data helpers ────────────────────────────────────────────────────
-function computeDiscWeeklyMap(source, brandKey, catFilter) {
+function _discAccumulate(source, brandKey, catFilter) {
     let rows;
     if      (source === 'olympikus') rows = (typeof RAW_DISC_OLYMPIKUS !== 'undefined') ? RAW_DISC_OLYMPIKUS : [];
     else if (source === 'mizuno')    rows = (typeof RAW_DISC_MIZUNO    !== 'undefined') ? RAW_DISC_MIZUNO    : [];
@@ -834,6 +848,11 @@ function computeDiscWeeklyMap(source, brandKey, catFilter) {
         e.sumP += r.pct * r.n;
         e.sumN += r.n;
     }
+    return byWeek;
+}
+
+function computeDiscWeeklyMap(source, brandKey, catFilter) {
+    const byWeek = _discAccumulate(source, brandKey, catFilter);
     const result = new Map();
     for (const [w, { sumP, sumN }] of byWeek) {
         if (sumN > 0) result.set(w, Math.round(sumP / sumN * 10000) / 10000);
@@ -841,19 +860,21 @@ function computeDiscWeeklyMap(source, brandKey, catFilter) {
     return result;
 }
 
+// Total = SKU-weighted mean across channels, all-3-channels-required per week.
 function computeTotalDiscWeekly(brandId, sport) {
-    const maps = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
+    const accs = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
         const s = SERIES_BY_KEY[k];
         if (!s) return new Map();
-        return computeDiscWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport));
+        return _discAccumulate(s.source, s.brandKey, getCatFilter(s.source, sport));
     });
     const allWeeks = new Set();
-    maps.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
+    accs.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
     const result = new Map();
     for (const w of allWeeks) {
-        const vals = maps.map(m => m.get(w));
-        if (vals.some(v => v == null)) continue;
-        result.set(w, Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 10000) / 10000);
+        if (accs.some(m => !m.has(w))) continue;
+        let sumP = 0, sumN = 0;
+        for (const m of accs) { const a = m.get(w); sumP += a.sumP; sumN += a.sumN; }
+        if (sumN > 0) result.set(w, Math.round(sumP / sumN * 10000) / 10000);
     }
     return result;
 }
@@ -863,18 +884,18 @@ function getDiscWeeklyMap(s, sport) {
     return computeDiscWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport));
 }
 
-function computeWeeklyMap(source, brandKey, catFilter, metric) {
+// Accumulator: returns Map<week, {sumP, sumN}> for one channel × brand × filter.
+// Shared by computeWeeklyMap (single-channel) and computeTotalWeekly (cross-channel pool).
+function _priceAccumulate(source, brandKey, catFilter, metric) {
     let rows;
     if (source === 'olympikus') rows = (typeof RAW_OLYMPIKUS !== 'undefined') ? RAW_OLYMPIKUS : [];
     else if (source === 'mizuno') rows = (typeof RAW_MIZUNO !== 'undefined') ? RAW_MIZUNO : [];
     else if (source === 'centauro') {
-        // RAW_CENTAURO now includes all 6 brands (adidas/Nike/Asics/UA/Olympikus/Mizuno).
-        // The legacy auxiliary arrays (RAW_CENTAURO_OLYMPIKUS/MIZUNO/UA) are no longer
-        // concatenated to avoid double-counting Olympikus/Mizuno/UA in price means.
         rows = (typeof RAW_CENTAURO !== 'undefined') ? RAW_CENTAURO.filter(r => r.brand === brandKey) : [];
     }
     else if (source === 'direct') rows = (typeof RAW_DIRECT !== 'undefined') ? RAW_DIRECT.filter(r => r.brand === brandKey) : [];
     else if (source === 'netshoes') rows = (typeof RAW_NETSHOES !== 'undefined') ? RAW_NETSHOES.filter(r => r.brand === brandKey) : [];
+    else return new Map();
 
     const byWeek = new Map();
     for (const r of rows) {
@@ -887,6 +908,11 @@ function computeWeeklyMap(source, brandKey, catFilter, metric) {
         e.sumP += val * r.n;
         e.sumN += r.n;
     }
+    return byWeek;
+}
+
+function computeWeeklyMap(source, brandKey, catFilter, metric) {
+    const byWeek = _priceAccumulate(source, brandKey, catFilter, metric);
     const result = new Map();
     for (const [w, { sumP, sumN }] of byWeek) {
         if (sumN > 0) result.set(w, Math.round(sumP / sumN * 100) / 100);
@@ -1775,7 +1801,7 @@ let avgDiscViewMode       = 'comparison';
 let avgDiscCompChannel    = 'free';
 let avgDiscBreakdownBrand = 'adidas';
 
-function computeAvgDiscWeeklyMap(source, brandKey, catFilter, scope) {
+function _avgDiscAccumulate(source, brandKey, catFilter, scope) {
     let rows;
     if      (source === 'olympikus') rows = (typeof RAW_AVGDISC_OLYMPIKUS !== 'undefined') ? RAW_AVGDISC_OLYMPIKUS : [];
     else if (source === 'mizuno')    rows = (typeof RAW_AVGDISC_MIZUNO    !== 'undefined') ? RAW_AVGDISC_MIZUNO    : [];
@@ -1797,6 +1823,11 @@ function computeAvgDiscWeeklyMap(source, brandKey, catFilter, scope) {
         e.sumV += v * wt;
         e.sumN += wt;
     }
+    return byWeek;
+}
+
+function computeAvgDiscWeeklyMap(source, brandKey, catFilter, scope) {
+    const byWeek = _avgDiscAccumulate(source, brandKey, catFilter, scope);
     const result = new Map();
     for (const [w, { sumV, sumN }] of byWeek) {
         if (sumN > 0) result.set(w, Math.round(sumV / sumN * 10000) / 10000);
@@ -1804,19 +1835,21 @@ function computeAvgDiscWeeklyMap(source, brandKey, catFilter, scope) {
     return result;
 }
 
+// Total = SKU-weighted mean across channels, all-3-channels-required per week.
 function computeTotalAvgDiscWeekly(brandId, sport, scope) {
-    const maps = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
+    const accs = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
         const s = SERIES_BY_KEY[k];
         if (!s) return new Map();
-        return computeAvgDiscWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport), scope);
+        return _avgDiscAccumulate(s.source, s.brandKey, getCatFilter(s.source, sport), scope);
     });
     const allWeeks = new Set();
-    maps.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
+    accs.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
     const result = new Map();
     for (const w of allWeeks) {
-        const vals = maps.map(m => m.get(w));
-        if (vals.some(v => v == null)) continue;
-        result.set(w, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10000) / 10000);
+        if (accs.some(m => !m.has(w))) continue;
+        let sumV = 0, sumN = 0;
+        for (const m of accs) { const a = m.get(w); sumV += a.sumV; sumN += a.sumN; }
+        if (sumN > 0) result.set(w, Math.round(sumV / sumN * 10000) / 10000);
     }
     return result;
 }

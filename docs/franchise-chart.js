@@ -249,6 +249,29 @@
       .map(([f]) => f);
   }
 
+  // For brand-level Total (channel='*'), require the week to have data in ALL 3
+  // channels — same rule used by the other 3 cards' Total. Cached per render.
+  const _totalValidWeeksCache = new Map(); // key = brand + '|' + method + '|' + scope
+  function _validWeeksForBrandTotal(brand) {
+    const method = getMethod(), scope = getScope();
+    const cacheKey = brand + '|' + method + '|' + scope;
+    if (_totalValidWeeksCache.has(cacheKey)) return _totalValidWeeksCache.get(cacheKey);
+    const data = method === 'A' ? (typeof RAW_FRANCHISE_A !== 'undefined' ? RAW_FRANCHISE_A : [])
+                                : (typeof RAW_FRANCHISE_B !== 'undefined' ? RAW_FRANCHISE_B : []);
+    const channelWeeks = { website: new Set(), centauro: new Set(), netshoes: new Set() };
+    for (const r of data) {
+      if (r.brand !== brand) continue;
+      if (!passesSport(sportFor(r), scope)) continue;
+      if (channelWeeks[r.channel]) channelWeeks[r.channel].add(r.w);
+    }
+    const valid = new Set();
+    for (const w of channelWeeks.website) {
+      if (channelWeeks.centauro.has(w) && channelWeeks.netshoes.has(w)) valid.add(w);
+    }
+    _totalValidWeeksCache.set(cacheKey, valid);
+    return valid;
+  }
+
   // ── Aggregation: for a series (brand, channel) and a week,
   // weighted-mean across all franchises of (price, var_*). channel='*' = total.
   function rowsForSeries(serie) {
@@ -256,11 +279,13 @@
     const data = method === 'A' ? (typeof RAW_FRANCHISE_A !== 'undefined' ? RAW_FRANCHISE_A : [])
                                 : (typeof RAW_FRANCHISE_B !== 'undefined' ? RAW_FRANCHISE_B : []);
     const scope = getScope();
+    const validWeeks = serie.channel === '*' ? _validWeeksForBrandTotal(serie.brand) : null;
     return data.filter(r =>
       r.brand === serie.brand
       && (serie.channel === '*' ? true : r.channel === serie.channel)
       && (serie.franchise ? r.franchise === serie.franchise : true)
       && passesSport(sportFor(r), scope)
+      && (validWeeks ? validWeeks.has(r.w) : true)
     );
   }
 
