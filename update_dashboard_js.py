@@ -237,22 +237,27 @@ def flt(v) -> str:
         return s if s else '0'
     return str(v)
 
+def js_str(s) -> str:
+    """Escape a string for embedding inside single-quoted JS literals.
+    Handles apostrophes (e.g. 'Levi's', 'Form's') and stray backslashes."""
+    return str(s).replace('\\', '\\\\').replace("'", "\\'")
+
 def price_row(w, brand, cat, p_sale, p_list, n) -> str:
-    return f"{{w:'{w}',brand:'{brand}',cat:'{cat}',p_sale:{flt(p_sale)},p_list:{flt(p_list)},n:{n}}}"
+    return f"{{w:'{w}',brand:'{js_str(brand)}',cat:'{js_str(cat)}',p_sale:{flt(p_sale)},p_list:{flt(p_list)},n:{n}}}"
 
 def disc_row_brand(w, brand, cat, pct, n) -> str:
-    return f"{{w:'{w}',brand:'{brand}',cat:'{cat}',pct:{flt(pct)},n:{n}}}"
+    return f"{{w:'{w}',brand:'{js_str(brand)}',cat:'{js_str(cat)}',pct:{flt(pct)},n:{n}}}"
 
 def disc_row_no_brand(w, cat, pct, n) -> str:
-    return f"{{w:'{w}',cat:'{cat}',pct:{flt(pct)},n:{n}}}"
+    return f"{{w:'{w}',cat:'{js_str(cat)}',pct:{flt(pct)},n:{n}}}"
 
 def avgdisc_row_brand(w, brand, cat, avg_promo, avg_all, n_disc, n) -> str:
-    return (f"{{w:'{w}',brand:'{brand}',cat:'{cat}',"
+    return (f"{{w:'{w}',brand:'{js_str(brand)}',cat:'{js_str(cat)}',"
             f"avg_disc_promo:{flt(avg_promo)},avg_disc_all:{flt(avg_all)},"
             f"n_disc:{n_disc},n:{n}}}")
 
 def avgdisc_row_no_brand(w, cat, avg_promo, avg_all, n_disc, n) -> str:
-    return (f"{{w:'{w}',cat:'{cat}',"
+    return (f"{{w:'{w}',cat:'{js_str(cat)}',"
             f"avg_disc_promo:{flt(avg_promo)},avg_disc_all:{flt(avg_all)},"
             f"n_disc:{n_disc},n:{n}}}")
 
