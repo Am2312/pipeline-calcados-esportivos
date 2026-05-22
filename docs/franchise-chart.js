@@ -19,6 +19,13 @@
   const CHANNELS     = ['website','centauro','netshoes'];
   const CHANNEL_LABEL = { website:'Website', centauro:'Centauro', netshoes:'Netshoes' };
 
+  // Categorical palette for Model Breakdown (top 8 franchises)
+  const FRANCHISE_PALETTE = [
+    '#021C45', '#FF5B76', '#58D9D1', '#FF8C42',
+    '#9B6BFA', '#18A6F1', '#F4C430', '#5A0F4A',
+  ];
+  const MODEL_TOP_N = 8;
+
   // Sport scope (mirrors SPORT_CATS in HTML, applied to franchise.sport)
   const SPORT_SCOPE = {
     corrida:     new Set(['corrida']),
@@ -98,6 +105,7 @@
   let viewMode  = 'comparison';
   let compChannel = 'centauro';
   function breakdownBrand() { return $('fr-brand').value; }
+  function modelChannel() { return $('fr-model-channel').value; }
   function getMethod() { return $('fr-method').value; }
   function getPrice()  { return $('fr-price').value; }
   function getWindow() { return $('fr-window').value; }
@@ -111,9 +119,11 @@
   // ── View / Channel / Brand handlers ───────────────────────────────────────
   function updateViewControls() {
     const isBd = viewMode === 'breakdown';
-    $('fr-channel-block').style.display       = isBd ? 'none' : '';
-    $('fr-brand-block').style.display         = isBd ? '' : 'none';
-    $('fr-series-trigger-block').style.display = (!isBd && compChannel === 'free') ? '' : 'none';
+    const isMd = viewMode === 'model';
+    $('fr-channel-block').style.display        = (isBd || isMd) ? 'none' : '';
+    $('fr-brand-block').style.display          = (isBd || isMd) ? '' : 'none';
+    $('fr-model-channel-block').style.display  = isMd ? '' : 'none';
+    $('fr-series-trigger-block').style.display = (!isBd && !isMd && compChannel === 'free') ? '' : 'none';
   }
   window.onFrViewChange = function() {
     viewMode = $('fr-view').value;
@@ -185,7 +195,7 @@
       // name (channel is implied by the dropdown). Use solid line — no dashed needed
       // since all series share the same channel.
       return BRAND_IDS.map(b => ({ key: b + '|' + compChannel, label: b, brand: b, channel: compChannel, color: BC[b], dash: [] }));
-    } else {
+    } else if (viewMode === 'breakdown') {
       // Breakdown: 1 series per channel for the selected brand. Label = channel name.
       // Dash patterns distinguish channels visually (consistent with avgdisc).
       const br = breakdownBrand();
@@ -196,7 +206,41 @@
         color: BC[br],
         dash: ch === 'centauro' ? [6,3] : ch === 'netshoes' ? [3,2] : [],
       }));
+    } else {
+      // Model Breakdown: brand + channel fixed, top N franchises by volume.
+      const br = breakdownBrand();
+      const ch = modelChannel();           // 'total' | 'website' | 'centauro' | 'netshoes'
+      const chanKey = ch === 'total' ? '*' : ch;
+      const tops = topFranchisesForModel(br, ch);
+      return tops.map((franchise, i) => ({
+        key: br + '|' + chanKey + '|' + franchise,
+        label: franchise,
+        brand: br, channel: chanKey, franchise,
+        color: FRANCHISE_PALETTE[i % FRANCHISE_PALETTE.length],
+        dash: [],
+      }));
     }
+  }
+
+  // Top N franchises by total n_skus for the brand × channel × sport-scope.
+  // Used by Model Breakdown to pick which franchises to plot.
+  function topFranchisesForModel(brand, channel) {
+    const method = getMethod();
+    const data = method === 'A' ? (typeof RAW_FRANCHISE_A !== 'undefined' ? RAW_FRANCHISE_A : [])
+                                : (typeof RAW_FRANCHISE_B !== 'undefined' ? RAW_FRANCHISE_B : []);
+    const scope = getScope();
+    const sumByF = new Map();
+    for (const r of data) {
+      if (r.brand !== brand) continue;
+      if (channel !== 'total' && r.channel !== channel) continue;
+      if (!passesSport(sportFor(r), scope)) continue;
+      if (!r.franchise) continue;
+      sumByF.set(r.franchise, (sumByF.get(r.franchise) || 0) + (r.n || 0));
+    }
+    return Array.from(sumByF.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MODEL_TOP_N)
+      .map(([f]) => f);
   }
 
   // ── Aggregation: for a series (brand, channel) and a week,
@@ -209,6 +253,7 @@
     return data.filter(r =>
       r.brand === serie.brand
       && (serie.channel === '*' ? true : r.channel === serie.channel)
+      && (serie.franchise ? r.franchise === serie.franchise : true)
       && passesSport(sportFor(r), scope)
     );
   }

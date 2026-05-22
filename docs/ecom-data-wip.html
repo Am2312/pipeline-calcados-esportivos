@@ -359,6 +359,7 @@
                         <select class="control-select" id="fr-view" onchange="onFrViewChange()">
                             <option value="comparison" selected>Company Comparison</option>
                             <option value="breakdown">Channel Breakdown</option>
+                            <option value="model">Model Breakdown</option>
                         </select>
                     </div>
                     <div class="control-block" id="fr-channel-block">
@@ -380,6 +381,15 @@
                             <option value="Asics">Asics</option>
                             <option value="Olympikus" selected>Olympikus</option>
                             <option value="Mizuno">Mizuno</option>
+                        </select>
+                    </div>
+                    <div class="control-block" id="fr-model-channel-block" style="display:none;">
+                        <div class="control-label">Channel</div>
+                        <select class="control-select" id="fr-model-channel" onchange="window._frRender && window._frRender()">
+                            <option value="total">Total</option>
+                            <option value="website">Website</option>
+                            <option value="centauro" selected>Centauro</option>
+                            <option value="netshoes">Netshoes</option>
                         </select>
                     </div>
                     <div class="control-block" id="fr-series-trigger-block" style="display:none;">
