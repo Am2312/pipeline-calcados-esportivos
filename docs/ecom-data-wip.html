@@ -63,7 +63,11 @@
         .chart-legend-item {
             display:inline-flex; align-items:center; gap:7px;
             color:#021C45; font:700 12px Verdana,Geneva,sans-serif; white-space:nowrap;
+            cursor:pointer; pointer-events:auto; user-select:none;
+            transition:opacity 0.15s;
         }
+        .chart-legend-item.legend-hidden { opacity:0.35; text-decoration:line-through; }
+        .chart-legend-item:hover { opacity:0.7; }
         .chart-legend-swatch { width:20px; height:3px; display:inline-block; flex-shrink:0; }
 
         /* Chart card */
@@ -264,7 +268,7 @@
             <div><h3 style="margin:0;font-size:0;"></h3></div>
             <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;width:100%;transform:translateY(-34px);margin-bottom:-30px;">
                 <div>
-                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Average Discount Depth</h3>
+                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Average Discount</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
                 <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
@@ -373,7 +377,7 @@
             </div>
 
             <div>
-                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Average Discount Depth</p>
+                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Average Discount</p>
                 <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Simple mean of <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">(1 − sale/list)</code> across discounted models per week &amp; category.</p>
                 <p style="font-size:12px;color:#344F75;margin:0;line-height:1.7;">When aggregating categories, weighted average by <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">n_disc</code> (number of discounted models).</p>
             </div>
@@ -494,8 +498,9 @@ const SPORT_CATS = {
     },
     centauro: {
         // Raw cats from centauro_trusted. "Aventura" = trail-running.
+        // "Treino" existed in Q3 2025 (1.7k rows) and disappeared since; kept for historical coverage.
         corrida:     ['Corrida / Caminhada'],
-        performance: ['Corrida / Caminhada', 'Academia / Fitness', 'Aventura'],
+        performance: ['Corrida / Caminhada', 'Academia / Fitness', 'Aventura', 'Treino'],
         all:         null
     },
     direct: {
@@ -593,43 +598,54 @@ const CHANNEL_BREAKDOWN_COLORS = ['#021C45', '#18A6F1', '#58D9D1'];
 
 const CHANNEL_LABEL = { website:'Website', centauro:'Centauro', netshoes:'Netshoes' };
 
-function getActiveSeries() {
+// Per-chart set of series keys hidden via legend click (independent of the side panel).
+const LEGEND_HIDDEN = { price: new Set(), disc: new Set(), avgdisc: new Set() };
+
+function getActiveSeries(includeHidden) {
+    let series;
     if (viewMode === 'breakdown') {
-        const chanNames = ['Website', 'Centauro', 'Netshoes'];
-        return (BRAND_SERIES_KEYS[breakdownBrand] || []).map((k, i) => {
+        series = (BRAND_SERIES_KEYS[breakdownBrand] || []).map((k, i) => {
             const s = SERIES_BY_KEY[k];
             if (!s) return null;
-            return { ...s, label: chanNames[i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
+            return { ...s, label: ['Website', 'Centauro', 'Netshoes'][i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
         }).filter(Boolean);
-    }
-    if (compChannel === 'free') return ALL_SERIES.filter(s => SERIES_ON[s.key]);
-    if (compChannel === 'website')  return ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
-    if (compChannel === 'netshoes') return ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
-    if (compChannel === 'centauro') return ALL_SERIES.filter(s => s.source === 'centauro').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey.toLowerCase()] || BRAND_LABELS[s.brandKey] || s.label }));
-    // total: one synthetic series per brand, label = brand name only
-    return BRAND_IDS.map(id => ({
+    } else if (compChannel === 'free') series = ALL_SERIES.filter(s => SERIES_ON[s.key]);
+    else if (compChannel === 'website')  series = ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
+    else if (compChannel === 'netshoes') series = ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
+    else if (compChannel === 'centauro') series = ALL_SERIES.filter(s => s.source === 'centauro').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey.toLowerCase()] || BRAND_LABELS[s.brandKey] || s.label }));
+    else series = BRAND_IDS.map(id => ({
         key: id + '|total', label: BRAND_LABELS[id],
         source: '_total', brandKey: '', color: BRAND_COLOR[id], dash: [], _totalBrandId: id
     }));
+    return includeHidden ? series : series.filter(s => !LEGEND_HIDDEN.price.has(s.key));
 }
 
-function getDiscActiveSeries() {
+function getDiscActiveSeries(includeHidden) {
+    let series;
     if (discViewMode === 'breakdown') {
-        const chanNames = ['Website', 'Centauro', 'Netshoes'];
-        return (BRAND_SERIES_KEYS[discBreakdownBrand] || []).map((k, i) => {
+        series = (BRAND_SERIES_KEYS[discBreakdownBrand] || []).map((k, i) => {
             const s = SERIES_BY_KEY[k];
             if (!s) return null;
-            return { ...s, label: chanNames[i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
+            return { ...s, label: ['Website', 'Centauro', 'Netshoes'][i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
         }).filter(Boolean);
-    }
-    if (discCompChannel === 'free') return ALL_SERIES.filter(s => DISC_SERIES_ON[s.key]);
-    if (discCompChannel === 'website')  return ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
-    if (discCompChannel === 'netshoes') return ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
-    if (discCompChannel === 'centauro') return ALL_SERIES.filter(s => s.source === 'centauro').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey.toLowerCase()] || BRAND_LABELS[s.brandKey] || s.label }));
-    return BRAND_IDS.map(id => ({
+    } else if (discCompChannel === 'free') series = ALL_SERIES.filter(s => DISC_SERIES_ON[s.key]);
+    else if (discCompChannel === 'website')  series = ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
+    else if (discCompChannel === 'netshoes') series = ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
+    else if (discCompChannel === 'centauro') series = ALL_SERIES.filter(s => s.source === 'centauro').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey.toLowerCase()] || BRAND_LABELS[s.brandKey] || s.label }));
+    else series = BRAND_IDS.map(id => ({
         key: id + '|total', label: BRAND_LABELS[id],
         source: '_total', brandKey: '', color: BRAND_COLOR[id], dash: [], _totalBrandId: id
     }));
+    return includeHidden ? series : series.filter(s => !LEGEND_HIDDEN.disc.has(s.key));
+}
+
+// Toggle legend visibility — exposed for inline onclick on legend items.
+function toggleLegendSeries(scope, key) {
+    const set = LEGEND_HIDDEN[scope];
+    if (set.has(key)) set.delete(key); else set.add(key);
+    if (scope === 'price') { buildPriceLegend(); buildPriceChart(); buildPriceTable(); }
+    else if (scope === 'disc') { buildDiscLegend(); buildDiscChart(); buildDiscTable(); }
+    else if (scope === 'avgdisc') { buildAvgDiscLegend(); buildAvgDiscChart(); buildAvgDiscTable(); }
 }
 
 function computeTotalWeekly(brandId, sport, metric) {
@@ -790,9 +806,10 @@ function aggregatePairs(weeklyPairs, gran) {
         g.sum += price;
         g.cnt += 1;
     }
+    // Round at 4 decimals: needed for % metrics (0-1 range); harmless for prices in R$.
     return [...groups.entries()]
         .sort((a,b) => a[1].firstW < b[1].firstW ? -1 : 1)
-        .map(([key, { sum, cnt }]) => [key, Math.round(sum / cnt * 100) / 100, cnt]);
+        .map(([key, { sum, cnt }]) => [key, Math.round(sum / cnt * 10000) / 10000, cnt]);
 }
 
 // Minimum weekly samples expected per granularity (below = flagged as thin).
@@ -1025,8 +1042,11 @@ document.addEventListener('click', e => {
 // ─── Inline legend (active series only, read-only) ────────────────────────────
 function buildPriceLegend() {
     const el = document.getElementById('price-legend');
-    el.innerHTML = getActiveSeries()
-        .map(s => `<span class="chart-legend-item">${makeDashSwatch(s.color, s.dash)}${s.label}</span>`)
+    el.innerHTML = getActiveSeries(true)
+        .map(s => {
+            const cls = LEGEND_HIDDEN.price.has(s.key) ? 'chart-legend-item legend-hidden' : 'chart-legend-item';
+            return `<span class="${cls}" onclick="toggleLegendSeries('price', '${s.key}')">${makeDashSwatch(s.color, s.dash)}${s.label}</span>`;
+        })
         .join('');
 }
 
@@ -1397,8 +1417,11 @@ function buildDiscAll() {
 // ─── Build disc chart + table ─────────────────────────────────────────────────
 function buildDiscLegend() {
     const el = document.getElementById('disc-legend');
-    el.innerHTML = getDiscActiveSeries()
-        .map(s => `<span class="chart-legend-item">${makeDashSwatch(s.color, s.dash)}${s.label}</span>`)
+    el.innerHTML = getDiscActiveSeries(true)
+        .map(s => {
+            const cls = LEGEND_HIDDEN.disc.has(s.key) ? 'chart-legend-item legend-hidden' : 'chart-legend-item';
+            return `<span class="${cls}" onclick="toggleLegendSeries('disc', '${s.key}')">${makeDashSwatch(s.color, s.dash)}${s.label}</span>`;
+        })
         .join('');
 }
 
@@ -1659,19 +1682,19 @@ function getAvgDiscWeeklyMap(s, sport, scope) {
     return computeAvgDiscWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport), scope);
 }
 
-function getAvgDiscActiveSeries() {
+function getAvgDiscActiveSeries(includeHidden) {
+    let series;
     if (avgDiscViewMode === 'breakdown') {
-        const chanNames = ['Website', 'Centauro', 'Netshoes'];
-        return (BRAND_SERIES_KEYS[avgDiscBreakdownBrand] || []).map((k, i) => {
+        series = (BRAND_SERIES_KEYS[avgDiscBreakdownBrand] || []).map((k, i) => {
             const s = SERIES_BY_KEY[k]; if (!s) return null;
-            return { ...s, label: chanNames[i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
+            return { ...s, label: ['Website', 'Centauro', 'Netshoes'][i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
         }).filter(Boolean);
-    }
-    if (avgDiscCompChannel === 'free')     return ALL_SERIES.filter(s => AVGDISC_SERIES_ON[s.key]);
-    if (avgDiscCompChannel === 'website')  return ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
-    if (avgDiscCompChannel === 'netshoes') return ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
-    if (avgDiscCompChannel === 'centauro') return ALL_SERIES.filter(s => s.source === 'centauro').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey.toLowerCase()] || BRAND_LABELS[s.brandKey] || s.label }));
-    return BRAND_IDS.map(id => ({ key: id + '|total', label: BRAND_LABELS[id], source: '_total', brandKey: '', color: BRAND_COLOR[id], dash: [], _totalBrandId: id }));
+    } else if (avgDiscCompChannel === 'free')     series = ALL_SERIES.filter(s => AVGDISC_SERIES_ON[s.key]);
+    else if (avgDiscCompChannel === 'website')  series = ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
+    else if (avgDiscCompChannel === 'netshoes') series = ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
+    else if (avgDiscCompChannel === 'centauro') series = ALL_SERIES.filter(s => s.source === 'centauro').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey.toLowerCase()] || BRAND_LABELS[s.brandKey] || s.label }));
+    else series = BRAND_IDS.map(id => ({ key: id + '|total', label: BRAND_LABELS[id], source: '_total', brandKey: '', color: BRAND_COLOR[id], dash: [], _totalBrandId: id }));
+    return includeHidden ? series : series.filter(s => !LEGEND_HIDDEN.avgdisc.has(s.key));
 }
 
 function buildAvgDiscSeriesPanel() {
@@ -1781,8 +1804,11 @@ function onAvgDiscBreakdownBrandChange() {
 }
 
 function buildAvgDiscLegend() {
-    document.getElementById('avgdisc-legend').innerHTML = getAvgDiscActiveSeries()
-        .map(s => `<span class="chart-legend-item">${makeDashSwatch(s.color, s.dash)}${s.label}</span>`).join('');
+    document.getElementById('avgdisc-legend').innerHTML = getAvgDiscActiveSeries(true)
+        .map(s => {
+            const cls = LEGEND_HIDDEN.avgdisc.has(s.key) ? 'chart-legend-item legend-hidden' : 'chart-legend-item';
+            return `<span class="${cls}" onclick="toggleLegendSeries('avgdisc', '${s.key}')">${makeDashSwatch(s.color, s.dash)}${s.label}</span>`;
+        }).join('');
 }
 
 function buildAvgDiscChart() {

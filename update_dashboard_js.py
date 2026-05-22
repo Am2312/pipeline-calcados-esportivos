@@ -563,7 +563,10 @@ def query_centauro_price(client, monday: str, sunday: str) -> list:
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
+        AND NOT STARTS_WITH(grandparent_category, 'z_')
         AND child_value_list_price > 0
+        AND child_value_sale_price IS NOT NULL
+        AND child_value_sale_price <= 10000
     )
     SELECT brand, cat,
       ROUND(AVG(sale_p), 2) AS p_sale,
@@ -592,7 +595,10 @@ def query_centauro_disc(client, monday: str, sunday: str) -> list:
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
+        AND NOT STARTS_WITH(grandparent_category, 'z_')  -- exclude deactivated categories
         AND child_value_sale_price IS NOT NULL
+        AND child_value_sale_price <= 10000  -- exclude seller-typo outliers (e.g. R$ 72.300)
+        AND CAST(child_pct_discount AS FLOAT64) >= -0.05  -- exclude negative discounts (sale > list)
       GROUP BY 1,2,3
     )
     SELECT brand, cat,
@@ -620,7 +626,10 @@ def query_centauro_avgdisc(client, monday: str, sunday: str) -> list:
         AND grandparent_brand IN {repr(CENTAURO_BRANDS)}
         AND grandparent_category IS NOT NULL
         AND grandparent_category != ''
+        AND NOT STARTS_WITH(grandparent_category, 'z_')  -- exclude deactivated categories
         AND child_value_sale_price IS NOT NULL
+        AND child_value_sale_price <= 10000  -- exclude seller-typo outliers (e.g. R$ 72.300)
+        AND CAST(child_pct_discount AS FLOAT64) >= -0.05  -- exclude negative discounts (sale > list)
       GROUP BY 1,2,3
     )
     SELECT brand, cat,
@@ -652,7 +661,7 @@ def query_oly_price(client, monday: str, sunday: str, table: str = OLY_TABLE,
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
-        AND child_sale_price IS NOT NULL
+        AND child_sale_price > 0
       GROUP BY 1,2,3
     )
     SELECT cat,
@@ -682,7 +691,7 @@ def query_oly_disc(client, monday: str, sunday: str, table: str = OLY_TABLE,
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
-        AND child_sale_price IS NOT NULL
+        AND child_sale_price > 0
       GROUP BY 1,2
     )
     SELECT cat,
@@ -710,7 +719,7 @@ def query_oly_avgdisc(client, monday: str, sunday: str, table: str = OLY_TABLE,
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND subcategory_name IN ({sub_list})
         AND child_is_available = 1
-        AND child_sale_price IS NOT NULL
+        AND child_sale_price > 0
       GROUP BY 1,2
     )
     SELECT cat,
