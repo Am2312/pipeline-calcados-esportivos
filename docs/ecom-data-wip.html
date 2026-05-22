@@ -484,10 +484,15 @@
                 <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Channel = Total (all 4 cards)</p>
                 <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">When <strong>Channel = Total</strong> is selected (or shown as the Total line in Channel Breakdown), the four cards aggregate Website + Centauro + Netshoes using the <strong>same rule</strong>, so numbers can be compared head-to-head across cards.</p>
                 <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;font-family:Verdana,Geneva,sans-serif;text-align:center;background:#F7F8FA;padding:8px;border-radius:4px;">
-                    Total<sub>brand, t</sub> = Σ<sub>ch</sub> (value<sub>ch, t</sub> × n_SKUs<sub>ch, t</sub>) / Σ<sub>ch</sub> n_SKUs<sub>ch, t</sub>
+                    Total<sub>brand, t</sub> = ( mean<sub>Website</sub> + mean<sub>Centauro</sub> + mean<sub>Netshoes</sub> ) / 3
                 </p>
-                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>SKU-weighted</strong> across channels — sumP and sumN pooled from raw rows before division. A channel with more SKUs in stock that week contributes proportionally more to the Total. Not an arithmetic mean of channel averages.</p>
-                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>All 3 channels required:</strong> a week only enters the Total if it has data in <em>all</em> of Website, Centauro, and Netshoes. Brands without coverage on a channel in a given week are excluded from that week's Total — this keeps Total comparable across brands and time. For Price Pass-Through, "data in a channel" means the brand has at least one franchise with rows there.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Two-stage aggregation:</strong></p>
+                <ol style="font-size:12px;color:#344F75;margin:0 0 6px 0;padding-left:18px;line-height:1.8;">
+                    <li><strong>Within each channel</strong> — SKU-weighted mean across all rows (categories, franchises) of that channel × brand × week.</li>
+                    <li><strong>Across channels</strong> — simple arithmetic mean of the three channel-level means (each channel weighs 1/3).</li>
+                </ol>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Why simple mean across channels (not SKU-weighted pool):</strong> each scraper counts SKUs at a different grain — Direct (Adidas/Nike/Asics/UA sites) counts colorways, Olympikus/Mizuno count EANs (model+color+size), Centauro counts EANs after seller dedup, Netshoes counts at colorway level. These row counts are <em>not directly comparable</em>: an EAN-grain channel can have ~5–10× more rows than a colorway-grain channel for the same real catalog. SKU-weighted pooling across channels would systematically over-weight finer-grain channels (mostly Centauro), so we use 1/3 each — a deliberately conservative, comparable rule.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>All 3 channels required:</strong> a week only enters the Total if it has data in <em>all</em> of Website, Centauro, and Netshoes. Since Netshoes coverage started 2026-05-15, Total time series will only start populating from that week onwards — historical Total will fill in as the series grows. For Price Pass-Through, "data in a channel" means the brand has at least one franchise with rows there.</p>
                 <p style="font-size:12px;color:#344F75;margin:0;line-height:1.7;">Applied identically to: <strong>Average Price</strong>, <strong>% Discounted SKUs</strong>, <strong>Average Discount</strong>, <strong>Price Pass-Through</strong>. Same sport scope and category filters as the single-channel views.</p>
             </div>
 
@@ -803,22 +808,25 @@ function toggleLegendSeries(scope, key) {
     else if (scope === 'avgdisc') { buildAvgDiscLegend(); buildAvgDiscChart(); buildAvgDiscTable(); }
 }
 
-// Total = SKU-weighted mean across channels, pooling raw (sumP, sumN) per week.
-// Week is kept only if ALL 3 channels (Website, Centauro, Netshoes) have data.
+// Total = simple arithmetic mean of the 3 channel-level weighted means.
+// Within each channel, the weekly value is already SKU-weighted across rows.
+// Across channels we use a flat 1/3 weight (NOT SKU-weighted) because each
+// scraper counts SKUs at a different grain (colorway vs EAN vs etc.), so
+// pooling raw n would over-weight finer-grain channels. All 3 channels are
+// required for a week to appear in the Total.
 function computeTotalWeekly(brandId, sport, metric) {
-    const accs = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
+    const maps = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
         const s = SERIES_BY_KEY[k];
         if (!s) return new Map();
-        return _priceAccumulate(s.source, s.brandKey, getCatFilter(s.source, sport), metric);
+        return computeWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport), metric);
     });
     const allWeeks = new Set();
-    accs.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
+    maps.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
     const result = new Map();
     for (const w of allWeeks) {
-        if (accs.some(m => !m.has(w))) continue; // all channels required
-        let sumP = 0, sumN = 0;
-        for (const m of accs) { const a = m.get(w); sumP += a.sumP; sumN += a.sumN; }
-        if (sumN > 0) result.set(w, Math.round(sumP / sumN * 100) / 100);
+        const vals = maps.map(m => m.get(w));
+        if (vals.some(v => v == null)) continue; // all channels required
+        result.set(w, Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 100) / 100);
     }
     return result;
 }
@@ -860,21 +868,21 @@ function computeDiscWeeklyMap(source, brandKey, catFilter) {
     return result;
 }
 
-// Total = SKU-weighted mean across channels, all-3-channels-required per week.
+// Total = simple arithmetic mean of the 3 channel-level weighted means.
+// See computeTotalWeekly for the grain-comparability rationale.
 function computeTotalDiscWeekly(brandId, sport) {
-    const accs = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
+    const maps = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
         const s = SERIES_BY_KEY[k];
         if (!s) return new Map();
-        return _discAccumulate(s.source, s.brandKey, getCatFilter(s.source, sport));
+        return computeDiscWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport));
     });
     const allWeeks = new Set();
-    accs.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
+    maps.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
     const result = new Map();
     for (const w of allWeeks) {
-        if (accs.some(m => !m.has(w))) continue;
-        let sumP = 0, sumN = 0;
-        for (const m of accs) { const a = m.get(w); sumP += a.sumP; sumN += a.sumN; }
-        if (sumN > 0) result.set(w, Math.round(sumP / sumN * 10000) / 10000);
+        const vals = maps.map(m => m.get(w));
+        if (vals.some(v => v == null)) continue;
+        result.set(w, Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 10000) / 10000);
     }
     return result;
 }
@@ -1835,21 +1843,21 @@ function computeAvgDiscWeeklyMap(source, brandKey, catFilter, scope) {
     return result;
 }
 
-// Total = SKU-weighted mean across channels, all-3-channels-required per week.
+// Total = simple arithmetic mean of the 3 channel-level weighted means.
+// See computeTotalWeekly for the grain-comparability rationale.
 function computeTotalAvgDiscWeekly(brandId, sport, scope) {
-    const accs = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
+    const maps = (BRAND_SERIES_KEYS[brandId] || []).map(k => {
         const s = SERIES_BY_KEY[k];
         if (!s) return new Map();
-        return _avgDiscAccumulate(s.source, s.brandKey, getCatFilter(s.source, sport), scope);
+        return computeAvgDiscWeeklyMap(s.source, s.brandKey, getCatFilter(s.source, sport), scope);
     });
     const allWeeks = new Set();
-    accs.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
+    maps.forEach(m => m.forEach((_, w) => allWeeks.add(w)));
     const result = new Map();
     for (const w of allWeeks) {
-        if (accs.some(m => !m.has(w))) continue;
-        let sumV = 0, sumN = 0;
-        for (const m of accs) { const a = m.get(w); sumV += a.sumV; sumN += a.sumN; }
-        if (sumN > 0) result.set(w, Math.round(sumV / sumN * 10000) / 10000);
+        const vals = maps.map(m => m.get(w));
+        if (vals.some(v => v == null)) continue;
+        result.set(w, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10000) / 10000);
     }
     return result;
 }

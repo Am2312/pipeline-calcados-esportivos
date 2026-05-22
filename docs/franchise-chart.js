@@ -306,6 +306,32 @@
       .sort((a, b) => a.w.localeCompare(b.w));
   }
 
+  // Weekly series for a single series object — applies the right aggregation per case.
+  // For Total series (channel='*'), Total = simple arithmetic mean of the 3 channel-
+  // level weighted means (1/3 weight each). All 3 channels required per week.
+  // See methodology: each scraper counts SKUs at a different grain, so SKU-weighted
+  // pooling across channels would over-weight finer-grain channels (e.g., Centauro).
+  function weeklyForSerie(serie, field) {
+    const rows = rowsForSeries(serie);
+    if (serie.channel !== '*') return weeklyAggregate(rows, field);
+    // Per-channel weighted means
+    const channels = ['website', 'centauro', 'netshoes'];
+    const perChannelMaps = channels.map(ch =>
+      new Map(weeklyAggregate(rows.filter(r => r.channel === ch), field)
+        .filter(p => p.val != null)
+        .map(p => [p.w, p.val]))
+    );
+    const allW = new Set();
+    perChannelMaps.forEach(m => m.forEach((_, w) => allW.add(w)));
+    const out = [];
+    for (const w of [...allW].sort()) {
+      const vals = perChannelMaps.map(m => m.get(w));
+      if (vals.some(v => v == null)) continue; // all 3 required
+      out.push({ w, val: (vals[0] + vals[1] + vals[2]) / 3 });
+    }
+    return out;
+  }
+
   // Roll weekly → granularity
   function rollToGran(weekly, gran) {
     if (gran === 'weekly') return weekly.map(p => ({ key: p.w, val: p.val }));
@@ -351,7 +377,7 @@
     const gran = getGran(); const fromK = getFromK(), toK = getToK();
 
     const seriesPairs = getActiveSeries().map(s => {
-      const weekly = weeklyAggregate(rowsForSeries(s), field);
+      const weekly = weeklyForSerie(s, field);
       const rolled = rollToGran(weekly, gran).filter(p => p.key >= fromK && p.key <= toK);
       return { s, rolled };
     }).filter(x => x.rolled.length > 0 && !FR_HIDDEN.has(x.s.key));
@@ -469,6 +495,8 @@
 
   // Aggregate (price + 5 var fields) for a series, weighted by n_skus across
   // franchises in the most-recent period within To.
+  // For Total series (channel='*'): each field = simple mean of the 3 channel-
+  // level weighted means at latestW. All 3 channels required.
   function summaryForSeries(serie) {
     const price = getPrice();
     const fields = [
@@ -478,7 +506,6 @@
     ];
     const rows = rowsForSeries(serie);
     const toK = getToK(), gran = getGran();
-    // Identify the most-recent w (within or at To-period)
     let latestW = '';
     for (const r of rows) {
       const k = fmtGranKey(r.w, gran);
@@ -486,12 +513,36 @@
       if (r.w > latestW) latestW = r.w;
     }
     if (!latestW) return null;
-    // Weighted aggregate across all franchises of this serie on latestW
     const out = { w: latestW };
+    const rowsAtW = rows.filter(r => r.w === latestW);
+
+    if (serie.channel === '*') {
+      // Total: weighted mean within each channel, then simple mean of the 3.
+      const channels = ['website', 'centauro', 'netshoes'];
+      for (const f of fields) {
+        const channelMeans = [];
+        for (const ch of channels) {
+          let sumV = 0, sumN = 0;
+          for (const r of rowsAtW) {
+            if (r.channel !== ch) continue;
+            const v = r[f];
+            if (v === null || v === undefined) continue;
+            const wt = r.n || 0;
+            if (wt === 0) continue;
+            sumV += v * wt; sumN += wt;
+          }
+          channelMeans.push(sumN > 0 ? sumV / sumN : null);
+        }
+        out[f] = channelMeans.every(v => v != null)
+          ? (channelMeans[0] + channelMeans[1] + channelMeans[2]) / 3
+          : null;
+      }
+      return out;
+    }
+    // Non-Total: SKU-weighted mean across rows of the series at latestW.
     for (const f of fields) {
       let sum = 0, n = 0;
-      for (const r of rows) {
-        if (r.w !== latestW) continue;
+      for (const r of rowsAtW) {
         const v = r[f];
         if (v === null || v === undefined) continue;
         const wt = r.n || 0;
