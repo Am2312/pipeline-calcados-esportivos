@@ -97,7 +97,7 @@
   const $ = (id) => document.getElementById(id);
   let viewMode  = 'comparison';
   let compChannel = 'centauro';
-  let breakdownBrand = 'Adidas';
+  function breakdownBrand() { return $('fr-brand').value; }
   function getMethod() { return $('fr-method').value; }
   function getPrice()  { return $('fr-price').value; }
   function getWindow() { return $('fr-window').value; }
@@ -125,13 +125,7 @@
     updateViewControls();
     render();
   };
-  // brand select reuses _frRender via onchange in HTML
-  Object.defineProperty(window, '_frBrand_updater', { value: () => { breakdownBrand = $('fr-brand').value; render(); } });
-  // wire it
-  if (typeof window !== 'undefined') {
-    const bs = $('fr-brand');
-    if (bs) bs.addEventListener('change', () => { breakdownBrand = bs.value; render(); });
-  }
+  // brand select uses inline onchange="window._frRender..." in HTML
 
   // ── Series panel (multi-select for Free Choice) ───────────────────────────
   let panelOpen = false;
@@ -185,18 +179,21 @@
       if (compChannel === 'free') return ALL_SERIES.filter(s => SERIES_ON[s.key]);
       if (compChannel === 'total') {
         // Total = one row per brand, aggregating across ALL channels.
-        // Represent as a virtual series per brand with channel='*' (handled in aggregate).
         return BRAND_IDS.map(b => ({ key: b + '|total', label: b, brand: b, channel: '*', color: BC[b], dash: [] }));
       }
-      // Specific channel: 1 series per brand at that channel
+      // Specific channel: 1 series per brand at that channel. Label is just the brand
+      // name (channel is implied by the dropdown). Use solid line — no dashed needed
+      // since all series share the same channel.
       return BRAND_IDS.map(b => ({ key: b + '|' + compChannel, label: b, brand: b, channel: compChannel, color: BC[b], dash: [] }));
     } else {
-      // Breakdown: 1 series per channel for the selected brand
+      // Breakdown: 1 series per channel for the selected brand. Label = channel name.
+      // Dash patterns distinguish channels visually (consistent with avgdisc).
+      const br = breakdownBrand();
       return CHANNELS.map(ch => ({
-        key: breakdownBrand + '|' + ch,
+        key: br + '|' + ch,
         label: CHANNEL_LABEL[ch],
-        brand: breakdownBrand, channel: ch,
-        color: BC[breakdownBrand],
+        brand: br, channel: ch,
+        color: BC[br],
         dash: ch === 'centauro' ? [6,3] : ch === 'netshoes' ? [3,2] : [],
       }));
     }
@@ -281,7 +278,7 @@
       const weekly = weeklyAggregate(rowsForSeries(s), field);
       const rolled = rollToGran(weekly, gran).filter(p => p.key >= fromK && p.key <= toK);
       return { s, rolled };
-    }).filter(x => x.rolled.length > 0);
+    }).filter(x => x.rolled.length > 0 && !FR_HIDDEN.has(x.s.key));
 
     const allKeys = new Set();
     seriesPairs.forEach(x => x.rolled.forEach(p => allKeys.add(p.key)));
@@ -359,16 +356,28 @@
     frChart.$ecomExtendedAxis = true;
     frChart.update('none');
 
-    renderLegend(seriesPairs.map(x => x.s));
+    // Legend shows ALL active series (visible + hidden) so the user can re-enable.
+    renderLegend(getActiveSeries());
   }
 
+  // Series-hidden state for legend toggle (mirrors avgdisc behaviour)
+  const FR_HIDDEN = new Set();
+  window._frLegendToggle = function(key) {
+    if (FR_HIDDEN.has(key)) FR_HIDDEN.delete(key); else FR_HIDDEN.add(key);
+    render();
+  };
+  function makeDashSwatch(color, dash) {
+    if (!dash || !dash.length)
+      return `<span class="chart-legend-swatch" style="background:${color};"></span>`;
+    if (dash[0] === 6)
+      return `<span class="chart-legend-swatch" style="background:repeating-linear-gradient(90deg,${color} 0,${color} 6px,transparent 6px,transparent 9px);"></span>`;
+    return `<span class="chart-legend-swatch" style="background:repeating-linear-gradient(90deg,${color} 0,${color} 2px,transparent 2px,transparent 5px);"></span>`;
+  }
   function renderLegend(series) {
-    const html = series.map(s => `
-      <span class="legend-pill" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;font-size:11px;background:${s.color}1A;color:${s.color};border:1px solid ${s.color}40;">
-        <span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0;"></span>
-        ${s.label}${s.dash && s.dash.length ? ' (dashed)' : ''}
-      </span>`).join(' ');
-    $('fr-legend').innerHTML = html;
+    $('fr-legend').innerHTML = series.map(s => {
+      const cls = FR_HIDDEN.has(s.key) ? 'chart-legend-item legend-hidden' : 'chart-legend-item';
+      return `<span class="${cls}" onclick="window._frLegendToggle('${s.key}')">${makeDashSwatch(s.color, s.dash || [])}${s.label}</span>`;
+    }).join('');
   }
 
   // ── Summary table — drills down into franchises ──────────────────────────
@@ -423,7 +432,7 @@
     const series = getActiveSeries();
     if (!series.length) { $('fr-table').innerHTML = ''; return; }
 
-    const rowsArr = series.map(s => ({ s, ref: summaryForSeries(s) })).filter(x => x.ref);
+    const rowsArr = series.map(s => ({ s, ref: summaryForSeries(s) })).filter(x => x.ref && !FR_HIDDEN.has(x.s.key));
     if (!rowsArr.length) {
       $('fr-table').innerHTML = `<div style="padding:24px;text-align:center;color:#9AA8BB;">No data for the current filters.</div>`;
       return;
