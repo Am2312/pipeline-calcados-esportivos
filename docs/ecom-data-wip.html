@@ -474,13 +474,15 @@ const SPORT_DESC = {
 // ─── Sport-category filter per source (null = include all) ────────────────────
 // SPORT_CATS — canonical filters per channel.
 // Uniformized 2026-05-22:
-//   * Corrida = running + walking (Centauro/Netshoes naturally bundle "Corrida / Caminhada";
-//     Olympikus/Direct list "Caminhada" separately so it is added explicitly).
-//   * Performance = Corrida + Treino + Trilha (uniform across all channels).
+//   * Corrida = running only (Caminhada NOT included where channels list it separately).
+//     Note: Centauro and Netshoes bundle "Corrida / Caminhada" at the source — these 2
+//     channels unavoidably include some Caminhada in "Corrida" because the source does
+//     not separate them.
+//   * Performance = Corrida + Treino + Trilha + Caminhada (uniform across all channels).
 //     "Aventura" in Centauro maps to Trilha (trail-running models like Gel-Trabuco, Gel-Sonoma).
 const SPORT_CATS = {
     olympikus: {
-        corrida:     ['Corrida', 'Caminhada'],
+        corrida:     ['Corrida'],
         performance: ['Corrida', 'Caminhada', 'Treino e Academia', 'Trilha'],
         all:         null
     },
@@ -495,7 +497,7 @@ const SPORT_CATS = {
         all:         null
     },
     direct: {
-        corrida:     ['Corrida', 'Running', 'Caminhada'],
+        corrida:     ['Corrida', 'Running'],
         performance: ['Corrida', 'Running', 'Caminhada', 'Treino', 'Treino & Academia', 'Training', 'Trilha', 'Trail Running'],
         all:         null
     },
