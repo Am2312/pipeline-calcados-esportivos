@@ -27,7 +27,7 @@ CTR_TABLE    = f"{BQ_PROJECT}.centauro_trusted.product_snapshot"
 OLY_TABLE    = f"{BQ_PROJECT}.olympikus_trusted.product_snapshot"
 MIZ_TABLE    = f"{BQ_PROJECT}.mizuno_trusted.product_snapshot"
 
-CENTAURO_BRANDS = ('Nike', 'adidas', 'Asics', 'Under Armour')  # case as stored in centauro_trusted
+CENTAURO_BRANDS = ('Nike', 'adidas', 'Asics', 'Under Armour', 'Olympikus', 'Mizuno')  # case as stored in centauro_trusted
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCS_DIR   = os.path.join(SCRIPT_DIR, "docs")
