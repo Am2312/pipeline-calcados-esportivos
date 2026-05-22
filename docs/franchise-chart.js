@@ -1,12 +1,12 @@
-// Franchise Pass-Through — chart + BPC-style summary table
-// Reads window.RAW_FRANCHISE_A, window.RAW_FRANCHISE_B, window.FRANCHISE_INDEX
-// Same visual language as the rest of the dashboard (Verdana font, pill labels,
-// extended axis, BPC tooltip). Sport filter uses the global #sport-filter.
+// Franchise Pass-Through — chart + BPC-style summary table.
+// Chart aggregates by brand × channel (NOT by franchise) — one line per brand/series.
+// Table drills down into franchises within the selected brand × channel.
+// Reads window.RAW_FRANCHISE_A, window.RAW_FRANCHISE_B.
 
 (function() {
   'use strict';
 
-  // ── Brand colours (must match BRAND_COLOR in ecom-data-wip.html) ─────────
+  // ── Brand colours (match BRAND_COLOR in HTML) ─────────────────────────────
   const BC = {
     Adidas:         '#021C45',
     Nike:           '#FF5B76',
@@ -15,18 +15,23 @@
     Olympikus:      '#5A0F4A',
     Mizuno:         '#667D99',
   };
+  const BRAND_IDS    = ['Adidas','Nike','Under Armour','Asics','Olympikus','Mizuno'];
+  const CHANNELS     = ['website','centauro','netshoes'];
+  const CHANNEL_LABEL = { website:'Website', centauro:'Centauro', netshoes:'Netshoes' };
 
-  // ── Sport buckets — must mirror SPORT_CATS in HTML ────────────────────────
-  // The franchise mapping's `sport` field falls into one of: corrida, performance,
-  // training, trail, basquete, tennis, racket, football, casual, kids, sandals,
-  // skate, other. Map these to the dashboard's 3-bucket scope filter:
+  // Sport scope (mirrors SPORT_CATS in HTML, applied to franchise.sport)
   const SPORT_SCOPE = {
     corrida:     new Set(['corrida']),
     performance: new Set(['corrida', 'training', 'trail']),
     all:         null,
   };
-  // Lookup table: (brand, franchise) → sport. Built from RAW_FRANCHISE_A (which has the sport field).
-  // Used to apply sport scope filter to Method B rows (whose data doesn't carry sport directly).
+  function passesSport(sport, scope) {
+    const s = SPORT_SCOPE[scope];
+    if (s === null || s === undefined) return true;
+    if (!sport) return true;
+    return s.has(sport);
+  }
+  // Sport lookup for Method B rows that don't carry the field
   const SPORT_LOOKUP = (() => {
     const m = new Map();
     if (typeof RAW_FRANCHISE_A !== 'undefined') {
@@ -34,16 +39,9 @@
     }
     return m;
   })();
-  function sportFor(row) {
-    if (row.sport) return row.sport;
-    return SPORT_LOOKUP.get(row.brand + '|' + row.franchise) || '';
-  }
-  function passesSport(sport, scope) {
-    const s = SPORT_SCOPE[scope];
-    return s === null || s === undefined ? true : s.has(sport);
-  }
+  function sportFor(row) { return row.sport || SPORT_LOOKUP.get(row.brand + '|' + row.franchise) || ''; }
 
-  // ── Date helpers ──────────────────────────────────────────────────────────
+  // ── Date helpers (1W26 / Jan-26 / Q2 2026) ────────────────────────────────
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function weekToDate(w) { return new Date(w + 'T00:00:00'); }
   function getISOWeek(d) {
@@ -73,91 +71,193 @@
     return `${getISOWeek(d)}W${String(getISOWeekYear(d)).slice(2)}`;
   }
 
+  // ── Series (brand × channel) — 18 possible series, like avgdisc ───────────
+  const ALL_SERIES = [];
+  for (const brand of BRAND_IDS) {
+    for (const channel of CHANNELS) {
+      ALL_SERIES.push({
+        key: brand + '|' + channel,
+        label: brand + ' — ' + CHANNEL_LABEL[channel],
+        brand, channel,
+        color: BC[brand],
+        dash: channel === 'centauro' ? [6,3] : channel === 'netshoes' ? [3,2] : [],
+      });
+    }
+  }
+  const SERIES_BY_KEY = Object.fromEntries(ALL_SERIES.map(s => [s.key, s]));
+  // Default ON: 5 series matching avgdisc convention
+  const DEFAULT_ON = new Set([
+    'Olympikus|website','Mizuno|website',
+    'Adidas|centauro','Nike|centauro','Asics|centauro',
+  ]);
+  const SERIES_ON = {};
+  ALL_SERIES.forEach(s => { SERIES_ON[s.key] = DEFAULT_ON.has(s.key); });
+
   // ── Controls ──────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
+  let viewMode  = 'comparison';
+  let compChannel = 'centauro';
+  let breakdownBrand = 'Adidas';
   function getMethod() { return $('fr-method').value; }
   function getPrice()  { return $('fr-price').value; }
-  function getBrand()  { return $('fr-brand').value; }
   function getWindow() { return $('fr-window').value; }
   function getGran()   { return $('fr-gran').value; }
   function getFromK()  { return $('fr-from').value; }
   function getToK()    { return $('fr-to').value; }
-  function getScope()  { return $('sport-filter').value; }   // global
-
+  function getScope()  { return $('sport-filter').value; }
   const varField   = (price, win) => `var_${price}_${win}`;
   const priceField = (price)      => `p_${price}`;
 
-  // ── Data access ───────────────────────────────────────────────────────────
-  function rowsForMethod() {
-    if (getMethod() === 'A') return (typeof RAW_FRANCHISE_A !== 'undefined') ? RAW_FRANCHISE_A : [];
-    return (typeof RAW_FRANCHISE_B !== 'undefined') ? RAW_FRANCHISE_B : [];
+  // ── View / Channel / Brand handlers ───────────────────────────────────────
+  function updateViewControls() {
+    const isBd = viewMode === 'breakdown';
+    $('fr-channel-block').style.display       = isBd ? 'none' : '';
+    $('fr-brand-block').style.display         = isBd ? '' : 'none';
+    $('fr-series-trigger-block').style.display = (!isBd && compChannel === 'free') ? '' : 'none';
+  }
+  window.onFrViewChange = function() {
+    viewMode = $('fr-view').value;
+    updateViewControls();
+    render();
+  };
+  window.onFrChannelChange = function() {
+    compChannel = $('fr-channel').value;
+    updateViewControls();
+    render();
+  };
+  // brand select reuses _frRender via onchange in HTML
+  Object.defineProperty(window, '_frBrand_updater', { value: () => { breakdownBrand = $('fr-brand').value; render(); } });
+  // wire it
+  if (typeof window !== 'undefined') {
+    const bs = $('fr-brand');
+    if (bs) bs.addEventListener('change', () => { breakdownBrand = bs.value; render(); });
   }
 
-  // Filter for the selected brand + sport scope
-  function filteredRows() {
-    const brand = getBrand(), scope = getScope();
-    return rowsForMethod().filter(r => r.brand === brand && passesSport(sportFor(r), scope));
-  }
-
-  // Group filtered rows by franchise; returns { franchise: [rows sorted by w] }
-  function rowsByFranchise() {
-    const out = {};
-    for (const r of filteredRows()) {
-      if (!out[r.franchise]) out[r.franchise] = [];
-      out[r.franchise].push(r);
+  // ── Series panel (multi-select for Free Choice) ───────────────────────────
+  let panelOpen = false;
+  function renderSeriesPanel() {
+    let panel = $('fr-series-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'fr-series-panel';
+      document.body.appendChild(panel);
     }
-    for (const f in out) out[f].sort((a,b) => a.w.localeCompare(b.w));
-    return out;
+    if (!panelOpen) { panel.style.display = 'none'; return; }
+    panel.style.cssText = 'position:absolute;background:#fff;border:1px solid #E0E4EA;border-radius:8px;box-shadow:0 8px 24px rgba(2,28,69,0.12);padding:10px;z-index:1000;display:block;';
+    const trig = $('fr-series-trigger');
+    if (trig) {
+      const r = trig.getBoundingClientRect();
+      panel.style.top  = (window.scrollY + r.bottom + 6) + 'px';
+      panel.style.left = (window.scrollX + r.left) + 'px';
+      panel.style.minWidth = (r.width + 80) + 'px';
+    }
+    const groups = { website: [], centauro: [], netshoes: [] };
+    ALL_SERIES.forEach(s => groups[s.channel].push(s));
+    panel.innerHTML = Object.entries(groups).map(([ch, list]) => `
+      <div style="margin-bottom:8px;">
+        <div style="font-size:10px;color:#9AA8BB;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin-bottom:4px;">${CHANNEL_LABEL[ch]}</div>
+        ${list.map(s => `
+          <label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:11px;cursor:pointer;">
+            <input type="checkbox" ${SERIES_ON[s.key] ? 'checked' : ''} onchange="window._frToggle('${s.key}')">
+            <span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0;"></span>
+            ${s.label}
+          </label>`).join('')}
+      </div>`).join('');
+  }
+  window.toggleFrSeriesPanel = function() { panelOpen = !panelOpen; renderSeriesPanel(); };
+  window._frToggle = function(key) {
+    SERIES_ON[key] = !SERIES_ON[key];
+    const n = Object.values(SERIES_ON).filter(Boolean).length;
+    const lbl = $('fr-series-trigger-label');
+    if (lbl) lbl.textContent = `${n} series selected`;
+    render(); renderSeriesPanel();
+  };
+  document.addEventListener('click', (e) => {
+    const panel = $('fr-series-panel'); const trig = $('fr-series-trigger');
+    if (!panel || !trig || panel.style.display !== 'block') return;
+    if (panel.contains(e.target) || trig.contains(e.target)) return;
+    panelOpen = false; renderSeriesPanel();
+  }, true);
+
+  // ── Active series for current view/channel ───────────────────────────────
+  function getActiveSeries() {
+    if (viewMode === 'comparison') {
+      if (compChannel === 'free') return ALL_SERIES.filter(s => SERIES_ON[s.key]);
+      if (compChannel === 'total') {
+        // Total = one row per brand, aggregating across ALL channels.
+        // Represent as a virtual series per brand with channel='*' (handled in aggregate).
+        return BRAND_IDS.map(b => ({ key: b + '|total', label: b, brand: b, channel: '*', color: BC[b], dash: [] }));
+      }
+      // Specific channel: 1 series per brand at that channel
+      return BRAND_IDS.map(b => ({ key: b + '|' + compChannel, label: b, brand: b, channel: compChannel, color: BC[b], dash: [] }));
+    } else {
+      // Breakdown: 1 series per channel for the selected brand
+      return CHANNELS.map(ch => ({
+        key: breakdownBrand + '|' + ch,
+        label: CHANNEL_LABEL[ch],
+        brand: breakdownBrand, channel: ch,
+        color: BC[breakdownBrand],
+        dash: ch === 'centauro' ? [6,3] : ch === 'netshoes' ? [3,2] : [],
+      }));
+    }
   }
 
-  // Aggregate weekly rows → granularity buckets (simple mean across weeks in the bucket).
-  function rollToGran(weekly, gran, field) {
-    if (gran === 'weekly') {
-      return weekly.map(r => ({ key: r.w, val: r[field] != null ? r[field] : null, n: r.n }));
+  // ── Aggregation: for a series (brand, channel) and a week,
+  // weighted-mean across all franchises of (price, var_*). channel='*' = total.
+  function rowsForSeries(serie) {
+    const method = getMethod();
+    const data = method === 'A' ? (typeof RAW_FRANCHISE_A !== 'undefined' ? RAW_FRANCHISE_A : [])
+                                : (typeof RAW_FRANCHISE_B !== 'undefined' ? RAW_FRANCHISE_B : []);
+    const scope = getScope();
+    return data.filter(r =>
+      r.brand === serie.brand
+      && (serie.channel === '*' ? true : r.channel === serie.channel)
+      && passesSport(sportFor(r), scope)
+    );
+  }
+
+  // Aggregate rows of a series to weekly (brand, channel-or-*, week) — weighted by n_skus
+  function weeklyAggregate(rows, field) {
+    const byW = new Map();
+    for (const r of rows) {
+      const v = r[field];
+      if (v === null || v === undefined) continue;
+      const n = r.n || 0;
+      if (n === 0) continue;
+      if (!byW.has(r.w)) byW.set(r.w, { sum: 0, n: 0 });
+      const a = byW.get(r.w);
+      a.sum += v * n; a.n += n;
     }
+    return Array.from(byW.entries())
+      .map(([w, a]) => ({ w, val: a.n > 0 ? a.sum / a.n : null }))
+      .sort((a, b) => a.w.localeCompare(b.w));
+  }
+
+  // Roll weekly → granularity
+  function rollToGran(weekly, gran) {
+    if (gran === 'weekly') return weekly.map(p => ({ key: p.w, val: p.val }));
     const groups = new Map();
-    for (const r of weekly) {
-      if (r[field] === null || r[field] === undefined) continue;
-      const k = fmtGranKey(r.w, gran);
-      if (!groups.has(k)) groups.set(k, { sum: 0, cnt: 0, n: 0, firstW: r.w });
-      const g = groups.get(k);
-      g.sum += r[field]; g.cnt += 1; g.n += (r.n || 0);
+    for (const p of weekly) {
+      if (p.val === null || p.val === undefined) continue;
+      const k = fmtGranKey(p.w, gran);
+      if (!groups.has(k)) groups.set(k, { sum: 0, cnt: 0, firstW: p.w });
+      const g = groups.get(k); g.sum += p.val; g.cnt += 1;
     }
     return Array.from(groups.entries())
-      .map(([key, g]) => ({ key, val: g.cnt > 0 ? g.sum / g.cnt : null, n: Math.round(g.n / g.cnt), firstW: g.firstW }))
-      .sort((a,b) => a.firstW.localeCompare(b.firstW));
-  }
-
-  // Aggregate price (p_sale or p_list) — weighted by n
-  function rollPriceToGran(weekly, gran, field) {
-    if (gran === 'weekly') {
-      return weekly.map(r => ({ key: r.w, val: r[field] != null ? r[field] : null, n: r.n }));
-    }
-    const groups = new Map();
-    for (const r of weekly) {
-      if (r[field] === null || r[field] === undefined) continue;
-      const k = fmtGranKey(r.w, gran);
-      if (!groups.has(k)) groups.set(k, { sum: 0, w_sum: 0, firstW: r.w });
-      const g = groups.get(k);
-      const w = r.n || 0;
-      g.sum += r[field] * w; g.w_sum += w;
-    }
-    return Array.from(groups.entries())
-      .map(([key, g]) => ({ key, val: g.w_sum > 0 ? g.sum / g.w_sum : null, firstW: g.firstW }))
-      .sort((a,b) => a.firstW.localeCompare(b.firstW));
+      .map(([key, g]) => ({ key, val: g.cnt > 0 ? g.sum / g.cnt : null, firstW: g.firstW }))
+      .sort((a, b) => a.firstW.localeCompare(b.firstW));
   }
 
   // ── From/To select population ─────────────────────────────────────────────
   function allPeriods() {
-    const set = new Set();
-    const gran = getGran();
-    for (const r of filteredRows()) {
-      if (gran === 'weekly') set.add(r.w);
-      else set.add(fmtGranKey(r.w, gran));
+    const set = new Set(); const gran = getGran();
+    for (const s of getActiveSeries()) {
+      for (const r of rowsForSeries(s)) {
+        set.add(gran === 'weekly' ? r.w : fmtGranKey(r.w, gran));
+      }
     }
     return Array.from(set).sort();
   }
-
   function populateFromTo() {
     const gran = getGran();
     const periods = allPeriods();
@@ -171,36 +271,23 @@
     toSel.value   = periods.includes(prevTo)   ? prevTo   : periods[periods.length - 1];
   }
 
-  // ── Chart — mirrors buildAvgDiscChart visual language ─────────────────────
+  // ── Chart — same styling as buildAvgDiscChart ─────────────────────────────
   let frChart = null;
   function renderChart() {
-    const win = getWindow();
-    const price = getPrice();
-    const field = varField(price, win);
-    const gran = getGran();
-    const fromK = getFromK(), toK = getToK();
+    const field = varField(getPrice(), getWindow());
+    const gran = getGran(); const fromK = getFromK(), toK = getToK();
 
-    const byFr = rowsByFranchise();
+    const seriesPairs = getActiveSeries().map(s => {
+      const weekly = weeklyAggregate(rowsForSeries(s), field);
+      const rolled = rollToGran(weekly, gran).filter(p => p.key >= fromK && p.key <= toK);
+      return { s, rolled };
+    }).filter(x => x.rolled.length > 0);
 
-    // Sort franchises by total volume desc, take top 8 to keep chart readable
-    const fr_volumes = Object.entries(byFr)
-      .map(([f, rows]) => ({ f, vol: rows.reduce((s, r) => s + (r.n || 0), 0) }))
-      .sort((a, b) => b.vol - a.vol);
-    const topFranchises = fr_volumes.slice(0, 8).map(x => x.f);
-
-    // Stable color palette for franchises within a brand
-    const PALETTE = ['#021C45', '#FF5B76', '#18A6F1', '#58D9D1', '#5A0F4A', '#667D99', '#FFA62B', '#0D7E6A', '#8F1028', '#9B4DCA'];
-    const seriesPairs = [];
     const allKeys = new Set();
-    topFranchises.forEach((f, idx) => {
-      const pairs = rollToGran(byFr[f], gran, field).filter(p => p.key >= fromK && p.key <= toK);
-      if (pairs.length === 0) return;
-      pairs.forEach(p => allKeys.add(p.key));
-      seriesPairs.push({ franchise: f, color: PALETTE[idx % PALETTE.length], pairs });
-    });
-
+    seriesPairs.forEach(x => x.rolled.forEach(p => allKeys.add(p.key)));
     const sortedKeys = [...allKeys].sort();
-    const allVals = seriesPairs.flatMap(({ pairs }) => pairs.map(p => p.val)).filter(v => v != null && isFinite(v));
+
+    const allVals = seriesPairs.flatMap(x => x.rolled.map(p => p.val)).filter(v => v != null && isFinite(v));
     const dataMin = allVals.length ? Math.min(...allVals) : -0.05;
     const dataMax = allVals.length ? Math.max(...allVals) : 0.05;
     const range   = (dataMax - dataMin) || Math.max(Math.abs(dataMax), Math.abs(dataMin), 0.05);
@@ -212,13 +299,13 @@
     const yMin = Math.floor((dataMin - range * 0.02) / yStep) * yStep;
     const yMax = Math.ceil((dataMax  + range * 0.02) / yStep) * yStep;
 
-    const datasets = seriesPairs.map(({ franchise, color, pairs }) => {
-      const pm = new Map(pairs.map(p => [p.key, p.val]));
+    const datasets = seriesPairs.map(({ s, rolled }) => {
+      const pm = new Map(rolled.map(p => [p.key, p.val]));
       return {
-        label: franchise,
-        data: sortedKeys.map(k => pm.get(k) ?? null),
-        borderColor: color, backgroundColor: color,
-        borderWidth: 2.5, borderDash: [],
+        label: s.label,
+        data:  sortedKeys.map(k => pm.get(k) ?? null),
+        borderColor: s.color, backgroundColor: s.color,
+        borderWidth: 2.5, borderDash: s.dash,
         tension: 0.28, pointRadius: 0, pointHoverRadius: 0,
         spanGaps: false, fill: false,
       };
@@ -272,24 +359,21 @@
     frChart.$ecomExtendedAxis = true;
     frChart.update('none');
 
-    // Render legend at the top
-    renderLegend(seriesPairs);
+    renderLegend(seriesPairs.map(x => x.s));
   }
 
-  function renderLegend(seriesPairs) {
-    const html = seriesPairs.map(({ franchise, color }) => `
-      <span class="legend-pill" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;font-size:11px;background:${color}1A;color:${color};border:1px solid ${color}40;">
-        <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
-        ${franchise}
+  function renderLegend(series) {
+    const html = series.map(s => `
+      <span class="legend-pill" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;font-size:11px;background:${s.color}1A;color:${s.color};border:1px solid ${s.color}40;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0;"></span>
+        ${s.label}${s.dash && s.dash.length ? ' (dashed)' : ''}
       </span>`).join(' ');
     $('fr-legend').innerHTML = html;
   }
 
-  // ── Summary table (BPC-style heat badges) ─────────────────────────────────
+  // ── Summary table — drills down into franchises ──────────────────────────
   function heatBadge(v) {
-    if (v === null || v === undefined || !isFinite(v)) {
-      return `<span style="color:#9AA8BB;font-weight:700;">—</span>`;
-    }
+    if (v === null || v === undefined || !isFinite(v)) return `<span style="color:#9AA8BB;font-weight:700;">—</span>`;
     const mag = Math.max(0.18, Math.min(Math.abs(v) / 0.15, 1));
     const bg = v > 0 ? `rgba(88,217,209,${0.18 + mag * 0.48})` : (v < 0 ? `rgba(255,79,108,${0.18 + mag * 0.52})` : '#F2F4F8');
     const color = v > 0 ? '#0D7E6A' : (v < 0 ? '#8F1028' : '#021C45');
@@ -298,65 +382,81 @@
     return `<span style="display:inline-block;min-width:64px;padding:6px 10px;border-radius:6px;background:${bg};color:${color};font-weight:800;box-shadow:inset 0 0 0 1px rgba(2,28,69,0.06);font-size:12px;font-family:Verdana,Geneva,sans-serif;">${sign}${pct}%</span>`;
   }
 
-  function pickRefRow(rows) {
-    // Pick the row whose w (or aggregated key) corresponds to the To-period selected.
-    const gran = getGran();
-    const toK = getToK();
-    // Walk from end to start; first row whose granKey ≤ toK
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const k = fmtGranKey(rows[i].w, gran);
-      if (k <= toK) return rows[i];
-    }
-    return rows.length ? rows[rows.length - 1] : null;
-  }
-
   function renderTable() {
-    const method = getMethod();
-    const price = getPrice();
-    const byFr = rowsByFranchise();
+    // Drill-down: pick a representative (brand, channel) for the table.
+    // In Comparison + specific channel: that channel; in Comparison + total: aggregate; in Breakdown: per-channel.
+    const method = getMethod(), price = getPrice();
+    const data = method === 'A' ? (typeof RAW_FRANCHISE_A !== 'undefined' ? RAW_FRANCHISE_A : [])
+                                : (typeof RAW_FRANCHISE_B !== 'undefined' ? RAW_FRANCHISE_B : []);
+    const scope = getScope(), toK = getToK(), gran = getGran();
 
-    // Sort franchises by latest n_skus desc
-    const ordered = Object.entries(byFr)
-      .map(([f, rows]) => ({ f, ref: pickRefRow(rows) }))
-      .filter(x => x.ref)
-      .sort((a, b) => (b.ref.n || 0) - (a.ref.n || 0));
+    let tableBrand, tableChannelFilter;
+    if (viewMode === 'breakdown') {
+      tableBrand = breakdownBrand; tableChannelFilter = null;   // show all channels stacked
+    } else if (compChannel === 'free') {
+      // Free choice: show ALL active series stacked
+      tableBrand = null; tableChannelFilter = null;
+    } else {
+      tableBrand = null; tableChannelFilter = compChannel === 'total' ? null : compChannel;
+    }
 
-    if (ordered.length === 0) {
+    // Filter dataset
+    let filtered = data.filter(r => passesSport(sportFor(r), scope));
+    if (tableBrand) filtered = filtered.filter(r => r.brand === tableBrand);
+    if (tableChannelFilter) filtered = filtered.filter(r => r.channel === tableChannelFilter);
+    // For Comparison Free Choice, restrict to active series
+    if (viewMode === 'comparison' && compChannel === 'free') {
+      const active = new Set(ALL_SERIES.filter(s => SERIES_ON[s.key]).map(s => s.brand + '|' + s.channel));
+      filtered = filtered.filter(r => active.has(r.brand + '|' + r.channel));
+    }
+
+    // Index: pick most-recent row per (brand, franchise, channel) within the To-period
+    const byKey = new Map();
+    for (const r of filtered) {
+      const granKey = fmtGranKey(r.w, gran);
+      if (granKey > toK) continue;
+      const k = r.brand + '|' + r.franchise + '|' + r.channel;
+      const prev = byKey.get(k);
+      if (!prev || r.w > prev.w) byKey.set(k, r);
+    }
+    const refs = Array.from(byKey.values()).sort((a, b) => (b.n || 0) - (a.n || 0));
+
+    if (refs.length === 0) {
       $('fr-table').innerHTML = `<div style="padding:24px;text-align:center;color:#9AA8BB;">No franchises match the current filters.</div>`;
       return;
     }
 
-    // Color cycle aligned with the chart
-    const PALETTE = ['#021C45', '#FF5B76', '#18A6F1', '#58D9D1', '#5A0F4A', '#667D99', '#FFA62B', '#0D7E6A', '#8F1028', '#9B4DCA'];
-
-    const rowsHtml = ordered.map(({ f, ref }, i) => {
-      const color = PALETTE[i % PALETTE.length];
-      const priceVal = ref[priceField(price)];
-      const v1w  = ref[varField(price, '1w')];
-      const v1m  = ref[varField(price, '1m')];
-      const v3m  = ref[varField(price, '3m')];
-      const v1y  = ref[varField(price, '1y')];
-      const vytd = ref[varField(price, 'ytd')];
+    const rowsHtml = refs.map(r => {
+      const color = BC[r.brand] || '#021C45';
+      const priceVal = r[priceField(price)];
+      const v1w  = r[varField(price, '1w')];
+      const v1m  = r[varField(price, '1m')];
+      const v3m  = r[varField(price, '3m')];
+      const v1y  = r[varField(price, '1y')];
+      const vytd = r[varField(price, 'ytd')];
       const cell = (v) => `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;">${heatBadge(v)}</td>`;
 
-      // Method B: append gen labels (e.g. "5 vs 22") to franchise name
-      let label = f;
-      if (method === 'B' && ref.gen_new != null) {
-        const newG = ref.gen_new;
-        const prevG = (ref.gen_prev != null) ? ref.gen_prev : '?';
-        label = `${f} <span style="color:#9AA8BB;font-weight:400;font-size:11px;">(gen ${newG} vs ${prevG})</span>`;
+      let label = `${r.franchise}`;
+      // Method B: add gen labels
+      if (method === 'B' && r.gen_new != null) {
+        const newG = r.gen_new;
+        const prevG = (r.gen_prev != null) ? r.gen_prev : '?';
+        label += ` <span style="color:#9AA8BB;font-weight:400;font-size:11px;">(gen ${newG} vs ${prevG})</span>`;
       }
+      // Show brand + channel context when multiple appear in table
+      const showBrand = !tableBrand;
+      const showChannel = !tableChannelFilter && viewMode !== 'breakdown';
+      const ctx = [];
+      if (showBrand) ctx.push(r.brand);
+      if (showChannel || viewMode === 'breakdown') ctx.push(CHANNEL_LABEL[r.channel] || r.channel);
+      const ctxStr = ctx.length ? ` <span style="color:#667D99;font-weight:400;font-size:11px;">— ${ctx.join(' / ')}</span>` : '';
 
       return `<tr>
         <td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:#021C45;font-family:Verdana,Geneva,sans-serif;font-size:13px;">
-          <span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:10px;vertical-align:middle;"></span>${label}
+          <span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:10px;vertical-align:middle;"></span>${label}${ctxStr}
         </td>
         <td style="padding:14px 8px;border-bottom:1px solid #EBEBEB;text-align:right;color:#021C45;font-weight:700;font-family:Verdana,Geneva,sans-serif;font-size:13px;">${priceVal != null ? 'R$ ' + Math.round(priceVal) : '—'}</td>
-        ${cell(v1w)}
-        ${cell(v1m)}
-        ${cell(v3m)}
-        ${cell(v1y)}
-        ${cell(vytd)}
+        ${cell(v1w)} ${cell(v1m)} ${cell(v3m)} ${cell(v1y)} ${cell(vytd)}
       </tr>`;
     }).join('');
 
@@ -380,16 +480,15 @@
     `;
   }
 
-  function render() {
-    populateFromTo();
-    renderChart();
-    renderTable();
-  }
-
+  function render() { populateFromTo(); renderChart(); renderTable(); }
   window._frRender = render;
 
   function init() {
     if (typeof RAW_FRANCHISE_A === 'undefined') { console.warn('Franchise data not loaded yet.'); return; }
+    // Initial trigger label
+    const lbl = $('fr-series-trigger-label');
+    if (lbl) lbl.textContent = `${Object.values(SERIES_ON).filter(Boolean).length} series selected`;
+    updateViewControls();
     render();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

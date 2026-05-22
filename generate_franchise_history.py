@@ -215,16 +215,17 @@ def date_to_sunday_anchor(d):
 
 # ── Step 3: aggregate to (brand, franchise, cat, date) cross-grandparent ──
 
+def source_to_channel(source: str) -> str:
+    """Map data source → dashboard channel label."""
+    if source in ('olympikus', 'mizuno', 'ua'): return 'website'
+    if source == 'centauro': return 'centauro'
+    if source == 'netshoes': return 'netshoes'
+    return source
+
 def aggregate_franchise_daily(rows):
-    """Cross-grandparent weighted aggregation per (brand, franchise, date).
-    No cat split — the franchise mapping already carries a curated `sport`
-    that the dashboard uses for the Corrida / Performance / All filter.
-    Weight = n_skus per grandparent (so it equals cross-SKU simple mean over
-    the underlying SKUs of the franchise on that day).
-    Returns dict: (brand, franchise, date) → {sale_avg, list_avg, n_skus, sport}
-    Also collects:
-      gen_first_seen: {(brand, franchise, gen): first_date_seen}
-      gen_day: per (brand, franchise, gen, date) — used for Method B
+    """Cross-grandparent weighted aggregation per (brand, franchise, channel, date).
+    `channel` (= mapped source) lets the dashboard filter by Website/Centauro/Netshoes
+    like the other cards do.
     """
     fr_day = defaultdict(lambda: {'sale_n': 0, 'sale_w': 0.0, 'list_n': 0, 'list_w': 0.0, 'n_skus': 0, 'sport': None})
     gen_day = defaultdict(lambda: {'sale_n': 0, 'sale_w': 0.0, 'list_n': 0, 'list_w': 0.0, 'n_skus': 0})
@@ -232,12 +233,13 @@ def aggregate_franchise_daily(rows):
 
     for r in rows:
         brand = r['brand']; franchise = r['franchise']; gen = r['gen']
+        channel = source_to_channel(r['source'])
         d = r['date']; n = r['n_skus']
         if isinstance(d, str):
             d = datetime.date.fromisoformat(d)
 
-        # Franchise-level (Method A) — aggregate across all cats
-        k = (brand, franchise, d)
+        # Franchise-level (Method A)
+        k = (brand, franchise, channel, d)
         agg = fr_day[k]
         if r['sale_avg'] is not None:
             agg['sale_w'] += r['sale_avg'] * n
@@ -248,9 +250,9 @@ def aggregate_franchise_daily(rows):
         agg['n_skus'] += n
         agg['sport'] = r['sport']
 
-        # Per-generation aggregates (Method B) — also no cat split
+        # Per-generation aggregates (Method B) — keyed by channel too
         if gen is not None:
-            gk = (brand, franchise, gen, d)
+            gk = (brand, franchise, gen, channel, d)
             ga = gen_day[gk]
             if r['sale_avg'] is not None:
                 ga['sale_w'] += r['sale_avg'] * n
@@ -259,8 +261,8 @@ def aggregate_franchise_daily(rows):
                 ga['list_w'] += r['list_avg'] * n
                 ga['list_n'] += n
             ga['n_skus'] += n
-            # First-seen date per (brand, franchise, gen)
-            gen_key = (brand, franchise, gen)
+            # First-seen date per (brand, franchise, channel, gen)
+            gen_key = (brand, franchise, channel, gen)
             if gen_key not in gen_first_seen or d < gen_first_seen[gen_key]:
                 gen_first_seen[gen_key] = d
 
@@ -286,13 +288,11 @@ def aggregate_franchise_daily(rows):
 # ── Step 4: weekly aggregation (Sunday-anchored) ──
 
 def daily_to_weekly(fr_daily):
-    """Aggregate franchise-daily to (brand, franchise, sunday_week).
-    Simple mean across the daily values within the same Sun-Sat span,
-    weighted by n_skus (consistent with the rest of the dashboard)."""
+    """Aggregate franchise-daily to (brand, franchise, channel, sunday_week)."""
     weekly = defaultdict(lambda: {'sale_sum': 0.0, 'sale_n': 0, 'list_sum': 0.0, 'list_n': 0, 'n_days': 0, 'n_skus_sum': 0, 'sport': None})
-    for (brand, franchise, d), v in fr_daily.items():
+    for (brand, franchise, channel, d), v in fr_daily.items():
         w = date_to_sunday_anchor(d)
-        wk = weekly[(brand, franchise, w)]
+        wk = weekly[(brand, franchise, channel, w)]
         if v['p_sale'] is not None:
             wk['sale_sum'] += v['p_sale'] * v['n_skus']
             wk['sale_n']  += v['n_skus']
@@ -364,37 +364,32 @@ def december_prev_year_days(d):
 
 
 def method_a_variations(fr_daily, fr_weekly):
-    """For each (brand, franchise, week_sun), compute the 5 deltas for sale and list.
-    Returns list of dicts ready for JS output."""
-    # Index daily by (brand, franchise) → {date: {p_sale, p_list, n_skus, sport}}
+    """For each (brand, franchise, channel, week_sun), compute the 5 deltas."""
     daily_idx = defaultdict(dict)
-    for (brand, franchise, d), v in fr_daily.items():
-        daily_idx[(brand, franchise)][d] = v
+    for (brand, franchise, channel, d), v in fr_daily.items():
+        daily_idx[(brand, franchise, channel)][d] = v
 
     rows = []
-    for (brand, franchise, w_sun), w_vals in fr_weekly.items():
-        # Reference values: pick a representative date — use the last actual
-        # observation date inside this Sun-Sat span (most recent in the week).
+    for (brand, franchise, channel, w_sun), w_vals in fr_weekly.items():
         span_days = [w_sun + datetime.timedelta(days=i) for i in range(7)]
-        days_with_data = [d for d in span_days if d in daily_idx[(brand, franchise)]]
+        days_with_data = [d for d in span_days if d in daily_idx[(brand, franchise, channel)]]
         if not days_with_data:
             continue
-        ref_d = max(days_with_data)  # most recent day inside the week
+        ref_d = max(days_with_data)
         out = {
             'w':         w_sun.isoformat(),
             'brand':     brand,
             'franchise': franchise,
+            'channel':   channel,
             'sport':     w_vals.get('sport') or '',
             'p_sale':    round(w_vals['p_sale'], 2) if w_vals['p_sale'] is not None else None,
             'p_list':    round(w_vals['p_list'], 2) if w_vals['p_list'] is not None else None,
             'n_skus':    w_vals['n_skus'],
         }
-        # Compute averages over reference windows
         def avg_window(days_iterable, field):
-            vals = []
-            wts  = []
+            vals, wts = [], []
             for d in days_iterable:
-                v = daily_idx[(brand, franchise)].get(d)
+                v = daily_idx[(brand, franchise, channel)].get(d)
                 if v is None: continue
                 price = v[field]
                 if price is None: continue
@@ -431,7 +426,7 @@ def method_a_variations(fr_daily, fr_weekly):
             out[f'var_{key}_1y']  = delta(cur, yoy)
             out[f'var_{key}_ytd'] = delta(cur, ytd)
         rows.append(out)
-    rows.sort(key=lambda r: (r['brand'], r['franchise'], r['w']))
+    rows.sort(key=lambda r: (r['brand'], r['franchise'], r['channel'], r['w']))
     return rows
 
 
@@ -442,17 +437,15 @@ def method_b_variations(gen_daily, gen_first_seen):
     (by first_seen_date, NOT by max numeric gen) and compute the 5 deltas
     comparing current-gen-at-t vs current-gen-at-t-window.
     Returns list of dicts."""
-    # Build per-(brand, franchise) timeline of gens, sorted by first_seen.
-    by_fr = defaultdict(list)  # (brand, franchise) → sorted list of (first_seen, gen)
-    for (brand, franchise, gen), fs in gen_first_seen.items():
-        by_fr[(brand, franchise)].append((fs, gen))
+    # Build per-(brand, franchise, channel) timeline of gens, sorted by first_seen.
+    by_fr = defaultdict(list)
+    for (brand, franchise, channel, gen), fs in gen_first_seen.items():
+        by_fr[(brand, franchise, channel)].append((fs, gen))
     for k in by_fr:
         by_fr[k].sort(key=lambda x: x[0])
 
-    def most_recent_gen_at(brand, franchise, d):
-        """Returns (gen, first_seen) of the latest gen launched on/before d.
-        Returns (None, None) if none."""
-        timeline = by_fr.get((brand, franchise), [])
+    def most_recent_gen_at(brand, franchise, channel, d):
+        timeline = by_fr.get((brand, franchise, channel), [])
         latest = None
         for fs, g in timeline:
             if fs <= d:
@@ -461,15 +454,14 @@ def method_b_variations(gen_daily, gen_first_seen):
                 break
         return latest if latest else (None, None)
 
-    # Index gen_daily by (brand, franchise, gen) → {date: {p_sale, p_list, n_skus}}
     gen_idx = defaultdict(dict)
-    for (brand, franchise, gen, d), v in gen_daily.items():
-        gen_idx[(brand, franchise, gen)][d] = v
+    for (brand, franchise, gen, channel, d), v in gen_daily.items():
+        gen_idx[(brand, franchise, channel, gen)][d] = v
 
-    def avg_window_for_gen(brand, franchise, gen, days, field):
+    def avg_window_for_gen(brand, franchise, channel, gen, days, field):
         vals, wts = [], []
         for d in days:
-            v = gen_idx[(brand, franchise, gen)].get(d)
+            v = gen_idx[(brand, franchise, channel, gen)].get(d)
             if v is None: continue
             p = v[field]
             if p is None: continue
@@ -477,23 +469,21 @@ def method_b_variations(gen_daily, gen_first_seen):
         if sum(wts) == 0: return None
         return sum(vals) / sum(wts)
 
-    # Build the set of weeks where Method B should be computed:
-    # any (brand, franchise, Sun-week) where gen_daily has data.
     weekly_keys = set()
-    for (brand, franchise, gen, d), v in gen_daily.items():
+    for (brand, franchise, gen, channel, d), v in gen_daily.items():
         w = date_to_sunday_anchor(d)
-        weekly_keys.add((brand, franchise, w))
+        weekly_keys.add((brand, franchise, channel, w))
 
     rows = []
-    for (brand, franchise, w_sun) in weekly_keys:
+    for (brand, franchise, channel, w_sun) in weekly_keys:
         span_days = [w_sun + datetime.timedelta(days=i) for i in range(7)]
         days_with_data = [d for d in span_days if any(
-            (brand, franchise, g_) in gen_idx and d in gen_idx[(brand, franchise, g_)]
-            for g_ in {x[1] for x in by_fr.get((brand, franchise), [])}
+            (brand, franchise, channel, g_) in gen_idx and d in gen_idx[(brand, franchise, channel, g_)]
+            for g_ in {x[1] for x in by_fr.get((brand, franchise, channel), [])}
         )]
         if not days_with_data: continue
         ref_d = max(days_with_data)
-        cur_gen, cur_fs = most_recent_gen_at(brand, franchise, ref_d)
+        cur_gen, cur_fs = most_recent_gen_at(brand, franchise, channel, ref_d)
         if cur_gen is None: continue
 
         windows = {
@@ -508,14 +498,15 @@ def method_b_variations(gen_daily, gen_first_seen):
             'w':            w_sun.isoformat(),
             'brand':        brand,
             'franchise':    franchise,
+            'channel':      channel,
             'gen_new':      cur_gen,
             'gen_new_first_seen': cur_fs.isoformat(),
-            'n_skus':       sum((gen_idx[(brand, franchise, cur_gen)].get(d, {}).get('n_skus', 0)) for d in days_with_data),
+            'n_skus':       sum((gen_idx[(brand, franchise, channel, cur_gen)].get(d, {}).get('n_skus', 0)) for d in days_with_data),
         }
         for field, key in [('p_sale', 'sale'), ('p_list', 'list')]:
             cur_vals, cur_wts = [], []
             for d in days_with_data:
-                v = gen_idx[(brand, franchise, cur_gen)].get(d)
+                v = gen_idx[(brand, franchise, channel, cur_gen)].get(d)
                 if v is None: continue
                 p = v[field]
                 if p is None: continue
@@ -524,14 +515,14 @@ def method_b_variations(gen_daily, gen_first_seen):
             out[f'p_{key}'] = round(cur_avg, 2) if cur_avg is not None else None
             for wname, wdays in windows.items():
                 ref_d_window = wdays[len(wdays)//2]
-                prev_gen, prev_fs = most_recent_gen_at(brand, franchise, ref_d_window)
+                prev_gen, prev_fs = most_recent_gen_at(brand, franchise, channel, ref_d_window)
                 if prev_gen is None or cur_avg is None:
                     out[f'var_{key}_{wname}'] = None
                     if wname == '1y' and field == 'p_sale':
                         out['gen_prev'] = None
                         out['gen_prev_first_seen'] = None
                     continue
-                prev_avg = avg_window_for_gen(brand, franchise, prev_gen, wdays, field)
+                prev_avg = avg_window_for_gen(brand, franchise, channel, prev_gen, wdays, field)
                 if prev_avg is None or prev_avg == 0:
                     out[f'var_{key}_{wname}'] = None
                 else:
@@ -540,7 +531,7 @@ def method_b_variations(gen_daily, gen_first_seen):
                     out['gen_prev'] = prev_gen
                     out['gen_prev_first_seen'] = prev_fs.isoformat() if prev_fs else None
         rows.append(out)
-    rows.sort(key=lambda r: (r['brand'], r['franchise'], r['w']))
+    rows.sort(key=lambda r: (r['brand'], r['franchise'], r['channel'], r['w']))
     return rows
 
 
@@ -560,6 +551,7 @@ def fmt_row_a(r):
         f"w:'{r['w']}'",
         f"brand:'{r['brand']}'",
         f"franchise:'{r['franchise']}'",
+        f"channel:'{r['channel']}'",
         f"sport:'{r['sport']}'",
         f"p_sale:{r['p_sale'] if r['p_sale'] is not None else 'null'}",
         f"p_list:{r['p_list'] if r['p_list'] is not None else 'null'}",
@@ -575,6 +567,7 @@ def fmt_row_b(r):
         f"w:'{r['w']}'",
         f"brand:'{r['brand']}'",
         f"franchise:'{r['franchise']}'",
+        f"channel:'{r['channel']}'",
         f"gen_new:{r['gen_new']}",
         f"gen_new_first_seen:'{r['gen_new_first_seen']}'",
         f"gen_prev:{r.get('gen_prev') if r.get('gen_prev') is not None else 'null'}",
@@ -652,7 +645,8 @@ def regenerate(client=None):
     print(f"  {len(rows_b):,} rows raw")
 
     # ── Volume filter: drop franchises whose peak weekly n_skus < threshold ──
-    THRESHOLD_N_SKUS = 100
+    # Threshold lowered to 50 because each franchise now splits across channels
+    THRESHOLD_N_SKUS = 50
     peak_n = defaultdict(int)
     for r in rows_a:
         peak_n[(r['brand'], r['franchise'])] = max(peak_n[(r['brand'], r['franchise'])], r['n_skus'])

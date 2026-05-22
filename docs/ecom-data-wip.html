@@ -355,6 +355,41 @@
                 </div>
                 <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
+                        <div class="control-label">View</div>
+                        <select class="control-select" id="fr-view" onchange="onFrViewChange()">
+                            <option value="comparison" selected>Company Comparison</option>
+                            <option value="breakdown">Channel Breakdown</option>
+                        </select>
+                    </div>
+                    <div class="control-block" id="fr-channel-block">
+                        <div class="control-label">Channel</div>
+                        <select class="control-select" id="fr-channel" onchange="onFrChannelChange()">
+                            <option value="total">Total</option>
+                            <option value="website">Website</option>
+                            <option value="centauro" selected>Centauro</option>
+                            <option value="netshoes">Netshoes</option>
+                            <option value="free">Free Choice</option>
+                        </select>
+                    </div>
+                    <div class="control-block" id="fr-brand-block" style="display:none;">
+                        <div class="control-label">Company</div>
+                        <select class="control-select" id="fr-brand" onchange="window._frRender && window._frRender()">
+                            <option value="Adidas">Adidas</option>
+                            <option value="Nike">Nike</option>
+                            <option value="Under Armour">Under Armour</option>
+                            <option value="Asics">Asics</option>
+                            <option value="Olympikus" selected>Olympikus</option>
+                            <option value="Mizuno">Mizuno</option>
+                        </select>
+                    </div>
+                    <div class="control-block" id="fr-series-trigger-block" style="display:none;">
+                        <div class="control-label">Series</div>
+                        <div class="series-trigger" id="fr-series-trigger" onclick="toggleFrSeriesPanel()">
+                            <span id="fr-series-trigger-label">5 series selected</span>
+                            <span style="font-size:9px;color:#9AA8BB;flex-shrink:0;">▼</span>
+                        </div>
+                    </div>
+                    <div class="control-block">
                         <div class="control-label">Method</div>
                         <select class="control-select" id="fr-method" onchange="window._frRender && window._frRender()">
                             <option value="A" selected>A: Média vs Média</option>
@@ -369,24 +404,13 @@
                         </select>
                     </div>
                     <div class="control-block">
-                        <div class="control-label">Brand</div>
-                        <select class="control-select" id="fr-brand" onchange="window._frRender && window._frRender()">
-                            <option value="Adidas">Adidas</option>
-                            <option value="Nike">Nike</option>
-                            <option value="Under Armour">Under Armour</option>
-                            <option value="Asics">Asics</option>
-                            <option value="Olympikus" selected>Olympikus</option>
-                            <option value="Mizuno">Mizuno</option>
-                        </select>
-                    </div>
-                    <div class="control-block">
                         <div class="control-label">Window (chart)</div>
                         <select class="control-select" id="fr-window" onchange="window._frRender && window._frRender()">
                             <option value="1w">Δ WoW</option>
                             <option value="1m">Δ MoM</option>
                             <option value="3m">Δ QoQ</option>
-                            <option value="1y" selected>Δ YoY</option>
-                            <option value="ytd">Δ YTD</option>
+                            <option value="1y">Δ YoY</option>
+                            <option value="ytd" selected>Δ YTD</option>
                         </select>
                     </div>
                     <div class="control-block">
