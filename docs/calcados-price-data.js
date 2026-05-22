@@ -1,4 +1,4 @@
-﻿// Sports Retail — Price Data
+// Sports Retail — Price Data
 // Sources: Olympikus site, Mizuno site, Centauro (Nike/Adidas/Asics)
 // Granularity: weekly (Sunday-anchored, closed weeks only)
 // Methodology: AVG(child_price) per parent_id per day, then AVG across parents per week

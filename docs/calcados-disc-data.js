@@ -1,4 +1,4 @@
-﻿const RAW_DISC_CENTAURO = [
+const RAW_DISC_CENTAURO = [
 {w:'2025-08-10',brand:'Asics',cat:'Academia / Fitness',pct:0.5626,n:1159},
 {w:'2025-08-10',brand:'Asics',cat:'Aventura / Esportes Radicais',pct:0.5906,n:171},
 {w:'2025-08-10',brand:'Asics',cat:'Basquete',pct:1.0,n:1},
