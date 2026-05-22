@@ -342,31 +342,65 @@
         <div id="avgdisc-table" style="margin-top:16px;"></div>
     </section>
 
-    <!-- Price Pass-Through (same-SKU price variation) -->
+    <!-- Price Pass-Through Summary -->
     <section class="chart-card" id="passthrough-card">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:8px;flex-wrap:wrap;">
             <div><h3 style="margin:0;font-size:0;"></h3></div>
             <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;width:100%;transform:translateY(-34px);margin-bottom:-30px;">
                 <div>
-                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Price Pass-Through</h3>
-                    <p style="color:#667D99;font-size:12px;margin:0;">(Same-SKU % variation vs reference window)</p>
+                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Price Pass-Through Summary</h3>
+                    <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
                 <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
-                        <div class="control-label">Window</div>
-                        <select class="control-select" id="pass-window" onchange="window._passRender && window._passRender()">
-                            <option value="1w">1 week</option>
-                            <option value="1m">1 month</option>
-                            <option value="3m">3 months</option>
-                            <option value="1y">1 year</option>
-                            <option value="ytd" selected>YTD</option>
+                        <div class="control-label">View</div>
+                        <select class="control-select" id="pass-view-mode" onchange="onPassViewModeChange()">
+                            <option value="comparison">Company Comparison</option>
+                            <option value="breakdown">Channel Breakdown</option>
                         </select>
+                    </div>
+                    <div class="control-block" id="pass-comp-channel-block">
+                        <div class="control-label">Channel</div>
+                        <select class="control-select" id="pass-comp-channel" onchange="onPassCompChannelChange()">
+                            <option value="website">Website</option>
+                            <option value="centauro" selected>Centauro</option>
+                            <option value="netshoes">Netshoes</option>
+                            <option value="free">Free Choice</option>
+                        </select>
+                    </div>
+                    <div class="control-block" id="pass-breakdown-brand-block" style="display:none;">
+                        <div class="control-label">Company</div>
+                        <select class="control-select" id="pass-breakdown-brand" onchange="onPassBreakdownBrandChange()">
+                            <option value="adidas">Adidas</option>
+                            <option value="nike">Nike</option>
+                            <option value="ua">Under Armour</option>
+                            <option value="asics">Asics</option>
+                            <option value="olympikus">Olympikus</option>
+                            <option value="mizuno">Mizuno</option>
+                        </select>
+                    </div>
+                    <div class="control-block" id="pass-series-trigger-block">
+                        <div class="control-label">Series</div>
+                        <div class="series-trigger" id="pass-series-trigger" onclick="togglePassSeriesPanel()">
+                            <span id="pass-series-trigger-label">9 series selected</span>
+                            <span style="font-size:9px;color:#9AA8BB;flex-shrink:0;">▼</span>
+                        </div>
                     </div>
                     <div class="control-block">
                         <div class="control-label">Price</div>
                         <select class="control-select" id="pass-price" onchange="window._passRender && window._passRender()">
                             <option value="sale" selected>Sale</option>
                             <option value="list">List</option>
+                        </select>
+                    </div>
+                    <div class="control-block">
+                        <div class="control-label">Window (chart)</div>
+                        <select class="control-select" id="pass-window" onchange="window._passRender && window._passRender()">
+                            <option value="1w">Δ WoW</option>
+                            <option value="1m">Δ MoM</option>
+                            <option value="3m">Δ QoQ</option>
+                            <option value="1y">Δ YoY</option>
+                            <option value="ytd" selected>Δ YTD</option>
                         </select>
                     </div>
                     <div class="control-block">
@@ -378,29 +412,32 @@
                         </select>
                     </div>
                     <div class="control-block">
-                        <div class="control-label">Outliers</div>
-                        <select class="control-select" id="pass-clip" onchange="window._passRender && window._passRender()" style="min-width:130px;">
-                            <option value="none" selected>No clip</option>
-                            <option value="50_100">Clip [-50%, +100%]</option>
+                        <div class="control-label">Granularity</div>
+                        <select class="control-select" id="pass-gran-select" onchange="onPassGranChange()" style="min-width:130px;">
+                            <option value="weekly" selected>Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="annual">Annual</option>
                         </select>
                     </div>
                     <div class="control-block">
                         <div class="control-label">From</div>
-                        <select class="control-select" id="pass-from" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
+                        <select class="control-select" id="pass-from-select" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
                     </div>
                     <div class="control-block">
                         <div class="control-label">To</div>
-                        <select class="control-select" id="pass-to" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
+                        <select class="control-select" id="pass-to-select" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
                     </div>
                 </div>
             </div>
         </div>
-        <div id="pass-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px 0;"></div>
         <div style="position:relative;height:500px;margin-top:4px;overflow:hidden;">
+            <div class="chart-legend-inline" id="pass-legend"></div>
             <canvas id="pass-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas>
         </div>
         <div id="pass-table" style="margin-top:16px;"></div>
     </section>
+    <div id="pass-series-panel"></div>
 
     <script src="./passthrough-chart.js"></script>
 
