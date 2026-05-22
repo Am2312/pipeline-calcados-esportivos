@@ -382,91 +382,83 @@
     return `<span style="display:inline-block;min-width:64px;padding:6px 10px;border-radius:6px;background:${bg};color:${color};font-weight:800;box-shadow:inset 0 0 0 1px rgba(2,28,69,0.06);font-size:12px;font-family:Verdana,Geneva,sans-serif;">${sign}${pct}%</span>`;
   }
 
+  // Aggregate (price + 5 var fields) for a series, weighted by n_skus across
+  // franchises in the most-recent period within To.
+  function summaryForSeries(serie) {
+    const price = getPrice();
+    const fields = [
+      priceField(price),
+      varField(price, '1w'), varField(price, '1m'), varField(price, '3m'),
+      varField(price, '1y'), varField(price, 'ytd'),
+    ];
+    const rows = rowsForSeries(serie);
+    const toK = getToK(), gran = getGran();
+    // Identify the most-recent w (within or at To-period)
+    let latestW = '';
+    for (const r of rows) {
+      const k = fmtGranKey(r.w, gran);
+      if (k > toK) continue;
+      if (r.w > latestW) latestW = r.w;
+    }
+    if (!latestW) return null;
+    // Weighted aggregate across all franchises of this serie on latestW
+    const out = { w: latestW };
+    for (const f of fields) {
+      let sum = 0, n = 0;
+      for (const r of rows) {
+        if (r.w !== latestW) continue;
+        const v = r[f];
+        if (v === null || v === undefined) continue;
+        const wt = r.n || 0;
+        if (wt === 0) continue;
+        sum += v * wt; n += wt;
+      }
+      out[f] = n > 0 ? sum / n : null;
+    }
+    return out;
+  }
+
   function renderTable() {
-    // Drill-down: pick a representative (brand, channel) for the table.
-    // In Comparison + specific channel: that channel; in Comparison + total: aggregate; in Breakdown: per-channel.
-    const method = getMethod(), price = getPrice();
-    const data = method === 'A' ? (typeof RAW_FRANCHISE_A !== 'undefined' ? RAW_FRANCHISE_A : [])
-                                : (typeof RAW_FRANCHISE_B !== 'undefined' ? RAW_FRANCHISE_B : []);
-    const scope = getScope(), toK = getToK(), gran = getGran();
+    const price = getPrice();
+    const series = getActiveSeries();
+    if (!series.length) { $('fr-table').innerHTML = ''; return; }
 
-    let tableBrand, tableChannelFilter;
-    if (viewMode === 'breakdown') {
-      tableBrand = breakdownBrand; tableChannelFilter = null;   // show all channels stacked
-    } else if (compChannel === 'free') {
-      // Free choice: show ALL active series stacked
-      tableBrand = null; tableChannelFilter = null;
-    } else {
-      tableBrand = null; tableChannelFilter = compChannel === 'total' ? null : compChannel;
-    }
-
-    // Filter dataset
-    let filtered = data.filter(r => passesSport(sportFor(r), scope));
-    if (tableBrand) filtered = filtered.filter(r => r.brand === tableBrand);
-    if (tableChannelFilter) filtered = filtered.filter(r => r.channel === tableChannelFilter);
-    // For Comparison Free Choice, restrict to active series
-    if (viewMode === 'comparison' && compChannel === 'free') {
-      const active = new Set(ALL_SERIES.filter(s => SERIES_ON[s.key]).map(s => s.brand + '|' + s.channel));
-      filtered = filtered.filter(r => active.has(r.brand + '|' + r.channel));
-    }
-
-    // Index: pick most-recent row per (brand, franchise, channel) within the To-period
-    const byKey = new Map();
-    for (const r of filtered) {
-      const granKey = fmtGranKey(r.w, gran);
-      if (granKey > toK) continue;
-      const k = r.brand + '|' + r.franchise + '|' + r.channel;
-      const prev = byKey.get(k);
-      if (!prev || r.w > prev.w) byKey.set(k, r);
-    }
-    const refs = Array.from(byKey.values()).sort((a, b) => (b.n || 0) - (a.n || 0));
-
-    if (refs.length === 0) {
-      $('fr-table').innerHTML = `<div style="padding:24px;text-align:center;color:#9AA8BB;">No franchises match the current filters.</div>`;
+    const rowsArr = series.map(s => ({ s, ref: summaryForSeries(s) })).filter(x => x.ref);
+    if (!rowsArr.length) {
+      $('fr-table').innerHTML = `<div style="padding:24px;text-align:center;color:#9AA8BB;">No data for the current filters.</div>`;
       return;
     }
 
-    const rowsHtml = refs.map(r => {
-      const color = BC[r.brand] || '#021C45';
-      const priceVal = r[priceField(price)];
-      const v1w  = r[varField(price, '1w')];
-      const v1m  = r[varField(price, '1m')];
-      const v3m  = r[varField(price, '3m')];
-      const v1y  = r[varField(price, '1y')];
-      const vytd = r[varField(price, 'ytd')];
-      const cell = (v) => `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;">${heatBadge(v)}</td>`;
+    // Anchor week label = latest among the series
+    const anchorW = rowsArr.reduce((max, x) => x.ref.w > max ? x.ref.w : max, '');
+    const anchorLabel = fmtGranLabel(anchorW, getGran());
 
-      let label = `${r.franchise}`;
-      // Method B: add gen labels
-      if (method === 'B' && r.gen_new != null) {
-        const newG = r.gen_new;
-        const prevG = (r.gen_prev != null) ? r.gen_prev : '?';
-        label += ` <span style="color:#9AA8BB;font-weight:400;font-size:11px;">(gen ${newG} vs ${prevG})</span>`;
-      }
-      // Show brand + channel context when multiple appear in table
-      const showBrand = !tableBrand;
-      const showChannel = !tableChannelFilter && viewMode !== 'breakdown';
-      const ctx = [];
-      if (showBrand) ctx.push(r.brand);
-      if (showChannel || viewMode === 'breakdown') ctx.push(CHANNEL_LABEL[r.channel] || r.channel);
-      const ctxStr = ctx.length ? ` <span style="color:#667D99;font-weight:400;font-size:11px;">— ${ctx.join(' / ')}</span>` : '';
+    const cell = (v) => `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;">${heatBadge(v)}</td>`;
 
+    const rowsHtml = rowsArr.map(({ s, ref }) => {
+      const priceVal = ref[priceField(price)];
+      const v1w  = ref[varField(price, '1w')];
+      const v1m  = ref[varField(price, '1m')];
+      const v3m  = ref[varField(price, '3m')];
+      const v1y  = ref[varField(price, '1y')];
+      const vytd = ref[varField(price, 'ytd')];
       return `<tr>
         <td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:#021C45;font-family:Verdana,Geneva,sans-serif;font-size:13px;">
-          <span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:10px;vertical-align:middle;"></span>${label}${ctxStr}
+          <span style="display:inline-block;width:10px;height:10px;background:${s.color};margin-right:10px;vertical-align:middle;"></span>${s.label}
         </td>
         <td style="padding:14px 8px;border-bottom:1px solid #EBEBEB;text-align:right;color:#021C45;font-weight:700;font-family:Verdana,Geneva,sans-serif;font-size:13px;">${priceVal != null ? 'R$ ' + Math.round(priceVal) : '—'}</td>
         ${cell(v1w)} ${cell(v1m)} ${cell(v3m)} ${cell(v1y)} ${cell(vytd)}
       </tr>`;
     }).join('');
 
+    const PRICE_LBL = price.charAt(0).toUpperCase() + price.slice(1);
     $('fr-table').innerHTML = `
       <div style="overflow-x:auto;margin-top:14px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:Verdana,Geneva,sans-serif;">
           <thead>
             <tr style="background:#021C45;color:#FFFFFF;">
-              <th style="padding:12px 16px;text-align:left;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;width:38%;">Franchise</th>
-              <th style="padding:12px 8px;text-align:right;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;">Price (${price})</th>
+              <th style="padding:12px 16px;text-align:left;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;width:32%;">${anchorLabel}</th>
+              <th style="padding:12px 8px;text-align:right;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;">${PRICE_LBL} price</th>
               <th style="padding:12px 16px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:#FF4F6C;">Δ WoW</th>
               <th style="padding:12px 16px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:#FF4F6C;">Δ MoM</th>
               <th style="padding:12px 16px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:#FF4F6C;">Δ QoQ</th>
