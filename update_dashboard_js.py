@@ -629,7 +629,7 @@ def main():
     # calcados-price-data.js
     # ══════════════════════════════════════════════════════════════════════════
     print("── calcados-price-data.js ──────────────────────────────────────────")
-    with open(PRICE_JS, 'r', encoding='utf-8') as f:
+    with open(PRICE_JS, 'r', encoding='utf-8-sig') as f:
         price_js = f.read()
 
     # ── RAW_DIRECT ───────────────────────────────────────────────────────────
@@ -666,7 +666,7 @@ def main():
     # calcados-disc-data.js
     # ══════════════════════════════════════════════════════════════════════════
     print("── calcados-disc-data.js ───────────────────────────────────────────")
-    with open(DISC_JS, 'r', encoding='utf-8') as f:
+    with open(DISC_JS, 'r', encoding='utf-8-sig') as f:
         disc_js = f.read()
 
     # ── RAW_DISC_DIRECT ───────────────────────────────────────────────────────
