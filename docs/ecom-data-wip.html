@@ -400,10 +400,12 @@
                 <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Week Convention</p>
                 <ul style="font-size:12px;color:#344F75;margin:0;padding-left:18px;line-height:1.9;">
                     <li>ISO week labelled by its <strong>Sunday</strong> — e.g. W20 2026 = 2026-05-17</li>
-                    <li><strong>Olympikus / Mizuno:</strong> Sunday snapshot only (Aster pipeline)</li>
+                    <li><strong>Olympikus / Mizuno (Aster):</strong> daily collection — week aggregates all 7 days</li>
                     <li><strong>Direct (Adidas/Nike/Asics/UA):</strong> daily scraper 07:00 BRT — week aggregates all daily snapshots collected Mon–Sun</li>
-                    <li><strong>Centauro / Netshoes:</strong> daily collection — week aggregates all available days</li>
+                    <li><strong>Netshoes (own scraper):</strong> daily collection — week aggregates all available days</li>
+                    <li><strong>Centauro (Aster):</strong> <span style="color:#C8102E;font-weight:600;">Thursday snapshot only — 1×/week</span>. The "week" datapoint for Centauro is in fact a single Thursday snapshot. When that Thursday is missed by the source, the entire week is empty (no fallback to other days).</li>
                 </ul>
+                <p style="font-size:11px;color:#9AA8BB;margin:8px 0 0 0;line-height:1.6;"><strong>Centauro data gaps:</strong> (a) <em>structural</em> — Black Friday and any weekend event are never captured since collection is Thursday-only; (b) <em>historical</em> — no Centauro data exists in the source between 2023-10-01 and 2025-07-27 (~21 months); (c) <em>sporadic missed Thursdays</em>: 2025-09-18, 2025-10-02, 2025-10-09, 2025-10-30 (whole weeks therefore absent). Affects Asics-, Nike- and Adidas-Centauro series. Monthly aggregates ignore empty weeks rather than treating them as zero; October-2025 averages are based on only 2 weeks (16 + 23).</p>
             </div>
 
             <div>
