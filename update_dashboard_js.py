@@ -267,10 +267,14 @@ def avgdisc_row_no_brand(w, cat, avg_promo, avg_all, n_disc, n) -> str:
 # ── BQ query functions ─────────────────────────────────────────────────────────
 
 def query_direct_price(client, monday: str, sunday: str) -> list:
-    """RAW_DIRECT: avg price per brand × cat for the week."""
+    """RAW_DIRECT: avg price per brand × cat for the week.
+    Deduped at parent_id (colorway) level. Each color of a model is a separate unit —
+    avoids inflating the metric when a single color of a model is discounted while others
+    are full-price (e.g. Adidas Ultraboost branco -20% but Preto/Azul/Vermelho full).
+    Asics/UA have 1 colorway per model in this schema, so this equals grandparent_id for them."""
     sql = f"""
     WITH dp AS (
-      SELECT date, brand_name, sport, grandparent_id,
+      SELECT date, brand_name, sport, parent_id,
         AVG(child_sale_price) AS sale_p,
         AVG(child_list_price) AS list_p
       FROM `{DIRECT_TABLE}`
@@ -282,7 +286,7 @@ def query_direct_price(client, monday: str, sunday: str) -> list:
     SELECT brand_name, sport,
       ROUND(AVG(sale_p), 2) AS p_sale,
       ROUND(AVG(list_p), 2) AS p_list,
-      COUNT(DISTINCT grandparent_id) AS n
+      COUNT(DISTINCT parent_id) AS n
     FROM dp
     GROUP BY 1,2
     ORDER BY 1,2
@@ -363,10 +367,10 @@ def query_ns_price(client, monday: str, sunday: str) -> list:
 
 
 def query_direct_disc(client, monday: str, sunday: str) -> list:
-    """RAW_DISC_DIRECT: % SKUs discounted per brand × mapped_cat (consistent with RAW_DIRECT)."""
+    """RAW_DISC_DIRECT: % colorways discounted per brand × mapped_cat (consistent with RAW_DIRECT)."""
     sql = f"""
     WITH agg AS (
-      SELECT brand_name, sport, grandparent_id,
+      SELECT brand_name, sport, parent_id,
         MAX(child_pct_discount) AS max_disc
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
@@ -447,10 +451,10 @@ def query_ns_disc(client, monday: str, sunday: str) -> list:
 
 
 def query_direct_avgdisc(client, monday: str, sunday: str) -> list:
-    """RAW_AVGDISC_DIRECT: avg discount depth per brand × mapped_cat (consistent with RAW_DIRECT)."""
+    """RAW_AVGDISC_DIRECT: avg discount depth per brand × mapped_cat (colorway-level)."""
     sql = f"""
     WITH agg AS (
-      SELECT brand_name, sport, grandparent_id,
+      SELECT brand_name, sport, parent_id,
         MAX(child_pct_discount) AS max_disc
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
