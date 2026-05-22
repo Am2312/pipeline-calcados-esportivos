@@ -982,6 +982,17 @@ def main():
         f.write(disc_js)
     print(f"  ✅ Saved {DISC_JS}\n")
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # calcados-passthrough-data.js (full regen — same-SKU price variation)
+    # ══════════════════════════════════════════════════════════════════════════
+    print("── calcados-passthrough-data.js (full regen) ──────────────────────")
+    try:
+        from generate_passthrough_history import regenerate as regen_passthrough
+        regen_passthrough(client)
+    except Exception as e:
+        print(f"  ⚠ Passthrough regen failed: {e}")
+        print("    (Continuing — other arrays already saved.)")
+
     print("✅ Dashboard update complete.")
     print(f"   Week {week_label} data added to docs/ JS files.")
     print("   Commit + push handled by GitHub Actions workflow.\n")

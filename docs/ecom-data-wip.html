@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="./calcados-price-data.js"></script>
     <script src="./calcados-disc-data.js"></script>
+    <script src="./calcados-passthrough-data.js"></script>
     <script>
         tailwind.config = {
             theme: { extend: { colors: {
@@ -341,6 +342,68 @@
         <div id="avgdisc-table" style="margin-top:16px;"></div>
     </section>
 
+    <!-- Price Pass-Through (same-SKU price variation) -->
+    <section class="chart-card" id="passthrough-card">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:8px;flex-wrap:wrap;">
+            <div><h3 style="margin:0;font-size:0;"></h3></div>
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;width:100%;transform:translateY(-34px);margin-bottom:-30px;">
+                <div>
+                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Price Pass-Through</h3>
+                    <p style="color:#667D99;font-size:12px;margin:0;">(Same-SKU % variation vs reference window)</p>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
+                    <div class="control-block">
+                        <div class="control-label">Window</div>
+                        <select class="control-select" id="pass-window" onchange="window._passRender && window._passRender()">
+                            <option value="1w">1 week</option>
+                            <option value="1m">1 month</option>
+                            <option value="3m">3 months</option>
+                            <option value="1y">1 year</option>
+                            <option value="ytd" selected>YTD</option>
+                        </select>
+                    </div>
+                    <div class="control-block">
+                        <div class="control-label">Price</div>
+                        <select class="control-select" id="pass-price" onchange="window._passRender && window._passRender()">
+                            <option value="sale" selected>Sale</option>
+                            <option value="list">List</option>
+                        </select>
+                    </div>
+                    <div class="control-block">
+                        <div class="control-label">Scope</div>
+                        <select class="control-select" id="pass-scope" onchange="window._passRender && window._passRender()" style="min-width:130px;">
+                            <option value="all" selected>All footwear</option>
+                            <option value="performance">Performance</option>
+                            <option value="corrida">Corrida</option>
+                        </select>
+                    </div>
+                    <div class="control-block">
+                        <div class="control-label">Outliers</div>
+                        <select class="control-select" id="pass-clip" onchange="window._passRender && window._passRender()" style="min-width:130px;">
+                            <option value="none" selected>No clip</option>
+                            <option value="50_100">Clip [-50%, +100%]</option>
+                        </select>
+                    </div>
+                    <div class="control-block">
+                        <div class="control-label">From</div>
+                        <select class="control-select" id="pass-from" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
+                    </div>
+                    <div class="control-block">
+                        <div class="control-label">To</div>
+                        <select class="control-select" id="pass-to" onchange="window._passRender && window._passRender()" style="min-width:130px;"></select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="pass-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px 0;"></div>
+        <div style="position:relative;height:500px;margin-top:4px;overflow:hidden;">
+            <canvas id="pass-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas>
+        </div>
+        <div id="pass-table" style="margin-top:16px;"></div>
+    </section>
+
+    <script src="./passthrough-chart.js"></script>
+
     <!-- Methodology -->
     <section class="chart-card" id="methodology-card">
         <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 24px 0;">Methodology</h3>
@@ -380,6 +443,25 @@
                 <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Average Discount</p>
                 <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Simple mean of <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">(1 − sale/list)</code> across discounted models per week &amp; category.</p>
                 <p style="font-size:12px;color:#344F75;margin:0;line-height:1.7;">When aggregating categories, weighted average by <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">n_disc</code> (number of discounted models).</p>
+            </div>
+
+            <div>
+                <p style="font-size:11px;font-weight:700;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px 0;border-bottom:1px solid #EBEBEB;padding-bottom:6px;">Price Pass-Through</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Same-SKU price variation across 5 windows. For each SKU on each date <em>t</em>:</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;font-family:Verdana,Geneva,sans-serif;text-align:center;background:#F7F8FA;padding:8px;border-radius:4px;">
+                    var<sub>w</sub>(SKU, t) = (price<sub>t</sub> − AVG(price<sub>SKU, prev_window</sub>)) / AVG(price<sub>SKU, prev_window</sub>)
+                </p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;">Reference window per metric:</p>
+                <ul style="font-size:12px;color:#344F75;margin:0 0 6px 0;padding-left:18px;line-height:1.8;">
+                    <li><strong>Δ WoW</strong> — previous ISO week (Mon–Sun)</li>
+                    <li><strong>Δ MoM</strong> — previous calendar month</li>
+                    <li><strong>Δ QoQ</strong> — month 3 months back</li>
+                    <li><strong>Δ YoY</strong> — same month previous year</li>
+                    <li><strong>Δ YTD</strong> — December of previous year</li>
+                </ul>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Snapshot dynamic cohort:</strong> a SKU contributes only when it has data in both <em>t</em> and the reference window. New SKUs enter when the window completes; discontinued SKUs drop on the day. Computed independently for <strong>sale</strong> and <strong>list</strong> price.</p>
+                <p style="font-size:12px;color:#344F75;margin:0 0 6px 0;line-height:1.7;"><strong>Aggregation:</strong> cross-SKU simple mean per day &amp; cat → mean of days per Sunday-week. Cross-category aggregation weighted by N SKUs (reconstructs the global cross-SKU mean).</p>
+                <p style="font-size:11px;color:#9AA8BB;margin:0;line-height:1.6;"><strong>Outlier clip</strong> (toggleable, default off): when on, SKU-level variations outside <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">[−50%, +100%]</code> are dropped before the cross-SKU mean. Methodology validated against Aster <code style="font-size:10px;background:#F7F8FA;padding:1px 4px;border-radius:4px;">price_variation_snapshot</code> — max_diff = 0.0 across 5 windows × 5 059 SKUs on 2026-05-17.</p>
             </div>
 
             <div>
