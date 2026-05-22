@@ -350,7 +350,7 @@
             <div><h3 style="margin:0;font-size:0;"></h3></div>
             <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;width:100%;transform:translateY(-34px);margin-bottom:-30px;">
                 <div>
-                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Franchise Pass-Through</h3>
+                    <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Price Pass-Through</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
                 <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
@@ -365,6 +365,7 @@
                     <div class="control-block" id="fr-channel-block">
                         <div class="control-label">Channel</div>
                         <select class="control-select" id="fr-channel" onchange="onFrChannelChange()">
+                            <option value="total">Total</option>
                             <option value="website">Website</option>
                             <option value="centauro" selected>Centauro</option>
                             <option value="netshoes">Netshoes</option>
@@ -739,11 +740,15 @@ const LEGEND_HIDDEN = { price: new Set(), disc: new Set(), avgdisc: new Set() };
 function getActiveSeries(includeHidden) {
     let series;
     if (viewMode === 'breakdown') {
-        series = (BRAND_SERIES_KEYS[breakdownBrand] || []).map((k, i) => {
+        const channelSeries = (BRAND_SERIES_KEYS[breakdownBrand] || []).map((k, i) => {
             const s = SERIES_BY_KEY[k];
             if (!s) return null;
             return { ...s, label: ['Website', 'Centauro', 'Netshoes'][i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
         }).filter(Boolean);
+        series = [...channelSeries, {
+            key: breakdownBrand + '|total', label: 'Total',
+            source: '_total', brandKey: '', color: '#344F75', dash: [], _totalBrandId: breakdownBrand,
+        }];
     } else if (compChannel === 'free') series = ALL_SERIES.filter(s => SERIES_ON[s.key]);
     else if (compChannel === 'website')  series = ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
     else if (compChannel === 'netshoes') series = ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
@@ -758,11 +763,15 @@ function getActiveSeries(includeHidden) {
 function getDiscActiveSeries(includeHidden) {
     let series;
     if (discViewMode === 'breakdown') {
-        series = (BRAND_SERIES_KEYS[discBreakdownBrand] || []).map((k, i) => {
+        const channelSeries = (BRAND_SERIES_KEYS[discBreakdownBrand] || []).map((k, i) => {
             const s = SERIES_BY_KEY[k];
             if (!s) return null;
             return { ...s, label: ['Website', 'Centauro', 'Netshoes'][i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
         }).filter(Boolean);
+        series = [...channelSeries, {
+            key: discBreakdownBrand + '|total', label: 'Total',
+            source: '_total', brandKey: '', color: '#344F75', dash: [], _totalBrandId: discBreakdownBrand,
+        }];
     } else if (discCompChannel === 'free') series = ALL_SERIES.filter(s => DISC_SERIES_ON[s.key]);
     else if (discCompChannel === 'website')  series = ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
     else if (discCompChannel === 'netshoes') series = ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));
@@ -1820,10 +1829,14 @@ function getAvgDiscWeeklyMap(s, sport, scope) {
 function getAvgDiscActiveSeries(includeHidden) {
     let series;
     if (avgDiscViewMode === 'breakdown') {
-        series = (BRAND_SERIES_KEYS[avgDiscBreakdownBrand] || []).map((k, i) => {
+        const channelSeries = (BRAND_SERIES_KEYS[avgDiscBreakdownBrand] || []).map((k, i) => {
             const s = SERIES_BY_KEY[k]; if (!s) return null;
             return { ...s, label: ['Website', 'Centauro', 'Netshoes'][i], color: CHANNEL_BREAKDOWN_COLORS[i], dash: [] };
         }).filter(Boolean);
+        series = [...channelSeries, {
+            key: avgDiscBreakdownBrand + '|total', label: 'Total',
+            source: '_total', brandKey: '', color: '#344F75', dash: [], _totalBrandId: avgDiscBreakdownBrand,
+        }];
     } else if (avgDiscCompChannel === 'free')     series = ALL_SERIES.filter(s => AVGDISC_SERIES_ON[s.key]);
     else if (avgDiscCompChannel === 'website')  series = ALL_SERIES.filter(s => s.source === 'olympikus' || s.source === 'mizuno' || s.source === 'direct').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey || s.source] || s.label }));
     else if (avgDiscCompChannel === 'netshoes') series = ALL_SERIES.filter(s => s.source === 'netshoes').map(s => ({ ...s, label: BRAND_LABELS[s.brandKey] || s.label }));

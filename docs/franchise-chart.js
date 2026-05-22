@@ -196,16 +196,22 @@
       // since all series share the same channel.
       return BRAND_IDS.map(b => ({ key: b + '|' + compChannel, label: b, brand: b, channel: compChannel, color: BC[b], dash: [] }));
     } else if (viewMode === 'breakdown') {
-      // Breakdown: 1 series per channel for the selected brand. Label = channel name.
-      // Dash patterns distinguish channels visually (consistent with avgdisc).
+      // Breakdown: 1 series per channel for the selected brand + a Total line.
       const br = breakdownBrand();
-      return CHANNELS.map(ch => ({
+      const channelSeries = CHANNELS.map(ch => ({
         key: br + '|' + ch,
         label: CHANNEL_LABEL[ch],
         brand: br, channel: ch,
         color: BC[br],
         dash: ch === 'centauro' ? [6,3] : ch === 'netshoes' ? [3,2] : [],
       }));
+      return [...channelSeries, {
+        key: br + '|total',
+        label: 'Total',
+        brand: br, channel: '*',
+        color: '#344F75',
+        dash: [],
+      }];
     } else {
       // Model Breakdown: brand + channel fixed, top N franchises by volume.
       const br = breakdownBrand();
