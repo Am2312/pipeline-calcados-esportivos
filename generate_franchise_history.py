@@ -420,7 +420,13 @@ def method_a_variations(fr_daily, fr_weekly):
             mom = avg_window(prev_calendar_month_days(ref_d), field)
             qoq = avg_window(month_n_back_days(ref_d, 3), field)
             yoy = avg_window(same_month_prev_year_days(ref_d), field)
-            ytd = avg_window(december_prev_year_days(ref_d), field)
+            # YTD reference uses the year of the WEEK LABEL (Sunday anchor),
+            # not ref_d. Sunday-anchored weeks straddle the year boundary
+            # (e.g. Sun 28-Dec to Sat 03-Jan), and ref_d could fall in the new
+            # year — making the YTD reference shift to the current year's
+            # December instead of the previous year's. Using w_sun.year keeps
+            # the comparison consistent with the label the user sees.
+            ytd = avg_window(december_prev_year_days(w_sun), field)
             def delta(cur, ref):
                 if ref is None or ref == 0: return None
                 return round((cur - ref) / ref, 6)
