@@ -29,6 +29,41 @@ MIZ_TABLE    = f"{BQ_PROJECT}.mizuno_trusted.product_snapshot"
 
 CENTAURO_BRANDS = ('Nike', 'adidas', 'Asics', 'Under Armour', 'Olympikus', 'Mizuno')  # case as stored in centauro_trusted
 
+# ── Per-scraper bad-day exclusions ─────────────────────────────────────────────
+# Days where the scraper malfunctioned (partial scrape, duplicate run, etc).
+# Filtered out at query time so weekly aggregates aren't contaminated.
+# Format: { source: {(brand_filter_or_None, date_iso)} }  brand_filter = None means all brands.
+SCRAPER_EXCLUSIONS = {
+    'direct': {
+        ('Nike', '2026-05-22'),       # Partial scrape: 1170 colorways vs ~2570 normal (~45%).
+                                       # 1159 of those reappear on 23-May → confirmed subset, not real change.
+    },
+    'netshoes': {
+        (None, '2026-05-19'),         # Anomalous run: 44,649 SKUs / 869 brands (4.5x normal).
+                                       # Likely double-run or dedup bug. Excluded for cleanliness.
+    },
+}
+
+def exclusion_clause_direct(brand_label=None):
+    """Build SQL clause to exclude bad Direct scraper days.
+    brand_label=None → apply ALL exclusions (used in query_direct_* which return all brands).
+    brand_label='Nike' → apply only Nike-specific + universal (b is None) exclusions."""
+    bad = SCRAPER_EXCLUSIONS.get('direct', set())
+    if brand_label is not None:
+        bad = [(b, d) for (b, d) in bad if b == brand_label or b is None]
+    if not bad: return ''
+    parts = [f"(brand_name = '{b}' AND date = DATE '{d}')" if b else f"date = DATE '{d}'" for b, d in bad]
+    return ' AND NOT (' + ' OR '.join(parts) + ')'
+
+def exclusion_clause_netshoes():
+    """Build SQL clause to exclude bad Netshoes days."""
+    bad = SCRAPER_EXCLUSIONS.get('netshoes', set())
+    if not bad: return ''
+    parts = []
+    for b, d in bad:
+        parts.append(f"date = DATE '{d}'" if b is None else f"(brand = '{b}' AND date = DATE '{d}')")
+    return ' AND NOT (' + ' OR '.join(parts) + ')'
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCS_DIR   = os.path.join(SCRIPT_DIR, "docs")
 PRICE_JS   = os.path.join(DOCS_DIR, "calcados-price-data.js")
@@ -280,7 +315,7 @@ def query_direct_price(client, monday: str, sunday: str) -> list:
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND child_is_available = 1
-        AND child_sale_price IS NOT NULL
+        AND child_sale_price IS NOT NULL{exclusion_clause_direct()}
       GROUP BY 1,2,3,4
     )
     SELECT brand_name, sport,
@@ -329,7 +364,7 @@ def query_ns_price(client, monday: str, sunday: str) -> list:
       FROM `{NS_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND is_available = 1
-        AND sale_price IS NOT NULL
+        AND sale_price IS NOT NULL{exclusion_clause_netshoes()}
       GROUP BY 1,2,3,4
     )
     SELECT brand, department,
@@ -375,7 +410,7 @@ def query_direct_disc(client, monday: str, sunday: str) -> list:
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND child_is_available = 1
-        AND child_sale_price IS NOT NULL
+        AND child_sale_price IS NOT NULL{exclusion_clause_direct()}
       GROUP BY 1,2,3
     )
     SELECT brand_name, sport,
@@ -414,7 +449,7 @@ def query_ns_disc(client, monday: str, sunday: str) -> list:
       FROM `{NS_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND is_available = 1
-        AND sale_price IS NOT NULL
+        AND sale_price IS NOT NULL{exclusion_clause_netshoes()}
       GROUP BY 1,2,3
     )
     SELECT
@@ -459,7 +494,7 @@ def query_direct_avgdisc(client, monday: str, sunday: str) -> list:
       FROM `{DIRECT_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND child_is_available = 1
-        AND child_sale_price IS NOT NULL
+        AND child_sale_price IS NOT NULL{exclusion_clause_direct()}
       GROUP BY 1,2,3
     )
     SELECT brand_name, sport, max_disc
@@ -631,7 +666,7 @@ def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
       FROM `{NS_TABLE}`
       WHERE date BETWEEN '{monday}' AND '{sunday}'
         AND is_available = 1
-        AND sale_price IS NOT NULL
+        AND sale_price IS NOT NULL{exclusion_clause_netshoes()}
       GROUP BY 1,2,3
     )
     SELECT
