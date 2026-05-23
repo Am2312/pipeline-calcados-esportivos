@@ -67,12 +67,17 @@ sys.path.insert(0, SCRIPT_DIR)
 from update_dashboard_js import (  # noqa: E402
     OLY_TABLE, MIZ_TABLE, CTR_TABLE, CENTAURO_BRANDS,
     OLY_INCLUDE_SUBCAT, MIZ_INCLUDE_SUBCAT,
+    DIRECT_TABLE, DIRECT_BRAND_KEY, map_direct_cat,
+    exclusion_clause_direct,
     get_bq_client, bq_rows,
 )
 from franchise_mapping import classify  # noqa: E402
 
 UA_TABLE = "aster-data-platform.under_armour_trusted.product_snapshot"
 UA_INCLUDE_SUBCAT = {'Calçados'}
+
+# Adidas / Nike / Asics website via the Direct scraper (UA stays on Aster — see below).
+DIRECT_BRANDS_FOR_FRANCHISE = ('Adidas', 'Nike', 'Asics')
 
 
 # ── Step 1: pull daily aggregates per (source, brand, grandparent_name, cat, date) ──
@@ -93,6 +98,30 @@ WHERE child_is_available = 1
   AND child_sale_price IS NOT NULL AND child_sale_price > 0
   AND child_list_price IS NOT NULL AND child_list_price > 0
 GROUP BY source, brand, grandparent_name, cat, date
+"""
+
+# Direct scraper (Adidas / Nike / Asics websites). UA NOT included — UA is pulled
+# from Aster trusted for long history (see UA_TABLE pull). The scraper schema uses
+# `parent_name` per colorway and a `sport` field that needs mapping via DIRECT_CAT_MAP
+# (same canonical cats as the other 3 dashboard cards). Grouped by grandparent_id so
+# each row = one model per day; ANY_VALUE picks a representative parent_name for the
+# franchise regex classifier. Bad-day exclusions are honoured via SCRAPER_EXCLUSIONS.
+DIRECT_DAILY_SQL = """
+SELECT 'direct' AS source,
+       brand_name AS brand,
+       ANY_VALUE(parent_name) AS grandparent_name,
+       sport AS raw_sport,
+       date,
+       AVG(child_sale_price) AS sale_avg,
+       AVG(child_list_price) AS list_avg,
+       COUNT(DISTINCT parent_id) AS n_skus
+FROM `{table}`
+WHERE child_is_available = 1
+  AND brand_name IN {brands}
+  AND date >= DATE '{since}'
+  AND child_sale_price IS NOT NULL AND child_sale_price > 0
+  AND child_list_price IS NOT NULL AND child_list_price > 0{exclusions}
+GROUP BY source, brand, grandparent_id, raw_sport, date
 """
 
 CTR_DAILY_SQL = """
@@ -174,6 +203,23 @@ def pull_daily(client):
     all_rows.extend(rows)
     print(f"    {len(rows)} daily rows", flush=True)
 
+    # Direct scraper for Adidas / Nike / Asics website (UA already via Aster above).
+    print("  Pulling direct (Adidas/Nike/Asics website)...", flush=True)
+    sql = DIRECT_DAILY_SQL.format(
+        table=DIRECT_TABLE,
+        brands=repr(DIRECT_BRANDS_FOR_FRANCHISE),
+        since=SINCE_DATE,
+        exclusions=exclusion_clause_direct(),
+    )
+    rows = bq_rows(client, sql)
+    # Map raw sport → canonical cat (matches SPORT_CATS.direct used by JS filter).
+    for r in rows:
+        bk = DIRECT_BRAND_KEY.get(r['brand'], r['brand'].lower())
+        r['cat'] = map_direct_cat(bk, r.get('raw_sport') or '')
+        r.pop('raw_sport', None)
+    all_rows.extend(rows)
+    print(f"    {len(rows)} daily rows", flush=True)
+
     print(f"  TOTAL: {len(all_rows)} rows", flush=True)
     return all_rows
 
@@ -217,7 +263,7 @@ def date_to_sunday_anchor(d):
 
 def source_to_channel(source: str) -> str:
     """Map data source → dashboard channel label."""
-    if source in ('olympikus', 'mizuno', 'ua'): return 'website'
+    if source in ('olympikus', 'mizuno', 'ua', 'direct'): return 'website'
     if source == 'centauro': return 'centauro'
     if source == 'netshoes': return 'netshoes'
     return source
