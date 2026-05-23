@@ -26,27 +26,39 @@
   ];
   const MODEL_TOP_N = 8;
 
-  // Sport scope (mirrors SPORT_CATS in HTML, applied to franchise.sport)
-  const SPORT_SCOPE = {
-    corrida:     new Set(['corrida']),
-    performance: new Set(['corrida', 'training', 'trail']),
-    all:         null,
-  };
-  function passesSport(sport, scope) {
-    const s = SPORT_SCOPE[scope];
-    if (s === null || s === undefined) return true;
-    if (!sport) return true;
-    return s.has(sport);
+  // Sport filter — uses the SAME raw-cat table (SPORT_CATS) that the other 3
+  // cards use, so all 4 cards filter identical SKU populations for a given scope.
+  // Method A rows carry `cat` (raw category from BQ). Method B rows do not — they
+  // fall back to the franchise.sport tag (legacy behaviour, marginal divergence).
+  function franchiseSourceFor(brand, channel) {
+    // Map (brand, channel) → SPORT_CATS source key
+    if (channel === 'centauro') return 'centauro';
+    if (channel === 'netshoes') return 'netshoes';
+    // channel = 'website' → depends on brand
+    if (brand === 'Olympikus') return 'olympikus';
+    if (brand === 'Mizuno')    return 'mizuno';
+    return 'direct';  // Adidas / Nike / Under Armour / Asics
   }
-  // Sport lookup for Method B rows that don't carry the field
-  const SPORT_LOOKUP = (() => {
-    const m = new Map();
-    if (typeof RAW_FRANCHISE_A !== 'undefined') {
-      for (const r of RAW_FRANCHISE_A) m.set(r.brand + '|' + r.franchise, r.sport);
+  function passesSport(row, scope) {
+    if (scope === 'all' || scope === null || scope === undefined) return true;
+    // Method A: filter by raw cat (consistent with the other 3 cards)
+    if (row.cat !== undefined && typeof SPORT_CATS !== 'undefined') {
+      const src = franchiseSourceFor(row.brand, row.channel);
+      const allowed = (SPORT_CATS[src] || {})[scope];
+      if (allowed === null || allowed === undefined) return true; // 'all' bucket has null
+      return allowed.includes(row.cat);
     }
-    return m;
-  })();
-  function sportFor(row) { return row.sport || SPORT_LOOKUP.get(row.brand + '|' + row.franchise) || ''; }
+    // Method B fallback: use franchise.sport tag
+    const SPORT_SCOPE_FALLBACK = {
+      corrida:     new Set(['corrida']),
+      performance: new Set(['corrida', 'training', 'trail']),
+      all:         null,
+    };
+    const s = SPORT_SCOPE_FALLBACK[scope];
+    if (s === null || s === undefined) return true;
+    if (!row.sport) return true;
+    return s.has(row.sport);
+  }
 
   // ── Date helpers (1W26 / Jan-26 / Q2 2026) ────────────────────────────────
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -239,7 +251,7 @@
     for (const r of data) {
       if (r.brand !== brand) continue;
       if (channel !== 'total' && r.channel !== channel) continue;
-      if (!passesSport(sportFor(r), scope)) continue;
+      if (!passesSport(r, scope)) continue;
       if (!r.franchise) continue;
       sumByF.set(r.franchise, (sumByF.get(r.franchise) || 0) + (r.n || 0));
     }
@@ -261,7 +273,7 @@
     const channelWeeks = { website: new Set(), centauro: new Set(), netshoes: new Set() };
     for (const r of data) {
       if (r.brand !== brand) continue;
-      if (!passesSport(sportFor(r), scope)) continue;
+      if (!passesSport(r, scope)) continue;
       if (channelWeeks[r.channel]) channelWeeks[r.channel].add(r.w);
     }
     const valid = new Set();
@@ -284,7 +296,7 @@
       r.brand === serie.brand
       && (serie.channel === '*' ? true : r.channel === serie.channel)
       && (serie.franchise ? r.franchise === serie.franchise : true)
-      && passesSport(sportFor(r), scope)
+      && passesSport(r, scope)
       && (validWeeks ? validWeeks.has(r.w) : true)
     );
   }

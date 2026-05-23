@@ -223,9 +223,11 @@ def source_to_channel(source: str) -> str:
     return source
 
 def aggregate_franchise_daily(rows):
-    """Cross-grandparent weighted aggregation per (brand, franchise, channel, date).
-    `channel` (= mapped source) lets the dashboard filter by Website/Centauro/Netshoes
-    like the other cards do.
+    """Cross-grandparent weighted aggregation per (brand, franchise, channel, cat, date).
+    `channel` (= mapped source) and `cat` (raw category from BQ) let the dashboard
+    filter consistently with the other cards' SPORT_CATS table.
+    Method B keeps the simpler (brand, franchise, gen, channel, date) key — no cat —
+    because generation-vs-generation comparisons are not split by category.
     """
     fr_day = defaultdict(lambda: {'sale_n': 0, 'sale_w': 0.0, 'list_n': 0, 'list_w': 0.0, 'n_skus': 0, 'sport': None})
     gen_day = defaultdict(lambda: {'sale_n': 0, 'sale_w': 0.0, 'list_n': 0, 'list_w': 0.0, 'n_skus': 0})
@@ -234,12 +236,13 @@ def aggregate_franchise_daily(rows):
     for r in rows:
         brand = r['brand']; franchise = r['franchise']; gen = r['gen']
         channel = source_to_channel(r['source'])
+        cat = r.get('cat') or ''
         d = r['date']; n = r['n_skus']
         if isinstance(d, str):
             d = datetime.date.fromisoformat(d)
 
-        # Franchise-level (Method A)
-        k = (brand, franchise, channel, d)
+        # Franchise-level (Method A) — keyed by cat so the JS can filter via SPORT_CATS
+        k = (brand, franchise, channel, cat, d)
         agg = fr_day[k]
         if r['sale_avg'] is not None:
             agg['sale_w'] += r['sale_avg'] * n
@@ -250,7 +253,7 @@ def aggregate_franchise_daily(rows):
         agg['n_skus'] += n
         agg['sport'] = r['sport']
 
-        # Per-generation aggregates (Method B) — keyed by channel too
+        # Per-generation aggregates (Method B) — keyed by channel, NOT cat
         if gen is not None:
             gk = (brand, franchise, gen, channel, d)
             ga = gen_day[gk]
@@ -288,11 +291,11 @@ def aggregate_franchise_daily(rows):
 # ── Step 4: weekly aggregation (Sunday-anchored) ──
 
 def daily_to_weekly(fr_daily):
-    """Aggregate franchise-daily to (brand, franchise, channel, sunday_week)."""
+    """Aggregate franchise-daily to (brand, franchise, channel, cat, sunday_week)."""
     weekly = defaultdict(lambda: {'sale_sum': 0.0, 'sale_n': 0, 'list_sum': 0.0, 'list_n': 0, 'n_days': 0, 'n_skus_sum': 0, 'sport': None})
-    for (brand, franchise, channel, d), v in fr_daily.items():
+    for (brand, franchise, channel, cat, d), v in fr_daily.items():
         w = date_to_sunday_anchor(d)
-        wk = weekly[(brand, franchise, channel, w)]
+        wk = weekly[(brand, franchise, channel, cat, w)]
         if v['p_sale'] is not None:
             wk['sale_sum'] += v['p_sale'] * v['n_skus']
             wk['sale_n']  += v['n_skus']
@@ -364,15 +367,15 @@ def december_prev_year_days(d):
 
 
 def method_a_variations(fr_daily, fr_weekly):
-    """For each (brand, franchise, channel, week_sun), compute the 5 deltas."""
+    """For each (brand, franchise, channel, cat, week_sun), compute the 5 deltas."""
     daily_idx = defaultdict(dict)
-    for (brand, franchise, channel, d), v in fr_daily.items():
-        daily_idx[(brand, franchise, channel)][d] = v
+    for (brand, franchise, channel, cat, d), v in fr_daily.items():
+        daily_idx[(brand, franchise, channel, cat)][d] = v
 
     rows = []
-    for (brand, franchise, channel, w_sun), w_vals in fr_weekly.items():
+    for (brand, franchise, channel, cat, w_sun), w_vals in fr_weekly.items():
         span_days = [w_sun + datetime.timedelta(days=i) for i in range(7)]
-        days_with_data = [d for d in span_days if d in daily_idx[(brand, franchise, channel)]]
+        days_with_data = [d for d in span_days if d in daily_idx[(brand, franchise, channel, cat)]]
         if not days_with_data:
             continue
         ref_d = max(days_with_data)
@@ -381,6 +384,7 @@ def method_a_variations(fr_daily, fr_weekly):
             'brand':     brand,
             'franchise': franchise,
             'channel':   channel,
+            'cat':       cat,
             'sport':     w_vals.get('sport') or '',
             'p_sale':    round(w_vals['p_sale'], 2) if w_vals['p_sale'] is not None else None,
             'p_list':    round(w_vals['p_list'], 2) if w_vals['p_list'] is not None else None,
@@ -389,7 +393,7 @@ def method_a_variations(fr_daily, fr_weekly):
         def avg_window(days_iterable, field):
             vals, wts = [], []
             for d in days_iterable:
-                v = daily_idx[(brand, franchise, channel)].get(d)
+                v = daily_idx[(brand, franchise, channel, cat)].get(d)
                 if v is None: continue
                 price = v[field]
                 if price is None: continue
@@ -426,7 +430,7 @@ def method_a_variations(fr_daily, fr_weekly):
             out[f'var_{key}_1y']  = delta(cur, yoy)
             out[f'var_{key}_ytd'] = delta(cur, ytd)
         rows.append(out)
-    rows.sort(key=lambda r: (r['brand'], r['franchise'], r['channel'], r['w']))
+    rows.sort(key=lambda r: (r['brand'], r['franchise'], r['channel'], r['cat'], r['w']))
     return rows
 
 
@@ -546,12 +550,17 @@ def _flt(v):
         return s
     return str(v)
 
+def _js_str(s):
+    """Escape single-quotes for JS string literal embedding."""
+    return (s or '').replace("\\", "\\\\").replace("'", "\\'")
+
 def fmt_row_a(r):
     parts = [
         f"w:'{r['w']}'",
         f"brand:'{r['brand']}'",
-        f"franchise:'{r['franchise']}'",
+        f"franchise:'{_js_str(r['franchise'])}'",
         f"channel:'{r['channel']}'",
+        f"cat:'{_js_str(r['cat'])}'",
         f"sport:'{r['sport']}'",
         f"p_sale:{r['p_sale'] if r['p_sale'] is not None else 'null'}",
         f"p_list:{r['p_list'] if r['p_list'] is not None else 'null'}",
@@ -645,11 +654,16 @@ def regenerate(client=None):
     print(f"  {len(rows_b):,} rows raw")
 
     # ── Volume filter: drop franchises whose peak weekly n_skus < threshold ──
-    # Threshold lowered to 50 because each franchise now splits across channels
+    # Threshold lowered to 50 because each franchise now splits across channels.
+    # Peak = max over (channel, week) of the SUM across cats — keeps the original
+    # semantics now that rows split by cat too.
     THRESHOLD_N_SKUS = 50
-    peak_n = defaultdict(int)
+    fr_week_sum = defaultdict(int)
     for r in rows_a:
-        peak_n[(r['brand'], r['franchise'])] = max(peak_n[(r['brand'], r['franchise'])], r['n_skus'])
+        fr_week_sum[(r['brand'], r['franchise'], r['channel'], r['w'])] += r['n_skus']
+    peak_n = defaultdict(int)
+    for (brand, franchise, channel, w), n in fr_week_sum.items():
+        peak_n[(brand, franchise)] = max(peak_n[(brand, franchise)], n)
     keep_fr = {k for k, v in peak_n.items() if v >= THRESHOLD_N_SKUS}
     rows_a = [r for r in rows_a if (r['brand'], r['franchise']) in keep_fr]
     rows_b = [r for r in rows_b if (r['brand'], r['franchise']) in keep_fr]

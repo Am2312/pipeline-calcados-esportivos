@@ -650,9 +650,11 @@ const SPORT_CATS = {
     },
     centauro: {
         // Raw cats from centauro_trusted. "Aventura" = trail-running.
-        // "Treino" existed in Q3 2025 (1.7k rows) and disappeared since; kept for historical coverage.
-        corrida:     ['Corrida / Caminhada'],
-        performance: ['Corrida / Caminhada', 'Academia / Fitness', 'Aventura', 'Treino'],
+        // Centauro evolved cats over time: original "Corrida / Caminhada" was later
+        // split into "Corrida" alone in some periods; "Aventura" was renamed
+        // "Aventura / Esportes Radicais". Both old and new cats listed for full coverage.
+        corrida:     ['Corrida / Caminhada', 'Corrida'],
+        performance: ['Corrida / Caminhada', 'Corrida', 'Academia / Fitness', 'Aventura', 'Aventura / Esportes Radicais', 'Treino'],
         all:         null
     },
     direct: {
