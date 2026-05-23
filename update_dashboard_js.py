@@ -492,6 +492,136 @@ def query_direct_avgdisc(client, monday: str, sunday: str) -> list:
     return result
 
 
+# ── UA from Aster trusted (long history) ──────────────────────────────────────
+# Replaces UA in the Direct scraper output. The scraper only started 2026-05-15,
+# while under_armour_trusted has data since 2024-04. Filters and cat mapping are
+# identical to the scraper path so numbers stay comparable across brands.
+UA_ASTER_TABLE = "aster-data-platform.under_armour_trusted.product_snapshot"
+
+def query_ua_aster_price(client, monday: str, sunday: str) -> list:
+    """UA price for the week from Aster. Returns list of {brand:'ua', cat, p_sale, p_list, n}."""
+    sql = f"""
+    WITH dp AS (
+      SELECT date, COALESCE(subcategory_2_name, subcategory_name, '') AS sport, parent_id,
+        AVG(child_sale_price) AS sale_p,
+        AVG(child_list_price) AS list_p
+      FROM `{UA_ASTER_TABLE}`
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND child_is_available = 1
+        AND subcategory_name = 'Calçados'
+        AND child_sale_price IS NOT NULL AND child_sale_price > 0
+        AND child_list_price IS NOT NULL AND child_list_price > 0
+      GROUP BY 1, 2, 3
+    )
+    SELECT sport,
+      ROUND(AVG(sale_p), 2) AS p_sale,
+      ROUND(AVG(list_p), 2) AS p_list,
+      COUNT(DISTINCT parent_id) AS n
+    FROM dp
+    GROUP BY 1
+    ORDER BY 1
+    """
+    rows = bq_rows(client, sql)
+    agg = defaultdict(lambda: {'sale_w': 0.0, 'list_w': 0.0, 'n': 0})
+    for r in rows:
+        cat = map_direct_cat('ua', r['sport'] or '')
+        n = r['n'] or 0
+        agg[cat]['sale_w'] += (r['p_sale'] or 0) * n
+        agg[cat]['list_w'] += (r['p_list'] or 0) * n
+        agg[cat]['n'] += n
+    out = []
+    for cat, v in sorted(agg.items()):
+        if v['n'] == 0:
+            continue
+        out.append({
+            'brand': 'ua', 'cat': cat,
+            'p_sale': round(v['sale_w'] / v['n'], 2),
+            'p_list': round(v['list_w'] / v['n'], 2),
+            'n': v['n'],
+        })
+    return out
+
+def query_ua_aster_disc(client, monday: str, sunday: str) -> list:
+    """UA % discounted for the week from Aster. Returns list of {brand:'ua', cat, pct, n}."""
+    sql = f"""
+    WITH agg AS (
+      SELECT COALESCE(subcategory_2_name, subcategory_name, '') AS sport, parent_id,
+        MAX(SAFE_DIVIDE(child_list_price - child_sale_price, child_list_price)) AS max_disc
+      FROM `{UA_ASTER_TABLE}`
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND child_is_available = 1
+        AND subcategory_name = 'Calçados'
+        AND child_sale_price IS NOT NULL AND child_sale_price > 0
+        AND child_list_price IS NOT NULL AND child_list_price > 0
+      GROUP BY 1, 2
+    )
+    SELECT sport,
+      COUNTIF(max_disc > 0) AS n_disc,
+      COUNT(*) AS n_total
+    FROM agg
+    GROUP BY 1
+    ORDER BY 1
+    """
+    rows = bq_rows(client, sql)
+    agg = defaultdict(lambda: {'disc': 0, 'total': 0})
+    for r in rows:
+        cat = map_direct_cat('ua', r['sport'] or '')
+        agg[cat]['disc'] += r['n_disc'] or 0
+        agg[cat]['total'] += r['n_total'] or 0
+    out = []
+    for cat, v in sorted(agg.items()):
+        if v['total'] == 0:
+            continue
+        out.append({
+            'brand': 'ua', 'cat': cat,
+            'pct': round(v['disc'] / v['total'], 4),
+            'n': v['total'],
+        })
+    return out
+
+def query_ua_aster_avgdisc(client, monday: str, sunday: str) -> list:
+    """UA avg discount depth for the week from Aster.
+    Returns list of {brand:'ua', cat, avg_promo, avg_all, n_disc, n}."""
+    sql = f"""
+    WITH agg AS (
+      SELECT COALESCE(subcategory_2_name, subcategory_name, '') AS sport, parent_id,
+        MAX(SAFE_DIVIDE(child_list_price - child_sale_price, child_list_price)) AS max_disc
+      FROM `{UA_ASTER_TABLE}`
+      WHERE date BETWEEN '{monday}' AND '{sunday}'
+        AND child_is_available = 1
+        AND subcategory_name = 'Calçados'
+        AND child_sale_price IS NOT NULL AND child_sale_price > 0
+        AND child_list_price IS NOT NULL AND child_list_price > 0
+      GROUP BY 1, 2
+    )
+    SELECT sport, max_disc
+    FROM agg
+    """
+    rows = bq_rows(client, sql)
+    agg = defaultdict(lambda: {'sp_w': 0.0, 'nd': 0, 'sa_w': 0.0, 'n': 0})
+    for r in rows:
+        cat = map_direct_cat('ua', r['sport'] or '')
+        d = r['max_disc']
+        if d is None:
+            d = 0
+        if d > 0:
+            agg[cat]['sp_w'] += d
+            agg[cat]['nd']   += 1
+        agg[cat]['sa_w'] += d
+        agg[cat]['n']    += 1
+    out = []
+    for cat, v in sorted(agg.items()):
+        if v['n'] == 0:
+            continue
+        out.append({
+            'brand': 'ua', 'cat': cat,
+            'avg_promo': round(v['sp_w'] / v['nd'], 4) if v['nd'] > 0 else None,
+            'avg_all':   round(v['sa_w'] / v['n'], 4),
+            'n_disc': v['nd'], 'n': v['n'],
+        })
+    return out
+
+
 def query_ns_avgdisc(client, monday: str, sunday: str) -> list:
     """RAW_AVGDISC_NETSHOES: avg disc depth, model level, mapped dept names."""
     sql = f"""
@@ -781,15 +911,19 @@ def main():
         price_js = f.read()
 
     # ── RAW_DIRECT ───────────────────────────────────────────────────────────
+    # UA pulled from Aster trusted (long history) instead of the Direct scraper.
+    # Adidas/Nike/Asics stay on the scraper since they have no Aster equivalent.
     print("  Querying RAW_DIRECT (Direct brands price)...")
-    direct_price = query_direct_price(client, monday_str, sunday_str)
+    direct_price = [r for r in query_direct_price(client, monday_str, sunday_str) if r['brand'] != 'ua']
+    ua_price = query_ua_aster_price(client, monday_str, sunday_str)
+    direct_price = direct_price + ua_price
     if direct_price:
         price_js = update_js_array(
             price_js, 'RAW_DIRECT', week_label, direct_price,
             lambda r: price_row(week_label, r['brand'], r['cat'],
                                 r['p_sale'], r['p_list'], r['n'])
         )
-        print(f"    ✓ {len(direct_price)} rows added")
+        print(f"    ✓ {len(direct_price)} rows added ({len(ua_price)} UA from Aster)")
     else:
         print("    ⚠ No data found — skipping RAW_DIRECT")
 
@@ -857,14 +991,17 @@ def main():
         disc_js = f.read()
 
     # ── RAW_DISC_DIRECT ───────────────────────────────────────────────────────
+    # UA from Aster (long history), Adidas/Nike/Asics from scraper.
     print("  Querying RAW_DISC_DIRECT...")
-    direct_disc = query_direct_disc(client, monday_str, sunday_str)
+    direct_disc = [r for r in query_direct_disc(client, monday_str, sunday_str) if r['brand'] != 'ua']
+    ua_disc = query_ua_aster_disc(client, monday_str, sunday_str)
+    direct_disc = direct_disc + ua_disc
     if direct_disc:
         disc_js = update_js_array(
             disc_js, 'RAW_DISC_DIRECT', week_label, direct_disc,
             lambda r: disc_row_brand(week_label, r['brand'], r['cat'], r['pct'], r['n'])
         )
-        print(f"    ✓ {len(direct_disc)} rows  (replaces any contaminated W{week_label} rows)")
+        print(f"    ✓ {len(direct_disc)} rows ({len(ua_disc)} UA from Aster)")
     else:
         print("    ⚠ No data — skipping RAW_DISC_DIRECT")
 
@@ -881,8 +1018,11 @@ def main():
         print("    ⚠ No data — skipping RAW_DISC_NETSHOES")
 
     # ── RAW_AVGDISC_DIRECT ────────────────────────────────────────────────────
+    # UA from Aster (long history), Adidas/Nike/Asics from scraper.
     print("  Querying RAW_AVGDISC_DIRECT...")
-    direct_avgdisc = query_direct_avgdisc(client, monday_str, sunday_str)
+    direct_avgdisc = [r for r in query_direct_avgdisc(client, monday_str, sunday_str) if r['brand'] != 'ua']
+    ua_avgdisc = query_ua_aster_avgdisc(client, monday_str, sunday_str)
+    direct_avgdisc = direct_avgdisc + ua_avgdisc
     if direct_avgdisc:
         disc_js = update_js_array(
             disc_js, 'RAW_AVGDISC_DIRECT', week_label, direct_avgdisc,
