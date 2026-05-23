@@ -225,18 +225,28 @@
         dash: [],
       }];
     } else {
-      // Model Breakdown: brand + channel fixed, top N franchises by volume.
+      // Model Breakdown: brand + channel fixed, top N franchises by volume,
+      // plus a "Total" line = brand×channel aggregate across all franchises.
       const br = breakdownBrand();
       const ch = modelChannel();           // 'total' | 'website' | 'centauro' | 'netshoes'
       const chanKey = ch === 'total' ? '*' : ch;
       const tops = topFranchisesForModel(br, ch);
-      return tops.map((franchise, i) => ({
+      const franchiseSeries = tops.map((franchise, i) => ({
         key: br + '|' + chanKey + '|' + franchise,
         label: franchise,
         brand: br, channel: chanKey, franchise,
         color: FRANCHISE_PALETTE[i % FRANCHISE_PALETTE.length],
         dash: [],
       }));
+      // Brand×channel Total — no franchise filter, distinct dashed style
+      const totalSerie = {
+        key: br + '|' + chanKey + '|__total__',
+        label: 'Total',
+        brand: br, channel: chanKey,  // no franchise → aggregates across all
+        color: '#344F75',
+        dash: [10, 5],
+      };
+      return franchiseSeries.concat(totalSerie);
     }
   }
 
