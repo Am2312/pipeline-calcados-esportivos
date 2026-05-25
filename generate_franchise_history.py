@@ -68,7 +68,8 @@ from update_dashboard_js import (  # noqa: E402
     OLY_TABLE, MIZ_TABLE, CTR_TABLE, CENTAURO_BRANDS,
     OLY_INCLUDE_SUBCAT, MIZ_INCLUDE_SUBCAT,
     DIRECT_TABLE, DIRECT_BRAND_KEY, map_direct_cat,
-    exclusion_clause_direct,
+    NS_TABLE, map_ns_cat,
+    exclusion_clause_direct, exclusion_clause_netshoes,
     get_bq_client, bq_rows,
 )
 from franchise_mapping import classify  # noqa: E402
@@ -78,6 +79,8 @@ UA_INCLUDE_SUBCAT = {'Calçados'}
 
 # Adidas / Nike / Asics website via the Direct scraper (UA stays on Aster — see below).
 DIRECT_BRANDS_FOR_FRANCHISE = ('Adidas', 'Nike', 'Asics')
+# Netshoes covers all 6 brands.
+NS_BRANDS_FOR_FRANCHISE = ('Adidas', 'Nike', 'Asics', 'Under Armour', 'Olympikus', 'Mizuno')
 
 
 # ── Step 1: pull daily aggregates per (source, brand, grandparent_name, cat, date) ──
@@ -122,6 +125,24 @@ WHERE child_is_available = 1
   AND child_sale_price IS NOT NULL AND child_sale_price > 0
   AND child_list_price IS NOT NULL AND child_list_price > 0{exclusions}
 GROUP BY source, brand, grandparent_id, raw_sport, date
+"""
+
+NS_DAILY_SQL = """
+SELECT 'netshoes' AS source,
+       brand AS brand,
+       ANY_VALUE(name) AS grandparent_name,
+       department AS raw_department,
+       date,
+       AVG(sale_price) AS sale_avg,
+       AVG(list_price) AS list_avg,
+       COUNT(DISTINCT sku) AS n_skus
+FROM `{table}`
+WHERE is_available = 1
+  AND brand IN {brands}
+  AND date >= DATE '{since}'
+  AND sale_price IS NOT NULL AND sale_price > 0
+  AND list_price IS NOT NULL AND list_price > 0{exclusions}
+GROUP BY source, brand, product_code, raw_department, date
 """
 
 CTR_DAILY_SQL = """
@@ -217,6 +238,23 @@ def pull_daily(client):
         bk = DIRECT_BRAND_KEY.get(r['brand'], r['brand'].lower())
         r['cat'] = map_direct_cat(bk, r.get('raw_sport') or '')
         r.pop('raw_sport', None)
+    all_rows.extend(rows)
+    print(f"    {len(rows)} daily rows", flush=True)
+
+    # Netshoes scraper for all 6 brands. Unblocks the brand-level Total in the
+    # Price Pass-Through card (rule = "all 3 channels required" per week).
+    print("  Pulling netshoes (all 6 brands)...", flush=True)
+    sql = NS_DAILY_SQL.format(
+        table=NS_TABLE,
+        brands=repr(NS_BRANDS_FOR_FRANCHISE),
+        since=SINCE_DATE,
+        exclusions=exclusion_clause_netshoes(),
+    )
+    rows = bq_rows(client, sql)
+    # Map raw department → canonical cat (matches SPORT_CATS.netshoes used by JS filter).
+    for r in rows:
+        r['cat'] = map_ns_cat(r.get('raw_department') or '')
+        r.pop('raw_department', None)
     all_rows.extend(rows)
     print(f"    {len(rows)} daily rows", flush=True)
 
