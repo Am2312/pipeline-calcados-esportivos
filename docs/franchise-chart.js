@@ -630,19 +630,25 @@
     `;
   }
 
-  function render() { populateFromTo(); renderChart(); renderTable(); }
+  function render() {
+    // Remove any loading/error placeholder left by init()
+    const placeholder = document.getElementById('fr-placeholder');
+    if (placeholder) placeholder.remove();
+    // Clear cache so stale empty results don't persist across renders
+    _totalValidWeeksCache.clear();
+    populateFromTo(); renderChart(); renderTable();
+  }
   window._frRender = render;
 
-  function showError(msg) {
-    const el = $('fr-chart');
-    if (el) el.insertAdjacentHTML('afterend',
-      `<div style="color:#8F1028;background:#FFF0F2;border:1px solid #FFBDC7;border-radius:6px;padding:12px 16px;font-size:12px;font-family:Verdana;margin-top:8px;">
-        <strong>Price Pass-Through — erro ao carregar:</strong><br>${msg}</div>`);
-  }
   function init() {
     if (typeof RAW_FRANCHISE_A === 'undefined') {
-      showError('calcados-franchise-data.js não carregou (RAW_FRANCHISE_A indefinido). Verifique o console (F12) e recarregue a página.');
-      console.error('[franchise-chart] RAW_FRANCHISE_A is undefined — data file failed to load or has a syntax error.');
+      // Data file loading asynchronously — show placeholder; loader will call _frRender() on arrival
+      const el = $('fr-chart');
+      if (el && !document.getElementById('fr-placeholder')) {
+        el.insertAdjacentHTML('afterend',
+          '<div id="fr-placeholder" style="color:#667D99;font-size:12px;font-family:Verdana;padding:16px 0;">' +
+          'Carregando dados do Pass-Through…</div>');
+      }
       return;
     }
     try {
@@ -651,7 +657,10 @@
       updateViewControls();
       render();
     } catch(e) {
-      showError('Erro de JavaScript: ' + e.message + ' — ' + (e.stack || '').split('\n')[1]);
+      const el = $('fr-chart');
+      if (el) el.insertAdjacentHTML('afterend',
+        `<div style="color:#8F1028;background:#FFF0F2;border:1px solid #FFBDC7;border-radius:6px;padding:12px 16px;font-size:12px;font-family:Verdana;margin-top:8px;">
+          <strong>Price Pass-Through — erro:</strong><br>${e.message}</div>`);
       console.error('[franchise-chart] init error:', e);
     }
   }

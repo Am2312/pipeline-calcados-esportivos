@@ -10,7 +10,7 @@
     <script src="./calcados-disc-data.js"></script>
     <!-- Same-SKU pass-through deprecated 2026-05-22 night; kept in repo for revert.
          <script src="./calcados-passthrough-data.js"></script> -->
-    <script src="./calcados-franchise-data.js"></script>
+    <!-- calcados-franchise-data.js loaded async at bottom of body (too large for sync head) -->
     <script>
         tailwind.config = {
             theme: { extend: { colors: {
@@ -2153,6 +2153,25 @@ document.addEventListener('DOMContentLoaded', () => {
     populateAvgDiscFromTo('weekly');
     renderAll();
 });
+</script>
+
+<!-- Load franchise data async — avoids blocking the 3 other charts while 15MB downloads -->
+<script>
+(function() {
+    var s = document.createElement('script');
+    s.src = './calcados-franchise-data.js';
+    s.onload = function() {
+        // Data arrived after DOMContentLoaded — trigger franchise chart render
+        if (window._frRender) window._frRender();
+    };
+    s.onerror = function() {
+        var el = document.getElementById('fr-chart');
+        if (el) el.insertAdjacentHTML('afterend',
+            '<div style="color:#8F1028;background:#FFF0F2;border:1px solid #FFBDC7;border-radius:6px;padding:12px 16px;font-size:12px;font-family:Verdana;margin-top:8px;">' +
+            '<strong>Price Pass-Through — erro:</strong> calcados-franchise-data.js não carregou (erro de rede). Recarregue a página.</div>');
+    };
+    document.body.appendChild(s);
+})();
 </script>
 </body>
 </html>
