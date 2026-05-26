@@ -1557,6 +1557,8 @@ window._ecomInit = function() {
 
 // Expose inline event-handler functions for <select onchange="..."> in the template HTML
 window.renderAll                    = renderAll;
+window.onSeriesToggle               = onSeriesToggle;
+window.onDiscSeriesToggle           = onDiscSeriesToggle;
 window.onViewModeChange             = onViewModeChange;
 window.onCompChannelChange          = onCompChannelChange;
 window.onBreakdownBrandChange       = onBreakdownBrandChange;
