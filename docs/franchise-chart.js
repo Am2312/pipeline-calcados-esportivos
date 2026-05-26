@@ -692,9 +692,13 @@
     _totalValidWeeksCache.clear();
     populateFromTo(); renderChart(); renderTable();
   }
-  window._frRender = render;
+  // Guard: only render if elements are live in the DOM (not inside a <template>)
+  window._frRender = function() { if (document.getElementById('fr-chart')) render(); };
+  window._frInit   = init;
 
   function initRender() {
+    // Guard: if elements aren't in live DOM yet, bail — _frInit will be called by _ecomInit when ready
+    if (!document.getElementById('fr-channel-block')) return;
     try {
       const lbl = $('fr-series-trigger-label');
       if (lbl) lbl.textContent = `${Object.values(SERIES_ON).filter(Boolean).length} series selected`;
@@ -724,6 +728,7 @@
     let ticks = 0;
     const poll = setInterval(function() {
       ticks++;
+      if (!document.getElementById('fr-chart')) { clearInterval(poll); return; } // tab was destroyed
       if (typeof RAW_FRANCHISE_A !== 'undefined') {
         clearInterval(poll);
         initRender();
@@ -738,6 +743,10 @@
       }
     }, 1000);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  // Auto-init only when fr-chart canvas is in the live DOM (standalone ecom-data-wip.html).
+  // In the unified dashboard the canvas lives in a <template> until the tab activates —
+  // in that case _frInit() is called by _ecomInit() instead.
+  function maybeInit() { if (document.getElementById('fr-chart')) init(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeInit);
+  else maybeInit();
 })();
