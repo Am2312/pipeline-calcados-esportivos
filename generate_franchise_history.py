@@ -290,11 +290,10 @@ def date_to_iso_week_anchor(d):
     return d - datetime.timedelta(days=d.weekday())  # Mon = 0
 
 def date_to_sunday_anchor(d):
-    """Return Sunday-anchored week label (Sunday of d's Sun-Sat week)."""
-    # In our convention, week label = Sunday at the START of the Sun-Sat span.
-    # weekday(): Mon=0..Sun=6 → days since Sunday = (weekday+1)%7
-    days_since_sunday = (d.weekday() + 1) % 7
-    return d - datetime.timedelta(days=days_since_sunday)
+    """Return Sunday at END of ISO week (Mon-Sun), matching disc/price data files."""
+    # weekday(): Mon=0..Sun=6 → days until next Sunday = (6 - weekday) % 7
+    days_until_sunday = (6 - d.weekday()) % 7
+    return d + datetime.timedelta(days=days_until_sunday)
 
 
 # ── Step 3: aggregate to (brand, franchise, cat, date) cross-grandparent ──
@@ -458,7 +457,7 @@ def method_a_variations(fr_daily, fr_weekly):
 
     rows = []
     for (brand, franchise, channel, cat, w_sun), w_vals in fr_weekly.items():
-        span_days = [w_sun + datetime.timedelta(days=i) for i in range(7)]
+        span_days = [w_sun - datetime.timedelta(days=6-i) for i in range(7)]
         days_with_data = [d for d in span_days if d in daily_idx[(brand, franchise, channel, cat)]]
         if not days_with_data:
             continue
@@ -570,7 +569,7 @@ def method_b_variations(gen_daily, gen_first_seen):
 
     rows = []
     for (brand, franchise, channel, w_sun) in weekly_keys:
-        span_days = [w_sun + datetime.timedelta(days=i) for i in range(7)]
+        span_days = [w_sun - datetime.timedelta(days=6-i) for i in range(7)]
         days_with_data = [d for d in span_days if any(
             (brand, franchise, channel, g_) in gen_idx and d in gen_idx[(brand, franchise, channel, g_)]
             for g_ in {x[1] for x in by_fr.get((brand, franchise, channel), [])}
