@@ -1555,4 +1555,25 @@ window._ecomInit = function() {
     if (window._frInit) window._frInit();
 };
 
-})(); // end IIFE — isolates all top-level const/let from sports-retail-dashboard.html inline script
+// Expose inline event-handler functions for <select onchange="..."> in the template HTML
+window.renderAll                    = renderAll;
+window.onViewModeChange             = onViewModeChange;
+window.onCompChannelChange          = onCompChannelChange;
+window.onBreakdownBrandChange       = onBreakdownBrandChange;
+window.toggleSeriesPanel            = toggleSeriesPanel;
+window.onGranChange                 = onGranChange;
+window.onDiscViewModeChange         = onDiscViewModeChange;
+window.onDiscCompChannelChange      = onDiscCompChannelChange;
+window.onDiscBreakdownBrandChange   = onDiscBreakdownBrandChange;
+window.toggleDiscSeriesPanel        = toggleDiscSeriesPanel;
+window.onDiscGranChange             = onDiscGranChange;
+window.buildDiscAll                 = buildDiscAll;
+window.onAvgDiscViewModeChange      = onAvgDiscViewModeChange;
+window.onAvgDiscCompChannelChange   = onAvgDiscCompChannelChange;
+window.onAvgDiscBreakdownBrandChange= onAvgDiscBreakdownBrandChange;
+window.toggleAvgDiscSeriesPanel     = toggleAvgDiscSeriesPanel;
+window.onAvgDiscSeriesToggle        = onAvgDiscSeriesToggle;
+window.onAvgDiscGranChange          = onAvgDiscGranChange;
+window.buildAvgDiscAll              = buildAvgDiscAll;
+
+})(); // end IIFE
