@@ -255,7 +255,7 @@ const cagedMonthlyComparisonState = {
 };
 
 const costIndexState = {
-    variable: 'eva',
+    variable: 'blended',
     currency: 'usd',
     from: null,
     to: null,
@@ -264,7 +264,7 @@ const costIndexState = {
 
 const costIndexTableState = {
     grain: 'monthly',
-    variable: 'eva',
+    variable: 'blended',
     forecast: 'off',
     from: null,
     to: null,
@@ -3981,7 +3981,28 @@ const COST_INDEX_CONFIG = {
     eva: { label: 'EVA', description: '75% Ethylene CFR SE Asia + 25% Vinyl Acetate Huadong converted to USD', fields: { usd: 'eva_usd', brl: 'eva_brl' } },
     pvc: { label: 'PVC', description: 'PVC Houston FAS', fields: { usd: 'pvc_usd', brl: 'pvc_brl' } },
     rubber: { label: 'Rubber', description: '50% Butadiene Rotterdam + 50% Styrene FOB US Gulf', fields: { usd: 'rubber_usd', brl: 'rubber_brl' } },
+    blended: { label: 'Petrochemical Cost Index', description: 'Weighted basket — 57.1% EVA + 21.4% Rubber + 21.4% PVC (the 20.0% / 7.5% / 7.5% of total cost, renormalized to 100%). Each component rebased to 1.0 at 2014-05-23, the first week all three series are available, so the index reflects only relative variation.', fields: { usd: 'eva_usd', brl: 'eva_brl' } },
 };
+
+const COST_INDEX_BLEND_WEIGHTS = { eva: 0.20 / 0.35, rubber: 0.075 / 0.35, pvc: 0.075 / 0.35 };
+
+function costIndexBlendedSeries(currency) {
+    const f = { eva: `eva_${currency}`, pvc: `pvc_${currency}`, rubber: `rubber_${currency}` };
+    const data = (window.SPORTS_RETAIL_COST_INDEX_DATA || [])
+        .filter(row => [f.eva, f.pvc, f.rubber].every(k => row[k] !== null && row[k] !== undefined))
+        .sort((a, b) => a.week_date.localeCompare(b.week_date));
+    const map = new Map();
+    if (!data.length) return map;
+    const base = data[0];
+    const b = { eva: Number(base[f.eva]), pvc: Number(base[f.pvc]), rubber: Number(base[f.rubber]) };
+    data.forEach(row => {
+        map.set(row.week_date,
+            COST_INDEX_BLEND_WEIGHTS.eva * (Number(row[f.eva]) / b.eva) +
+            COST_INDEX_BLEND_WEIGHTS.rubber * (Number(row[f.rubber]) / b.rubber) +
+            COST_INDEX_BLEND_WEIGHTS.pvc * (Number(row[f.pvc]) / b.pvc));
+    });
+    return map;
+}
 
 function costIndexDateLabel(dateKey) {
     const d = new Date(`${dateKey}T00:00:00`);
@@ -3996,6 +4017,16 @@ function costIndexAxisDateLabel(dateKey) {
 }
 
 function costIndexRows() {
+    if (costIndexState.variable === 'blended') {
+        return Array.from(costIndexBlendedSeries(costIndexState.currency).entries())
+            .map(([date, value]) => ({
+                key: date,
+                label: costIndexDateLabel(date),
+                axisLabel: costIndexAxisDateLabel(date),
+                value,
+            }))
+            .sort((a, b) => a.key.localeCompare(b.key));
+    }
     const cfg = COST_INDEX_CONFIG[costIndexState.variable] || COST_INDEX_CONFIG.eva;
     const field = cfg.fields[costIndexState.currency] || cfg.fields.usd;
     return (window.SPORTS_RETAIL_COST_INDEX_DATA || [])
@@ -4147,23 +4178,43 @@ function costIndexTableParseEnd(key) {
 }
 
 function costIndexTableWeeklyRows() {
-    const cfg = COST_INDEX_CONFIG[costIndexTableState.variable] || COST_INDEX_CONFIG.eva;
-    const rows = (window.SPORTS_RETAIL_COST_INDEX_DATA || [])
-        .map(row => {
-            const d = new Date(`${row.week_date}T00:00:00`);
+    let rows;
+    if (costIndexTableState.variable === 'blended') {
+        const usdMap = costIndexBlendedSeries('usd');
+        const brlMap = costIndexBlendedSeries('brl');
+        const dates = Array.from(new Set([...usdMap.keys(), ...brlMap.keys()])).sort((a, b) => a.localeCompare(b));
+        rows = dates.map(date => {
+            const d = new Date(`${date}T00:00:00`);
             return {
-                key: row.week_date,
+                key: date,
                 year: d.getFullYear(),
                 month: d.getMonth() + 1,
                 quarter: quarterOf(d.getMonth() + 1),
-                label: costIndexDateLabel(row.week_date),
-                usd: row[cfg.fields.usd] === null || row[cfg.fields.usd] === undefined ? null : Number(row[cfg.fields.usd]),
-                brl: row[cfg.fields.brl] === null || row[cfg.fields.brl] === undefined ? null : Number(row[cfg.fields.brl]),
+                label: costIndexDateLabel(date),
+                usd: usdMap.has(date) ? usdMap.get(date) : null,
+                brl: brlMap.has(date) ? brlMap.get(date) : null,
                 forecast: false,
             };
-        })
-        .filter(row => Number.isFinite(row.usd) || Number.isFinite(row.brl))
-        .sort((a, b) => a.key.localeCompare(b.key));
+        }).filter(row => Number.isFinite(row.usd) || Number.isFinite(row.brl));
+    } else {
+        const cfg = COST_INDEX_CONFIG[costIndexTableState.variable] || COST_INDEX_CONFIG.eva;
+        rows = (window.SPORTS_RETAIL_COST_INDEX_DATA || [])
+            .map(row => {
+                const d = new Date(`${row.week_date}T00:00:00`);
+                return {
+                    key: row.week_date,
+                    year: d.getFullYear(),
+                    month: d.getMonth() + 1,
+                    quarter: quarterOf(d.getMonth() + 1),
+                    label: costIndexDateLabel(row.week_date),
+                    usd: row[cfg.fields.usd] === null || row[cfg.fields.usd] === undefined ? null : Number(row[cfg.fields.usd]),
+                    brl: row[cfg.fields.brl] === null || row[cfg.fields.brl] === undefined ? null : Number(row[cfg.fields.brl]),
+                    forecast: false,
+                };
+            })
+            .filter(row => Number.isFinite(row.usd) || Number.isFinite(row.brl))
+            .sort((a, b) => a.key.localeCompare(b.key));
+    }
     if (costIndexTableState.forecast !== 'on' || !rows.length) return rows;
     const last = rows[rows.length - 1];
     const projected = [];
@@ -4273,7 +4324,7 @@ function costIndexTableControlsHtml() {
     ensureCostIndexTableRange();
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${selectBlock('Grain', `<select id="cost-index-table-grain-select" class="df-input" onchange="setCostIndexTableGrain()" style="width:126px;"><option value="weekly" ${costIndexTableState.grain === 'weekly' ? 'selected' : ''}>Weekly</option><option value="monthly" ${costIndexTableState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${costIndexTableState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${costIndexTableState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
-        ${selectBlock('Variable', `<select id="cost-index-table-variable-select" class="df-input" onchange="setCostIndexTableVariable()" style="width:126px;"><option value="eva" ${costIndexTableState.variable === 'eva' ? 'selected' : ''}>EVA</option><option value="pvc" ${costIndexTableState.variable === 'pvc' ? 'selected' : ''}>PVC</option><option value="rubber" ${costIndexTableState.variable === 'rubber' ? 'selected' : ''}>Rubber</option></select>`)}
+        ${selectBlock('Variable', `<select id="cost-index-table-variable-select" class="df-input" onchange="setCostIndexTableVariable()" style="width:200px;"><option value="blended" ${costIndexTableState.variable === 'blended' ? 'selected' : ''}>Petrochemical Cost Index</option><option value="eva" ${costIndexTableState.variable === 'eva' ? 'selected' : ''}>EVA</option><option value="pvc" ${costIndexTableState.variable === 'pvc' ? 'selected' : ''}>PVC</option><option value="rubber" ${costIndexTableState.variable === 'rubber' ? 'selected' : ''}>Rubber</option></select>`)}
         ${selectBlock('Forecast', `<select id="cost-index-table-forecast-select" class="df-input" onchange="setCostIndexTableForecast()" style="width:116px;"><option value="off" ${costIndexTableState.forecast !== 'on' ? 'selected' : ''}>No</option><option value="on" ${costIndexTableState.forecast === 'on' ? 'selected' : ''}>Yes</option></select>`)}
         ${selectBlock('From', costIndexTableSelect('cost-index-table-from-select', costIndexTableState.from, 'setCostIndexTableRange()'))}
         ${selectBlock('To', costIndexTableSelect('cost-index-table-to-select', costIndexTableState.to, 'setCostIndexTableRange()'))}
@@ -4374,7 +4425,7 @@ function renderCostIndexCard() {
     const latest = rows[rows.length - 1];
     const controls = `
         <div class="imports-controls" style="display:flex;align-items:center;justify-content:flex-end;gap:24px;flex-wrap:wrap;margin-left:auto;">
-            ${selectBlock('Variable', `<select id="cost-variable-select" class="df-input" onchange="setCostIndexSeries()" style="width:126px;"><option value="eva" ${costIndexState.variable === 'eva' ? 'selected' : ''}>EVA</option><option value="pvc" ${costIndexState.variable === 'pvc' ? 'selected' : ''}>PVC</option><option value="rubber" ${costIndexState.variable === 'rubber' ? 'selected' : ''}>Rubber</option></select>`)}
+            ${selectBlock('Variable', `<select id="cost-variable-select" class="df-input" onchange="setCostIndexSeries()" style="width:200px;"><option value="blended" ${costIndexState.variable === 'blended' ? 'selected' : ''}>Petrochemical Cost Index</option><option value="eva" ${costIndexState.variable === 'eva' ? 'selected' : ''}>EVA</option><option value="pvc" ${costIndexState.variable === 'pvc' ? 'selected' : ''}>PVC</option><option value="rubber" ${costIndexState.variable === 'rubber' ? 'selected' : ''}>Rubber</option></select>`)}
             ${selectBlock('Currency', `<select id="cost-currency-select" class="df-input" onchange="setCostIndexSeries()" style="width:104px;"><option value="usd" ${costIndexState.currency === 'usd' ? 'selected' : ''}>USD</option><option value="brl" ${costIndexState.currency === 'brl' ? 'selected' : ''}>BRL</option></select>`)}
             ${selectBlock('From', costIndexSelect('cost-from-select', costIndexState.from, 'setCostIndexRange()', rows, 128))}
             ${selectBlock('To', costIndexSelect('cost-to-select', costIndexState.to, 'setCostIndexRange()', rows, 128))}
