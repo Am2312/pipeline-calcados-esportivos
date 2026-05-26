@@ -633,13 +633,27 @@
   function render() { populateFromTo(); renderChart(); renderTable(); }
   window._frRender = render;
 
+  function showError(msg) {
+    const el = $('fr-chart');
+    if (el) el.insertAdjacentHTML('afterend',
+      `<div style="color:#8F1028;background:#FFF0F2;border:1px solid #FFBDC7;border-radius:6px;padding:12px 16px;font-size:12px;font-family:Verdana;margin-top:8px;">
+        <strong>Price Pass-Through — erro ao carregar:</strong><br>${msg}</div>`);
+  }
   function init() {
-    if (typeof RAW_FRANCHISE_A === 'undefined') { console.warn('Franchise data not loaded yet.'); return; }
-    // Initial trigger label
-    const lbl = $('fr-series-trigger-label');
-    if (lbl) lbl.textContent = `${Object.values(SERIES_ON).filter(Boolean).length} series selected`;
-    updateViewControls();
-    render();
+    if (typeof RAW_FRANCHISE_A === 'undefined') {
+      showError('calcados-franchise-data.js não carregou (RAW_FRANCHISE_A indefinido). Verifique o console (F12) e recarregue a página.');
+      console.error('[franchise-chart] RAW_FRANCHISE_A is undefined — data file failed to load or has a syntax error.');
+      return;
+    }
+    try {
+      const lbl = $('fr-series-trigger-label');
+      if (lbl) lbl.textContent = `${Object.values(SERIES_ON).filter(Boolean).length} series selected`;
+      updateViewControls();
+      render();
+    } catch(e) {
+      showError('Erro de JavaScript: ' + e.message + ' — ' + (e.stack || '').split('\n')[1]);
+      console.error('[franchise-chart] init error:', e);
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
