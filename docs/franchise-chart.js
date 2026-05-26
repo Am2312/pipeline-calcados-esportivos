@@ -238,15 +238,25 @@
         color: FRANCHISE_PALETTE[i % FRANCHISE_PALETTE.length],
         dash: [],
       }));
+      // Others = franchises not in top N
+      const othersSerie = {
+        key: br + '|' + chanKey + '|__others__',
+        label: 'Others',
+        brand: br, channel: chanKey,
+        franchise: '__others__',
+        excludeFranchises: new Set(tops),
+        color: '#9AA8BB',
+        dash: [4, 3],
+      };
       // Brand×channel Total — no franchise filter, distinct dashed style
       const totalSerie = {
         key: br + '|' + chanKey + '|__total__',
         label: 'Total',
-        brand: br, channel: chanKey,  // no franchise → aggregates across all
+        brand: br, channel: chanKey,
         color: '#344F75',
         dash: [10, 5],
       };
-      return franchiseSeries.concat(totalSerie);
+      return franchiseSeries.concat(othersSerie, totalSerie);
     }
   }
 
@@ -305,7 +315,9 @@
     return data.filter(r =>
       r.brand === serie.brand
       && (serie.channel === '*' ? true : r.channel === serie.channel)
-      && (serie.franchise ? r.franchise === serie.franchise : true)
+      && (serie.franchise === '__others__'
+          ? (serie.excludeFranchises ? !serie.excludeFranchises.has(r.franchise) : true)
+          : (serie.franchise ? r.franchise === serie.franchise : true))
       && passesSport(r, scope)
       && (validWeeks ? validWeeks.has(r.w) : true)
     );
@@ -562,6 +574,9 @@
       return out;
     }
     // Non-Total: SKU-weighted mean across rows of the series at latestW.
+    let _totalN = 0;
+    for (const r of rowsAtW) { _totalN += r.n || 0; }
+    out._n = _totalN;
     for (const f of fields) {
       let sum = 0, n = 0;
       for (const r of rowsAtW) {
@@ -591,21 +606,60 @@
     const anchorW = rowsArr.reduce((max, x) => x.ref.w > max ? x.ref.w : max, '');
     const anchorLabel = fmtGranLabel(anchorW, getGran());
 
-    const cell = (v) => `<td style="padding:10px 8px;border-bottom:1px solid #EBEBEB;text-align:center;">${heatBadge(v)}</td>`;
+    // Total SKU count = sum across franchise + Others rows (not Total row, not cross-channel)
+    // Only meaningful in Model Breakdown view where each row is a single named franchise or Others.
+    const hasNamedFranchises = rowsArr.some(({ s }) =>
+      s.franchise && s.franchise !== '__others__' && s.franchise !== '__total__');
+    const totalSkus = hasNamedFranchises
+      ? rowsArr.reduce((acc, { s, ref }) => {
+          // Include named franchises + Others; exclude Total (which already covers all of them)
+          if (s.channel !== '*' && !s.key.endsWith('|__total__')) acc += ref._n || 0;
+          return acc;
+        }, 0)
+      : 0;
+    const showPct = totalSkus > 0;
+
+    const borderBottom = '1px solid #EBEBEB';
+    const cell = (v, sep) => `<td style="padding:10px 8px;border-bottom:${sep || borderBottom};text-align:center;">${heatBadge(v)}</td>`;
 
     const rowsHtml = rowsArr.map(({ s, ref }) => {
-      const priceVal = ref[priceField(price)];
+      const isTotal   = s.key.endsWith('|__total__');
+      const isOthers  = s.key.endsWith('|__others__');
+      const priceVal  = ref[priceField(price)];
       const v1w  = ref[varField(price, '1w')];
       const v1m  = ref[varField(price, '1m')];
       const v3m  = ref[varField(price, '3m')];
       const v1y  = ref[varField(price, '1y')];
       const vytd = ref[varField(price, 'ytd')];
-      return `<tr>
-        <td style="padding:14px 16px;border-bottom:1px solid #EBEBEB;font-weight:700;color:#021C45;font-family:Verdana,Geneva,sans-serif;font-size:13px;">
-          <span style="display:inline-block;width:10px;height:10px;background:${s.color};margin-right:10px;vertical-align:middle;"></span>${s.label}
+
+      // SKU share label (only for named franchises and Others, not Total)
+      let skuPctHtml = '';
+      if (showPct && !isTotal) {
+        const n = ref._n || 0;
+        const pct = totalSkus > 0 ? Math.round(n / totalSkus * 100) : 0;
+        skuPctHtml = `<span style="font-weight:400;color:#9AA8BB;font-size:11px;margin-left:6px;">(${pct}% of total)</span>`;
+      }
+
+      // Visual separator row before Total
+      const sep = isTotal ? '2px solid #CCD4DD' : borderBottom;
+      const rowBg = isTotal ? 'background:#F7F8FA;' : (isOthers ? 'background:#FAFBFC;' : '');
+      const nameStyle = isTotal
+        ? 'font-weight:700;color:#344F75;font-size:13px;'
+        : isOthers
+          ? 'font-weight:600;color:#667D99;font-style:italic;font-size:12px;'
+          : 'font-weight:700;color:#021C45;font-size:13px;';
+      const dot = isTotal
+        ? `<span style="display:inline-block;width:18px;height:0;border-top:2px dashed #344F75;margin-right:8px;vertical-align:middle;"></span>`
+        : isOthers
+          ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9AA8BB;margin-right:10px;vertical-align:middle;"></span>`
+          : `<span style="display:inline-block;width:10px;height:10px;background:${s.color};margin-right:10px;vertical-align:middle;"></span>`;
+
+      return `<tr style="${rowBg}">
+        <td style="padding:${isTotal ? 12 : 14}px 16px;border-bottom:${sep};font-family:Verdana,Geneva,sans-serif;${nameStyle}">
+          ${dot}${s.label}${skuPctHtml}
         </td>
-        <td style="padding:14px 8px;border-bottom:1px solid #EBEBEB;text-align:right;color:#021C45;font-weight:700;font-family:Verdana,Geneva,sans-serif;font-size:13px;">${priceVal != null ? 'R$ ' + Math.round(priceVal) : '—'}</td>
-        ${cell(v1w)} ${cell(v1m)} ${cell(v3m)} ${cell(v1y)} ${cell(vytd)}
+        <td style="padding:${isTotal ? 12 : 14}px 8px;border-bottom:${sep};text-align:right;font-family:Verdana,Geneva,sans-serif;${nameStyle}">${priceVal != null ? 'R$ ' + Math.round(priceVal) : '—'}</td>
+        ${cell(v1w, sep)} ${cell(v1m, sep)} ${cell(v3m, sep)} ${cell(v1y, sep)} ${cell(vytd, sep)}
       </tr>`;
     }).join('');
 
@@ -615,7 +669,7 @@
         <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:Verdana,Geneva,sans-serif;">
           <thead>
             <tr style="background:#021C45;color:#FFFFFF;">
-              <th style="padding:12px 16px;text-align:left;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;width:32%;">${anchorLabel}</th>
+              <th style="padding:12px 16px;text-align:left;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;width:34%;">${anchorLabel}</th>
               <th style="padding:12px 8px;text-align:right;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;">${PRICE_LBL} price</th>
               <th style="padding:12px 16px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:#FF4F6C;">Δ WoW</th>
               <th style="padding:12px 16px;text-align:center;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;background:#FF4F6C;">Δ MoM</th>
