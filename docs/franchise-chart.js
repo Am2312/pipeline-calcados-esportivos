@@ -640,17 +640,7 @@
   }
   window._frRender = render;
 
-  function init() {
-    if (typeof RAW_FRANCHISE_A === 'undefined') {
-      // Data file loading asynchronously — show placeholder; loader will call _frRender() on arrival
-      const el = $('fr-chart');
-      if (el && !document.getElementById('fr-placeholder')) {
-        el.insertAdjacentHTML('afterend',
-          '<div id="fr-placeholder" style="color:#667D99;font-size:12px;font-family:Verdana;padding:16px 0;">' +
-          'Carregando dados do Pass-Through…</div>');
-      }
-      return;
-    }
+  function initRender() {
     try {
       const lbl = $('fr-series-trigger-label');
       if (lbl) lbl.textContent = `${Object.values(SERIES_ON).filter(Boolean).length} series selected`;
@@ -661,8 +651,38 @@
       if (el) el.insertAdjacentHTML('afterend',
         `<div style="color:#8F1028;background:#FFF0F2;border:1px solid #FFBDC7;border-radius:6px;padding:12px 16px;font-size:12px;font-family:Verdana;margin-top:8px;">
           <strong>Price Pass-Through — erro:</strong><br>${e.message}</div>`);
-      console.error('[franchise-chart] init error:', e);
+      console.error('[franchise-chart] render error:', e);
     }
+  }
+
+  function init() {
+    if (typeof RAW_FRANCHISE_A !== 'undefined') {
+      initRender();
+      return;
+    }
+    // Data still loading — show status and poll until available
+    const el = $('fr-chart');
+    if (el && !document.getElementById('fr-placeholder')) {
+      el.insertAdjacentHTML('afterend',
+        '<div id="fr-placeholder" style="color:#667D99;font-size:12px;font-family:Verdana;padding:16px 0;">' +
+        'Carregando dados do Pass-Through (15 MB)…</div>');
+    }
+    let ticks = 0;
+    const poll = setInterval(function() {
+      ticks++;
+      if (typeof RAW_FRANCHISE_A !== 'undefined') {
+        clearInterval(poll);
+        initRender();
+      } else if (ticks >= 60) {
+        clearInterval(poll);
+        const ph = document.getElementById('fr-placeholder');
+        if (ph) {
+          ph.style.color = '#8F1028';
+          ph.innerHTML = '<strong>Price Pass-Through:</strong> calcados-franchise-data.js não carregou após 60s.' +
+            ' Verifique a aba Network e recarregue (Ctrl+Shift+R).';
+        }
+      }
+    }, 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
