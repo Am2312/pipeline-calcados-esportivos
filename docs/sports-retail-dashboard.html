@@ -1440,17 +1440,70 @@ function setVulcabrasShareRange() {
 
 function vulcabrasShareAxis(values) {
     const valid = values.filter(Number.isFinite);
-    if (!valid.length) return { min: 0, max: 0.25, step: 0.05 };
+    if (!valid.length) return { min: 0, max: 30 };
     const min = Math.min(...valid);
     const max = Math.max(...valid);
-    const range = Math.max(max - min, 0.04);
-    const pad = Math.max(range * 0.55, 0.04);
-    const step = range <= 0.08 ? 0.02 : 0.05;
+    const range = Math.max(max - min, 1.5);
+    const pad = Math.max(range * 0.16, 0.6);
     return {
-        min: Math.max(0, Math.floor((min - pad) / step) * step),
-        max: Math.ceil((max + pad) / step) * step,
-        step,
+        min: Math.max(0, Math.floor((min - pad) * 2) / 2),
+        max: Math.ceil((max + pad) * 2) / 2,
     };
+}
+
+function placeVulcabrasShareLabels(pills, chartArea, canvasWidth) {
+    const pad = 2;
+    const gap = 4;
+    const rightBound = canvasWidth != null ? canvasWidth : chartArea.right;
+    const clampY = (pill, y) => Math.max(chartArea.top + pad, Math.min(y, chartArea.bottom - pill.h - pad));
+    const clampX = pill => {
+        const center = pill.anchorX || pill.x + pill.w / 2;
+        return Math.max(0, Math.min(center - pill.w / 2, rightBound - pill.w - pad));
+    };
+    const groups = [];
+    pills.forEach(pill => {
+        const center = pill.anchorX || pill.x + pill.w / 2;
+        let group = groups.find(candidate => Math.abs(candidate.center - center) < 8);
+        if (!group) {
+            group = { center, items: [] };
+            groups.push(group);
+        }
+        group.items.push({ ...pill, x: clampX(pill) });
+    });
+    return groups.flatMap(group => {
+        const items = group.items
+            .slice()
+            .sort((a, b) => {
+                const valueDiff = Number(b.value) - Number(a.value);
+                return Math.abs(valueDiff) > 0.0001 ? valueDiff : a.pointY - b.pointY;
+            })
+            .map(pill => ({ ...pill, y: clampY(pill, pill.y) }));
+        items.forEach((pill, index) => {
+            if (index === 0) return;
+            const previous = items[index - 1];
+            pill.y = Math.max(pill.y, previous.y + previous.h + gap);
+        });
+        const overflow = items.length ? items[items.length - 1].y + items[items.length - 1].h - (chartArea.bottom - pad) : 0;
+        if (overflow > 0) items.forEach(pill => { pill.y -= overflow; });
+        const underflow = items.length ? chartArea.top + pad - items[0].y : 0;
+        if (underflow > 0) items.forEach(pill => { pill.y += underflow; });
+        items.forEach((pill, index) => {
+            if (index === 0) return;
+            const previous = items[index - 1];
+            pill.y = Math.max(pill.y, previous.y + previous.h + gap);
+        });
+        return items;
+    });
+}
+
+function updateVulcabrasShareAxis(chart) {
+    if (!chart) return;
+    const visibleValues = chart.data.datasets
+        .flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex) ? dataset.data : [])
+        .filter(Number.isFinite);
+    const axis = vulcabrasShareAxis(visibleValues);
+    chart.options.scales.y.min = axis.min;
+    chart.options.scales.y.max = axis.max;
 }
 
 function renderVulcabrasShareChart() {
@@ -1459,67 +1512,67 @@ function renderVulcabrasShareChart() {
     if (!el) return;
     const rows = selectedVulcabrasMarketShareRows();
     const labels = rows.map(row => row.label);
-    const totalShares = rows.map(row => row.totalShare);
-    const namedShares = rows.map(row => row.namedShare);
+    const totalShares = rows.map(row => Number.isFinite(row.totalShare) ? row.totalShare * 100 : null);
+    const namedShares = rows.map(row => Number.isFinite(row.namedShare) ? row.namedShare * 100 : null);
     const axis = vulcabrasShareAxis([...totalShares, ...namedShares]);
     const labelPlugin = {
         id: 'vulcabrasShareLabels',
-        afterDraw(chart) {
-            const { ctx, chartArea } = chart;
-            ctx.save();
-            ctx.strokeStyle = '#C9D3DF';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(Math.max(0, chartArea.left - 42), chartArea.bottom);
-            ctx.lineTo(Math.min(chart.width, chartArea.right + 42), chartArea.bottom);
-            ctx.stroke();
-            ctx.restore();
-        },
         afterDatasetsDraw(chart) {
             const ctx = chart.ctx;
-            const badgesByIndex = new Map();
-            ctx.save();
-            ctx.font = '800 11px Verdana';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+            const { chartArea } = chart;
+            const pills = [];
             chart.data.datasets.forEach((dataset, datasetIndex) => {
                 if (!chart.isDatasetVisible(datasetIndex)) return;
                 const meta = chart.getDatasetMeta(datasetIndex);
                 (meta.data || []).forEach((point, i) => {
                     const value = dataset.data[i];
                     if (!point || !Number.isFinite(value)) return;
-                    const text = fmtPctEN(value, 0);
+                    ctx.save();
+                    ctx.font = '700 11px Verdana';
+                    const text = fmtPctEN(value / 100, 0);
                     const width = ctx.measureText(text).width + 14;
                     const height = 22;
-                    if (!badgesByIndex.has(i)) badgesByIndex.set(i, []);
-                    badgesByIndex.get(i).push({
+                    ctx.restore();
+                    pills.push({
                         text,
                         color: dataset.borderColor,
                         x: point.x - width / 2,
-                        desiredY: point.y - height / 2,
-                        width,
-                        height,
+                        y: point.y - height / 2,
+                        w: width,
+                        h: height,
+                        pointY: point.y,
+                        anchorX: point.x,
+                        value,
                     });
                 });
             });
-            badgesByIndex.forEach(badges => {
-                badges.sort((a, b) => a.desiredY - b.desiredY);
-                const gap = 4;
-                badges.forEach((badge, index) => {
-                    const minY = index ? badges[index - 1].y + badges[index - 1].height + gap : chart.chartArea.top + 2;
-                    badge.y = Math.max(minY, Math.min(badge.desiredY, chart.chartArea.bottom - badge.height - 2));
-                });
-                const overflow = badges.length ? badges[badges.length - 1].y + badges[badges.length - 1].height - (chart.chartArea.bottom - 2) : 0;
-                if (overflow > 0) badges.forEach(badge => { badge.y = Math.max(chart.chartArea.top + 2, badge.y - overflow); });
-                badges.forEach(badge => {
-                    badge.x = Math.max(2, Math.min(badge.x, chart.width - badge.width - 2));
-                    ctx.fillStyle = badge.color;
-                    roundedRect(ctx, badge.x, badge.y, badge.width, badge.height, 4);
-                    ctx.fill();
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillText(badge.text, badge.x + badge.width / 2, badge.y + badge.height / 2 + 0.5);
-                });
+            placeVulcabrasShareLabels(pills, chartArea, chart.width).forEach(pill => {
+                ctx.save();
+                ctx.fillStyle = pill.color;
+                roundedRect(ctx, pill.x, pill.y, pill.w, pill.h, 4);
+                ctx.fill();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '700 11px Verdana';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(pill.text, pill.x + pill.w / 2, pill.y + pill.h / 2 + 0.5);
+                ctx.restore();
             });
+        }
+    };
+    const axisLinePlugin = {
+        id: 'vulcabrasShareAxisLine',
+        afterDraw(chart) {
+            const { ctx, scales } = chart;
+            const xScale = scales.x;
+            if (!xScale) return;
+            ctx.save();
+            ctx.strokeStyle = C.azulEscuro20;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(8, xScale.top);
+            ctx.lineTo(chart.width - 8, xScale.top);
+            ctx.stroke();
             ctx.restore();
         }
     };
@@ -1532,7 +1585,9 @@ function renderVulcabrasShareChart() {
                 borderColor: C.azulEscuro,
                 backgroundColor: C.azulEscuro,
                 borderWidth: 2.5,
-                pointRadius: 0,
+                pointRadius: 3,
+                pointBackgroundColor: C.azulEscuro,
+                pointBorderColor: C.azulEscuro,
                 pointHoverRadius: 5,
                 pointHitRadius: 18,
                 tension: 0.25,
@@ -1544,14 +1599,16 @@ function renderVulcabrasShareChart() {
                 borderColor: C.turquesa,
                 backgroundColor: C.turquesa,
                 borderWidth: 2.5,
-                pointRadius: 0,
+                pointRadius: 3,
+                pointBackgroundColor: C.turquesa,
+                pointBorderColor: C.turquesa,
                 pointHoverRadius: 5,
                 pointHitRadius: 18,
                 tension: 0.25,
                 spanGaps: false,
             }
         ] },
-        plugins: [labelPlugin],
+        plugins: [labelPlugin, axisLinePlugin],
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -1577,7 +1634,7 @@ function renderVulcabrasShareChart() {
                 }
             },
             scales: {
-                x: { offset: true, ticks: { color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { color: C.azulEscuro20 } },
+                x: { ticks: { autoSkip: false, color: C.azulEscuro40, font: { size: 10.5, family: 'Verdana' }, callback: function(value) { return this.getLabelForValue(value); } }, grid: { display: false }, border: { display: false } },
                 y: { min: axis.min, max: axis.max, ticks: { display: false }, grid: { display: false }, border: { display: false } }
             }
         }
@@ -1593,6 +1650,7 @@ function bindVulcabrasShareLegend(chart) {
         const toggle = () => {
             const index = Number(item.dataset.datasetIndex);
             chart.setDatasetVisibility(index, !chart.isDatasetVisible(index));
+            updateVulcabrasShareAxis(chart);
             chart.update();
             sync();
         };
@@ -1618,7 +1676,7 @@ function renderVulcabrasShareCard() {
             { label: 'Total Market Share', color: C.azulEscuro, datasetIndex: 0 },
             { label: 'Vulcabras - Named Players', color: C.turquesa, datasetIndex: 1 }
         ])}
-        <div style="position:relative;height:544px;margin-top:4px;overflow:hidden;"><canvas id="vulcabras-share-chart"></canvas></div>`;
+        <div style="position:relative;height:560px;margin-top:10px;"><canvas id="vulcabras-share-chart"></canvas></div>`;
     if (!existing) content.appendChild(card);
     renderVulcabrasShareChart();
     bindVulcabrasShareLegend(vulcabrasShareChartInstance);
