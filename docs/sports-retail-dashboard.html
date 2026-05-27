@@ -2115,6 +2115,18 @@ function buildFootwearDecompChart(canvas, series) {
     ];
     const labelPlugin = {
         id: 'decompLabels',
+        beforeDatasetsDraw(chart) {
+            const { ctx, chartArea, scales: { y: yScale } } = chart;
+            const y0 = yScale.getPixelForValue(0);
+            ctx.save();
+            ctx.strokeStyle = '#C2CCD6';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y0);
+            ctx.lineTo(chartArea.right, y0);
+            ctx.stroke();
+            ctx.restore();
+        },
         afterDatasetsDraw(chart) {
             const { ctx, scales: { y: yScale } } = chart;
             const meta0 = chart.getDatasetMeta(0);
@@ -2184,20 +2196,16 @@ function footwearDecompCardInner() {
     const header = `
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;width:100%;margin-bottom:10px;">
             <div>
-                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Footwear Value Growth - Price x Volume</h3>
-                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(YoY %, value growth split into price and volume)</p>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Footwear Growth Breakdown</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Percentage)</p>
             </div>
             <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
                 ${selectBlock('From', `<select class="df-input" id="decomp-from" style="width:96px;">${yearOpts(FOOTWEAR_DECOMP_STATE.from)}</select>`)}
                 ${selectBlock('To', `<select class="df-input" id="decomp-to" style="width:96px;">${yearOpts(FOOTWEAR_DECOMP_STATE.to)}</select>`)}
-                <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:80px;margin-left:6px;">
-                    <div style="font-size:10px;color:${C.azulEscuro40};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">Latest print</div>
-                    <div style="font-size:15px;font-weight:700;color:${C.turquesa};letter-spacing:0.03em;">${latest}</div>
-                </div>
             </div>
         </div>`;
     const legend = legendHtml([{ label: 'Price', color: C.azulEscuro }, { label: 'Volume', color: C.turquesa }]);
-    return `${header}${legend}<div style="position:relative;height:480px;"><canvas id="footwear-decomp-chart"></canvas></div>`;
+    return `${header}${legend}<div style="position:relative;height:640px;"><canvas id="footwear-decomp-chart"></canvas></div>`;
 }
 
 function bindFootwearDecompLegend(chart) {
