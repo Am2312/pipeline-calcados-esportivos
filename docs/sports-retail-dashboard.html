@@ -2267,7 +2267,7 @@ function renderSportswearTamCards() {
 
 // ===== Market Share tab (Euromonitor Brand Shares) =====
 const MS_VULCABRAS = ['Olympikus', 'Mizuno', 'Under Armour'];
-const MS_PALETTE = ['#021C45', '#18A6F1', '#58D9D1', '#5A0F4A', '#7D1327', '#0D7E6A', '#667D99', '#345C8C', '#9AA8BB'];
+const MS_PALETTE = ['#021C45', '#18A6F1', '#58D9D1', '#5A0F4A', '#7D1327', '#0D7E6A', '#667D99', '#CCD4DD', '#345C8C'];
 const MS_OTHERS_COLOR = '#D42AB6';
 const MS_STATE = { category: 'total', from: 2016, to: 2025, vulcabras: 'separate' };
 let marketShareChart = null;
@@ -2368,7 +2368,7 @@ function marketShareCardInner() {
             ${selectBlock('To', `<select class="df-input" id="ms-to" style="width:90px;">${yearOpts(MS_STATE.to)}</select>`)}
         </div></div>`;
     const legend = model ? legendHtml(model.series.map(s => ({ label: s.label, color: s.color }))) : '';
-    return `${header}${legend}<div style="position:relative;height:620px;"><canvas id="market-share-chart"></canvas></div>`;
+    return `${header}${legend}<div style="position:relative;height:470px;"><canvas id="market-share-chart"></canvas></div>`;
 }
 
 function bindMarketShareLegend(chart) {
