@@ -1391,7 +1391,7 @@ function selectedVulcabrasMarketShareRows() {
     const brands = d.brands?.footwear || {};
     const namedDenominator = msDenominatorSeries('footwear', 'named');
     return years
-        .filter(year => year >= MS_STATE.from && year <= MS_STATE.to)
+        .filter(year => year >= VULCABRAS_SHARE_STATE.from && year <= VULCABRAS_SHARE_STATE.to)
         .map(year => {
             const index = years.indexOf(year);
             const namedTotal = Number(namedDenominator[index] || 0);
@@ -1410,6 +1410,32 @@ function selectedVulcabrasMarketShareRows() {
             };
         })
         .filter(row => Number.isFinite(row.totalShare) || Number.isFinite(row.namedShare));
+}
+
+function vulcabrasShareControlsHtml() {
+    const years = msData().years || [];
+    const yearOpts = selected => years.map(year => `<option value="${year}" ${Number(year) === Number(selected) ? 'selected' : ''}>${year}</option>`).join('');
+    return `<div class="imports-controls" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-left:auto;">
+        ${selectBlock('Frequency', `<select id="vulcabras-share-frequency-select" class="df-input" onchange="setVulcabrasShareFrequency()" style="width:140px;"><option value="annual" selected>Annual</option></select>`)}
+        ${selectBlock('From', `<select id="vulcabras-share-from-select" class="df-input" onchange="setVulcabrasShareRange()" style="width:116px;">${yearOpts(VULCABRAS_SHARE_STATE.from)}</select>`)}
+        ${selectBlock('To', `<select id="vulcabras-share-to-select" class="df-input" onchange="setVulcabrasShareRange()" style="width:116px;">${yearOpts(VULCABRAS_SHARE_STATE.to)}</select>`)}
+    </div>`;
+}
+
+function setVulcabrasShareFrequency() {
+    renderVulcabrasShareCard();
+}
+
+function setVulcabrasShareRange() {
+    const years = msData().years || [];
+    const from = document.getElementById('vulcabras-share-from-select');
+    const to = document.getElementById('vulcabras-share-to-select');
+    if (from) VULCABRAS_SHARE_STATE.from = Number(from.value);
+    if (to) VULCABRAS_SHARE_STATE.to = Number(to.value);
+    if (years.indexOf(VULCABRAS_SHARE_STATE.from) > years.indexOf(VULCABRAS_SHARE_STATE.to)) {
+        [VULCABRAS_SHARE_STATE.from, VULCABRAS_SHARE_STATE.to] = [VULCABRAS_SHARE_STATE.to, VULCABRAS_SHARE_STATE.from];
+    }
+    renderVulcabrasShareCard();
 }
 
 function vulcabrasShareAxis(values) {
@@ -1462,7 +1488,7 @@ function renderVulcabrasShareChart() {
                 (meta.data || []).forEach((point, i) => {
                     const value = dataset.data[i];
                     if (!point || !Number.isFinite(value)) return;
-                    const text = fmtPctEN(value, 1);
+                    const text = fmtPctEN(value, 0);
                     const width = ctx.measureText(text).width + 14;
                     const height = 22;
                     if (!badgesByIndex.has(i)) badgesByIndex.set(i, []);
@@ -1530,7 +1556,7 @@ function renderVulcabrasShareChart() {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 74, right: 74, top: 0, bottom: 0 } },
+            layout: { padding: { left: 52, right: 52, top: 18, bottom: 0 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -1551,7 +1577,7 @@ function renderVulcabrasShareChart() {
                 }
             },
             scales: {
-                x: { offset: true, ticks: { color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: false } },
+                x: { offset: true, ticks: { color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { color: C.azulEscuro20 } },
                 y: { min: axis.min, max: axis.max, ticks: { display: false }, grid: { display: false }, border: { display: false } }
             }
         }
@@ -1587,12 +1613,12 @@ function renderVulcabrasShareCard() {
     card.id = 'vulcabras-share-card';
     card.style.cssText = cardStyle('margin-bottom:24px;');
     card.innerHTML = `
-        ${sectionTitle('Vulcabras Market Share', '(Percentage)', '')}
-        <div style="margin-top:18px;">${legendHtml([
+        ${sectionTitle('Vulcabras Market Share', '(Percentage)', vulcabrasShareControlsHtml())}
+        ${legendHtml([
             { label: 'Total Market Share', color: C.azulEscuro, datasetIndex: 0 },
             { label: 'Vulcabras - Named Players', color: C.turquesa, datasetIndex: 1 }
-        ])}</div>
-        <div style="position:relative;height:420px;margin-top:-32px;"><canvas id="vulcabras-share-chart"></canvas></div>`;
+        ])}
+        <div style="position:relative;height:544px;margin-top:4px;overflow:hidden;"><canvas id="vulcabras-share-chart"></canvas></div>`;
     if (!existing) content.appendChild(card);
     renderVulcabrasShareChart();
     bindVulcabrasShareLegend(vulcabrasShareChartInstance);
@@ -2391,6 +2417,7 @@ const MS_PALETTE = ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2
 const MS_OTHERS_COLOR = '#D02BB8';
 const MS_TOP_SERIES = 6;
 const MS_STATE = { category: 'footwear', from: 2016, to: 2025, vulcabras: 'separate', shareBasis: 'named' };
+const VULCABRAS_SHARE_STATE = { frequency: 'annual', from: 2016, to: 2025 };
 const MS_BRAND_GMV_CHART_STATE = { brand: 'Vulcabras', from: 2016, to: 2025 };
 const MS_BRAND_GMV_TABLE_STATE = { brand: 'Vulcabras', from: 2016, to: 2025 };
 let marketShareChart = null;
