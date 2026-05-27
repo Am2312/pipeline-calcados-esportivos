@@ -1912,7 +1912,7 @@ function tamChartCardInner() {
         { label: 'Footwear', color: C.turquesa },
         { label: 'YoY', color: C.cereja }
     ]);
-    return `${header}<div style="position:relative;height:560px;overflow:hidden;">${legend}<canvas id="tam-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas></div>`;
+    return `${header}${legend}<div style="position:relative;height:560px;"><canvas id="tam-chart"></canvas></div>`;
 }
 
 function bindTamLegend(chart) {
@@ -2197,7 +2197,7 @@ function footwearDecompCardInner() {
             </div>
         </div>`;
     const legend = legendHtml([{ label: 'Price', color: C.azulEscuro }, { label: 'Volume', color: C.turquesa }]);
-    return `${header}<div style="position:relative;height:480px;overflow:hidden;">${legend}<canvas id="footwear-decomp-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas></div>`;
+    return `${header}${legend}<div style="position:relative;height:480px;"><canvas id="footwear-decomp-chart"></canvas></div>`;
 }
 
 function bindFootwearDecompLegend(chart) {
