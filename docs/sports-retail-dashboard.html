@@ -1580,7 +1580,7 @@ function renderVulcabrasShareChart() {
         type: 'line',
         data: { labels, datasets: [
             {
-                label: 'Total Market Share',
+                label: 'Volume Market Share',
                 data: totalShares,
                 borderColor: C.azulEscuro,
                 backgroundColor: C.azulEscuro,
@@ -1594,7 +1594,7 @@ function renderVulcabrasShareChart() {
                 spanGaps: false,
             },
             {
-                label: 'Vulcabras - Named Players',
+                label: 'Total Market Share',
                 data: namedShares,
                 borderColor: C.turquesa,
                 backgroundColor: C.turquesa,
@@ -1627,8 +1627,8 @@ function renderVulcabrasShareChart() {
                     callbacks: {
                         label: c => {
                             const row = rows[c.dataIndex];
-                            if (c.datasetIndex === 1) return `  Vulcabras - Named Players: ${fmtPctEN(row.namedShare, 1)}`;
-                            return `  Total Market Share: ${fmtPctEN(row.totalShare, 1)}${Number.isFinite(row.vulcabrasVolumeMn) ? ` | Vulcabras: ${fmtNumberEN(row.vulcabrasVolumeMn, 1)}mn / Abicalcados: ${fmtNumberEN(row.abicalVolumeMn, 1)}mn` : ''}`;
+                            if (c.datasetIndex === 1) return `  Total Market Share: ${fmtPctEN(row.namedShare, 1)}`;
+                            return `  Volume Market Share: ${fmtPctEN(row.totalShare, 1)}${Number.isFinite(row.vulcabrasVolumeMn) ? ` | Vulcabras: ${fmtNumberEN(row.vulcabrasVolumeMn, 1)}mn / Abicalcados: ${fmtNumberEN(row.abicalVolumeMn, 1)}mn` : ''}`;
                         }
                     }
                 }
@@ -1673,8 +1673,8 @@ function renderVulcabrasShareCard() {
     card.innerHTML = `
         ${sectionTitle('Vulcabras Market Share', '(Percentage)', vulcabrasShareControlsHtml())}
         ${legendHtml([
-            { label: 'Total Market Share', color: C.azulEscuro, datasetIndex: 0 },
-            { label: 'Vulcabras - Named Players', color: C.turquesa, datasetIndex: 1 }
+            { label: 'Volume Market Share', color: C.azulEscuro, datasetIndex: 0 },
+            { label: 'Total Market Share', color: C.turquesa, datasetIndex: 1 }
         ])}
         <div style="position:relative;height:560px;margin-top:10px;"><canvas id="vulcabras-share-chart"></canvas></div>`;
     if (!existing) content.appendChild(card);
