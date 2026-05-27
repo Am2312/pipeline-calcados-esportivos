@@ -1418,7 +1418,7 @@ function vulcabrasShareAxis(values) {
     const min = Math.min(...valid);
     const max = Math.max(...valid);
     const range = Math.max(max - min, 0.04);
-    const pad = range * 0.22;
+    const pad = Math.max(range * 0.55, 0.04);
     const step = range <= 0.08 ? 0.02 : 0.05;
     return {
         min: Math.max(0, Math.floor((min - pad) / step) * step),
@@ -1486,7 +1486,7 @@ function renderVulcabrasShareChart() {
                 const overflow = badges.length ? badges[badges.length - 1].y + badges[badges.length - 1].height - (chart.chartArea.bottom - 2) : 0;
                 if (overflow > 0) badges.forEach(badge => { badge.y = Math.max(chart.chartArea.top + 2, badge.y - overflow); });
                 badges.forEach(badge => {
-                    badge.x = Math.max(chart.chartArea.left + 2, Math.min(badge.x, chart.chartArea.right - badge.width - 2));
+                    badge.x = Math.max(2, Math.min(badge.x, chart.width - badge.width - 2));
                     ctx.fillStyle = badge.color;
                     roundedRect(ctx, badge.x, badge.y, badge.width, badge.height, 4);
                     ctx.fill();
@@ -1530,7 +1530,7 @@ function renderVulcabrasShareChart() {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 44, right: 44, top: 4, bottom: 0 } },
+            layout: { padding: { left: 74, right: 74, top: 0, bottom: 0 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -1551,7 +1551,7 @@ function renderVulcabrasShareChart() {
                 }
             },
             scales: {
-                x: { ticks: { color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: false } },
+                x: { offset: true, ticks: { color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: false } },
                 y: { min: axis.min, max: axis.max, ticks: { display: false }, grid: { display: false }, border: { display: false } }
             }
         }
@@ -1592,7 +1592,7 @@ function renderVulcabrasShareCard() {
             { label: 'Total Market Share', color: C.azulEscuro, datasetIndex: 0 },
             { label: 'Vulcabras - Named Players', color: C.turquesa, datasetIndex: 1 }
         ])}</div>
-        <div style="position:relative;height:420px;margin-top:-6px;"><canvas id="vulcabras-share-chart"></canvas></div>`;
+        <div style="position:relative;height:420px;margin-top:-32px;"><canvas id="vulcabras-share-chart"></canvas></div>`;
     if (!existing) content.appendChild(card);
     renderVulcabrasShareChart();
     bindVulcabrasShareLegend(vulcabrasShareChartInstance);
