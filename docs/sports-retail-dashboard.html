@@ -119,14 +119,17 @@
         .breakdown-scroll::-webkit-scrollbar { height:10px; }
         .breakdown-scroll::-webkit-scrollbar-track { background:#F4F5F7; border-radius:5px; }
         .breakdown-scroll::-webkit-scrollbar-thumb { background:#9AA8BB; border-radius:5px; }
-        .breakdown-table { border-collapse:separate; border-spacing:0; min-width:1080px; width:100%; background:#FFFFFF; }
+        .breakdown-table { border-collapse:separate; border-spacing:0; min-width:980px; width:100%; background:#FFFFFF; }
         .breakdown-table thead th { background:#082654; color:#FFFFFF; font-size:12.9px; font-weight:700; letter-spacing:0.02em; padding:0 12px; height:45px; line-height:45px; white-space:nowrap; text-align:center; }
         .breakdown-table th.breakdown-side-head { background:#FF5B76; min-width:112px; width:112px; }
         .breakdown-table th.breakdown-gap-head, .breakdown-table td.breakdown-gap-cell { width:14px; min-width:14px; padding:0 !important; border:0 !important; background:#FFFFFF !important; }
-        .breakdown-table tbody td { vertical-align:top; padding:8px 12px 10px; border-bottom:1px solid #CFD8E3; background:#FFFFFF; text-align:center; }
-        .breakdown-table .breakdown-sticky { position:sticky; left:0; z-index:2; background:#FFFFFF; width:240px; min-width:240px; text-align:left; box-shadow:6px 0 8px -8px rgba(2,28,69,0.12); }
+        .breakdown-table tbody td { vertical-align:top; padding:8px 10px 10px; border-bottom:1px solid #CFD8E3; background:#FFFFFF; text-align:center; }
+        .breakdown-table .breakdown-sticky { position:sticky; left:0; z-index:2; background:#FFFFFF; width:165px; min-width:165px; text-align:left; box-shadow:6px 0 8px -8px rgba(2,28,69,0.12); }
         .breakdown-table thead .breakdown-sticky { background:#082654; z-index:4; box-shadow:none; }
-        .breakdown-total-band { background:#A7DDDB; border-bottom:1px solid #8BC4C2; margin:-8px -12px 6px; padding:6px 12px; }
+        .breakdown-table .breakdown-year-cell, .breakdown-table thead .breakdown-year-head { width:68px; min-width:68px; }
+        .breakdown-table .breakdown-total-row td { height:60px; box-sizing:border-box; }
+        .breakdown-table .breakdown-brand-row td { height:76px; box-sizing:border-box; }
+        .breakdown-total-band { background:#A7DDDB; border-bottom:1px solid #8BC4C2; margin:-8px -10px 6px; padding:6px 10px; }
         .breakdown-row-title { color:#021C45; font-size:13px; font-weight:700; line-height:1.35; padding-left:8px; text-align:left; }
         .breakdown-row-sub { color:#021C45; font-size:12px; line-height:1.35; margin-top:2px; padding-left:18px; text-align:left; }
         .breakdown-cell-main { color:#021C45; font-size:13px; font-weight:700; line-height:1.3; white-space:nowrap; text-align:center; }
@@ -2458,19 +2461,19 @@ function marketShareTableInner() {
         <div class="breakdown-cell-sub breakdown-sidebox-empty">-</div>
         ${sideInfo.varText ? `<div class="breakdown-cell-sub"><span class="breakdown-sidebox-pp ${sideInfo.varClass}">${sideInfo.varText}</span></div>` : `<div class="breakdown-cell-sub breakdown-sidebox-empty">-</div>`}
     </td>`;
-    const yearHeads = model.years.map(year => `<th>${year}</th>`).join('');
-    const totalCells = totalSeries.map((value, idx) => `<td>
-        <div class="breakdown-total-band"><div class="breakdown-cell-main">${fmtNumberEN(value, 1)}</div></div>
+    const yearHeads = model.years.map(year => `<th class="breakdown-year-head">${year}</th>`).join('');
+    const totalCells = totalSeries.map((value, idx) => `<td class="breakdown-year-cell">
+        <div class="breakdown-total-band"><div class="breakdown-cell-main">${fmtNumberEN(value, 0)}</div></div>
         <div class="breakdown-cell-sub">${msYoyHeatText(totalYoy[idx])}</div>
     </td>`).join('');
-    const rowHtml = rows.map((row, rowIdx) => `<tr>
+    const rowHtml = rows.map((row, rowIdx) => `<tr class="breakdown-brand-row">
         <td class="breakdown-sticky">
             <div class="breakdown-row-title">${rowIdx + 1}. ${row.label}</div>
             <div class="breakdown-row-sub">YoY (%)</div>
             <div class="breakdown-row-sub">Market Share</div>
         </td>
-        ${row.values.map((value, idx) => `<td>
-            <div class="breakdown-cell-main">${fmtNumberEN(value, 1)}</div>
+        ${row.values.map((value, idx) => `<td class="breakdown-year-cell">
+            <div class="breakdown-cell-main">${fmtNumberEN(value, 0)}</div>
             <div class="breakdown-cell-sub">${msYoyHeatText(row.yoy[idx])}</div>
             <div class="breakdown-cell-sub">${msFmtPct(row.shares[idx], 1)}</div>
         </td>`).join('')}
@@ -2484,7 +2487,7 @@ function marketShareTableInner() {
     return `${header}<div class="breakdown-scroll"><table class="breakdown-table">
         <thead><tr><th class="breakdown-sticky"></th>${yearHeads}<th class="breakdown-gap-head"></th><th class="breakdown-side-head">CAGR or Var</th></tr></thead>
         <tbody>
-            <tr>
+            <tr class="breakdown-total-row">
                 <td class="breakdown-sticky"><div class="breakdown-row-title">GMV</div><div class="breakdown-row-sub">YoY (%)</div></td>
                 ${totalCells}
                 <td class="breakdown-gap-cell"></td>
