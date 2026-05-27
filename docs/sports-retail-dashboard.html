@@ -19,6 +19,7 @@
     <script src="./data/vivara_caged_data.js"></script>
     <script src="./data/vulcabras_volume_data.js"></script>
     <script src="./data/sports_retail_cost_index_data.js"></script>
+    <script src="./data/sportswear_brand_shares_data.js"></script>
     <script>
         tailwind.config = {
             theme: { extend: { colors: {
@@ -172,7 +173,7 @@ const C = {
     cereja: '#FF4F6C', berinjela: '#5A0F4A', azulClaro: '#18A6F1', turquesa: '#6FDDCB', branco: '#FFFFFF'
 };
 
-const TABS = [{ id: 'cost-index', label: 'Cost Index' }, { id: 'caged', label: 'CAGED' }, { id: 'industry-data', label: 'Sector Data' }, { id: 'ecom-data', label: 'E-commerce Data' }, { id: 'imports-data', label: 'Imports Data' }, { id: 'methodology', label: 'Methodology' }];
+const TABS = [{ id: 'cost-index', label: 'Cost Index' }, { id: 'caged', label: 'CAGED' }, { id: 'industry-data', label: 'Sector Data' }, { id: 'market-share', label: 'Market Share' }, { id: 'ecom-data', label: 'E-commerce Data' }, { id: 'imports-data', label: 'Imports Data' }, { id: 'methodology', label: 'Methodology' }];
 let activeTab = 'cost-index';
 let importsChartInstance = null;
 let industryChartInstance = null;
@@ -2262,6 +2263,157 @@ function renderSportswearTamCards() {
     content.appendChild(decompCard);
     bindFootwearDecompControls();
     renderFootwearDecompChart();
+}
+
+// ===== Market Share tab (Euromonitor Brand Shares) =====
+const MS_VULCABRAS = ['Olympikus', 'Mizuno', 'Under Armour'];
+const MS_PALETTE = ['#021C45', '#18A6F1', '#58D9D1', '#5A0F4A', '#7D1327', '#0D7E6A', '#667D99', '#345C8C', '#9AA8BB'];
+const MS_OTHERS_COLOR = '#D42AB6';
+const MS_STATE = { category: 'total', from: 2016, to: 2025, vulcabras: 'separate' };
+let marketShareChart = null;
+
+function msData() { return window.SPORTSWEAR_BRAND_SHARES || { years: [], totals: {}, brands: {} }; }
+
+function getMarketShareModel() {
+    const d = msData();
+    const years = d.years || [];
+    if (!years.length) return null;
+    const cat = MS_STATE.category;
+    let fromIdx = years.indexOf(MS_STATE.from), toIdx = years.indexOf(MS_STATE.to);
+    if (fromIdx < 0) fromIdx = 0;
+    if (toIdx < 0) toIdx = years.length - 1;
+    if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
+    const shownYears = years.slice(fromIdx, toIdx + 1);
+    const totals = d.totals[cat] || [];
+    const brands = d.brands[cat] || {};
+    const val = (name, i) => (brands[name] && Number.isFinite(brands[name][i])) ? brands[name][i] : 0;
+    const rankIdx = toIdx;
+    const nonVulc = Object.keys(brands).filter(n => !MS_VULCABRAS.includes(n)).sort((a, b) => val(b, rankIdx) - val(a, rankIdx));
+    let entries;
+    if (MS_STATE.vulcabras === 'combined') {
+        entries = [{ key: 'Vulcabras', label: 'Vulcabras', members: MS_VULCABRAS.filter(n => brands[n]) }]
+            .concat(nonVulc.slice(0, 7).map(n => ({ key: n, label: n, members: [n] })));
+    } else {
+        const vulcSorted = MS_VULCABRAS.filter(n => brands[n]).sort((a, b) => val(b, rankIdx) - val(a, rankIdx));
+        entries = vulcSorted.map(n => ({ key: n, label: n, members: [n] }))
+            .concat(nonVulc.slice(0, 5).map(n => ({ key: n, label: n, members: [n] })));
+    }
+    const series = entries.map((e, ei) => ({
+        key: e.key, label: e.label, color: MS_PALETTE[ei % MS_PALETTE.length],
+        data: shownYears.map((_, si) => {
+            const i = fromIdx + si, tot = totals[i] || 0;
+            return tot ? e.members.reduce((s, m) => s + val(m, i), 0) / tot * 100 : 0;
+        })
+    }));
+    series.push({ key: 'Others', label: 'Others', color: MS_OTHERS_COLOR, data: shownYears.map((_, si) => Math.max(0, 100 - series.reduce((s, ser) => s + ser.data[si], 0))) });
+    return { years: shownYears, series };
+}
+
+function buildMarketShareChart(canvas, model) {
+    if (!canvas || !model) return null;
+    const labels = model.years.map(String);
+    const datasets = model.series.map(s => ({ label: s.label, data: s.data, backgroundColor: s.color, borderColor: s.color, borderWidth: 0, borderSkipped: false, stack: 'ms', barPercentage: 0.86, categoryPercentage: 0.9 }));
+    const labelPlugin = {
+        id: 'msLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            ctx.save();
+            ctx.font = '700 11px Verdana';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FFFFFF';
+            chart.data.datasets.forEach((ds, di) => {
+                if (!chart.isDatasetVisible(di)) return;
+                const meta = chart.getDatasetMeta(di);
+                meta.data.forEach((bar, i) => {
+                    const v = ds.data[i];
+                    if (!Number.isFinite(v) || v < 0.5 || Math.abs(bar.base - bar.y) < 14) return;
+                    ctx.fillText(`${Math.round(v)}%`, bar.x, (bar.y + bar.base) / 2);
+                });
+            });
+            ctx.restore();
+        }
+    };
+    return new Chart(canvas.getContext('2d'), {
+        type: 'bar', plugins: [labelPlugin], data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            layout: { padding: { top: 10, right: 20, left: 0, bottom: 0 } },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: c => `  ${c.dataset.label}: ${tamFmtPct(c.parsed.y, 1)}` } }
+            },
+            scales: {
+                x: { stacked: true, ticks: { color: C.azulEscuro40, font: { family: 'Verdana', size: 10.5 }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: C.azulEscuro20 } },
+                y: { stacked: true, min: 0, max: 100, ticks: { display: false }, grid: { display: false }, border: { display: false } }
+            }
+        }
+    });
+}
+
+function marketShareCardInner() {
+    const d = msData();
+    const model = getMarketShareModel();
+    const yearOpts = sel => (d.years || []).map(y => `<option value="${y}" ${y === sel ? 'selected' : ''}>${y}</option>`).join('');
+    const catOpts = `<option value="total" ${MS_STATE.category === 'total' ? 'selected' : ''}>Total</option><option value="footwear" ${MS_STATE.category === 'footwear' ? 'selected' : ''}>Footwear</option><option value="apparel" ${MS_STATE.category === 'apparel' ? 'selected' : ''}>Apparel</option>`;
+    const vulcOpts = `<option value="separate" ${MS_STATE.vulcabras === 'separate' ? 'selected' : ''}>Separate</option><option value="combined" ${MS_STATE.vulcabras === 'combined' ? 'selected' : ''}>Combined</option>`;
+    const header = `<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;width:100%;margin-bottom:10px;">
+        <div><h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Market Share Breakdown</h3>
+        <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Percentage)</p></div>
+        <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+            ${selectBlock('Category', `<select class="df-input" id="ms-category" style="width:120px;">${catOpts}</select>`)}
+            ${selectBlock('Vulcabras', `<select class="df-input" id="ms-vulcabras" style="width:120px;">${vulcOpts}</select>`)}
+            ${selectBlock('From', `<select class="df-input" id="ms-from" style="width:90px;">${yearOpts(MS_STATE.from)}</select>`)}
+            ${selectBlock('To', `<select class="df-input" id="ms-to" style="width:90px;">${yearOpts(MS_STATE.to)}</select>`)}
+        </div></div>`;
+    const legend = model ? legendHtml(model.series.map(s => ({ label: s.label, color: s.color }))) : '';
+    return `${header}${legend}<div style="position:relative;height:620px;"><canvas id="market-share-chart"></canvas></div>`;
+}
+
+function bindMarketShareLegend(chart) {
+    if (!chart) return;
+    const sync = () => document.querySelectorAll('#market-share-card .chart-legend-item[data-dataset-index]').forEach(it => it.classList.toggle('is-hidden', !chart.isDatasetVisible(Number(it.dataset.datasetIndex))));
+    document.querySelectorAll('#market-share-card .chart-legend-item[data-dataset-index]').forEach(item => {
+        const toggle = () => { const idx = Number(item.dataset.datasetIndex); chart.setDatasetVisibility(idx, !chart.isDatasetVisible(idx)); chart.update(); sync(); };
+        item.addEventListener('click', toggle);
+        item.addEventListener('keydown', e => { if (e.key !== 'Enter' && e.key !== ' ') return; e.preventDefault(); toggle(); });
+    });
+    sync();
+}
+
+function renderMarketShareChartOnly() {
+    if (marketShareChart) { marketShareChart.destroy(); marketShareChart = null; }
+    marketShareChart = buildMarketShareChart(document.getElementById('market-share-chart'), getMarketShareModel());
+    bindMarketShareLegend(marketShareChart);
+}
+
+function bindMarketShareControls() {
+    const cat = document.getElementById('ms-category'), vu = document.getElementById('ms-vulcabras'), f = document.getElementById('ms-from'), t = document.getElementById('ms-to');
+    const yrs = (msData().years || []);
+    if (cat) cat.onchange = () => { MS_STATE.category = cat.value; refreshMarketShareCard(); };
+    if (vu) vu.onchange = () => { MS_STATE.vulcabras = vu.value; refreshMarketShareCard(); };
+    if (f) f.onchange = () => { MS_STATE.from = +f.value; if (yrs.indexOf(MS_STATE.from) > yrs.indexOf(MS_STATE.to)) MS_STATE.to = MS_STATE.from; refreshMarketShareCard(); };
+    if (t) t.onchange = () => { MS_STATE.to = +t.value; if (yrs.indexOf(MS_STATE.to) < yrs.indexOf(MS_STATE.from)) MS_STATE.from = MS_STATE.to; refreshMarketShareCard(); };
+}
+
+function refreshMarketShareCard() {
+    const card = document.getElementById('market-share-card');
+    if (!card) return;
+    card.innerHTML = marketShareCardInner();
+    bindMarketShareControls();
+    renderMarketShareChartOnly();
+}
+
+function renderMarketShareCard() {
+    const content = document.getElementById('tab-content');
+    const card = document.createElement('section');
+    card.id = 'market-share-card';
+    card.style.cssText = cardStyle('margin-bottom:24px;');
+    card.innerHTML = marketShareCardInner();
+    content.appendChild(card);
+    bindMarketShareControls();
+    renderMarketShareChartOnly();
 }
 
 function renderIndustryDataCard() {
@@ -5192,6 +5344,11 @@ function renderContent() {
     if (activeTab === 'industry-data') {
         renderIndustryDataCard();
         document.getElementById('footer-source').textContent = 'Source: Abicalcados sector reports 2017-2025 / IBGE production segmentation';
+        return;
+    }
+    if (activeTab === 'market-share') {
+        renderMarketShareCard();
+        document.getElementById('footer-source').textContent = 'Source: Euromonitor Brand Shares (Sportswear), retail value RSP. Vulcabras = Olympikus + Mizuno + Under Armour.';
         return;
     }
     if (activeTab === 'cost-index') {
