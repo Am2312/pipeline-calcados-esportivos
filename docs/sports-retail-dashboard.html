@@ -2447,8 +2447,8 @@ function getMarketShareBrandGmvModel() {
         years: shownYears,
         values: sliceBn(totalMn),
         stackedSeries: [
-            { key: 'apparel', label: 'Apparel', color: C.azulEscuro, values: sliceBn(apparelMn) },
-            { key: 'footwear', label: 'Footwear', color: C.turquesa, values: sliceBn(footwearMn) }
+            { key: 'apparel', label: 'Apparel', color: C.turquesa, values: sliceBn(apparelMn) },
+            { key: 'footwear', label: 'Footwear', color: C.azulEscuro, values: sliceBn(footwearMn) }
         ],
         yoy: msYoySeries(totalMn).slice(fromIdx, toIdx + 1),
         cagr: msCagr(totalMn[fromIdx], totalMn[toIdx], toIdx - fromIdx),
@@ -2650,8 +2650,8 @@ function marketShareBrandGmvCardInner() {
             ${marketShareBrandGmvControlsHtml()}
         </div>`;
     const legend = legendHtml([
-        { label: 'Apparel', color: C.azulEscuro },
-        { label: 'Footwear', color: C.turquesa },
+        { label: 'Apparel', color: C.turquesa },
+        { label: 'Footwear', color: C.azulEscuro },
         { label: 'YoY', color: C.cereja }
     ]);
     return `${header}${legend}<div style="position:relative;height:560px;"><canvas id="market-share-brand-gmv-chart"></canvas></div>`;
