@@ -2339,7 +2339,7 @@ function buildMarketShareChart(canvas, model) {
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            layout: { padding: { top: 10, right: 20, left: 0, bottom: 0 } },
+            layout: { padding: { top: 22, right: 20, left: 0, bottom: 0 } },
             plugins: {
                 legend: { display: false },
                 tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: c => `  ${c.dataset.label}: ${tamFmtPct(c.parsed.y, 1)}` } }
@@ -2368,7 +2368,7 @@ function marketShareCardInner() {
             ${selectBlock('To', `<select class="df-input" id="ms-to" style="width:90px;">${yearOpts(MS_STATE.to)}</select>`)}
         </div></div>`;
     const legend = model ? legendHtml(model.series.map(s => ({ label: s.label, color: s.color }))) : '';
-    return `${header}${legend}<div style="position:relative;height:470px;"><canvas id="market-share-chart"></canvas></div>`;
+    return `${header}${legend}<div style="position:relative;height:520px;margin-top:14px;"><canvas id="market-share-chart"></canvas></div>`;
 }
 
 function bindMarketShareLegend(chart) {
