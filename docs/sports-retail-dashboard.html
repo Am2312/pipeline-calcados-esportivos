@@ -2269,6 +2269,7 @@ function renderSportswearTamCards() {
 const MS_VULCABRAS = ['Olympikus', 'Mizuno', 'Under Armour'];
 const MS_PALETTE = ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2C70', '#9AA8BB', '#CCD4DD'];
 const MS_OTHERS_COLOR = '#D02BB8';
+const MS_TOP_SERIES = 6;
 const MS_STATE = { category: 'total', from: 2016, to: 2025, vulcabras: 'separate' };
 let marketShareChart = null;
 
@@ -2288,16 +2289,21 @@ function getMarketShareModel() {
     const brands = d.brands[cat] || {};
     const val = (name, i) => (brands[name] && Number.isFinite(brands[name][i])) ? brands[name][i] : 0;
     const rankIdx = toIdx;
-    const nonVulc = Object.keys(brands).filter(n => !MS_VULCABRAS.includes(n)).sort((a, b) => val(b, rankIdx) - val(a, rankIdx));
-    let entries;
-    if (MS_STATE.vulcabras === 'combined') {
-        entries = [{ key: 'Vulcabras', label: 'Vulcabras', members: MS_VULCABRAS.filter(n => brands[n]) }]
-            .concat(nonVulc.slice(0, 7).map(n => ({ key: n, label: n, members: [n] })));
-    } else {
-        const vulcSorted = MS_VULCABRAS.filter(n => brands[n]).sort((a, b) => val(b, rankIdx) - val(a, rankIdx));
-        entries = vulcSorted.map(n => ({ key: n, label: n, members: [n] }))
-            .concat(nonVulc.slice(0, 5).map(n => ({ key: n, label: n, members: [n] })));
-    }
+    const rankShare = members => {
+        const tot = totals[rankIdx] || 0;
+        return tot ? members.reduce((sum, member) => sum + val(member, rankIdx), 0) / tot * 100 : 0;
+    };
+    const withRank = entry => ({ ...entry, rankShare: rankShare(entry.members) });
+    const vulcEntries = MS_STATE.vulcabras === 'combined'
+        ? [withRank({ key: 'Vulcabras', label: 'Vulcabras', members: MS_VULCABRAS.filter(n => brands[n]) })]
+        : MS_VULCABRAS.filter(n => brands[n]).map(n => withRank({ key: n, label: n, members: [n] }));
+    const fixedEntries = vulcEntries.filter(entry => entry.members.length && entry.rankShare > 0);
+    const rankedCompetitors = Object.keys(brands)
+        .filter(n => !MS_VULCABRAS.includes(n))
+        .map(n => withRank({ key: n, label: n, members: [n] }))
+        .filter(entry => entry.rankShare > 0)
+        .sort((a, b) => b.rankShare - a.rankShare || a.label.localeCompare(b.label));
+    const entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, MS_TOP_SERIES - fixedEntries.length)));
     const series = entries.map((e, ei) => ({
         key: e.key, label: e.label, color: MS_PALETTE[ei % MS_PALETTE.length],
         data: shownYears.map((_, si) => {
@@ -2328,7 +2334,7 @@ function buildMarketShareChart(canvas, model) {
                 meta.data.forEach((bar, i) => {
                     const v = ds.data[i];
                     if (!Number.isFinite(v) || v < 0.5 || Math.abs(bar.base - bar.y) < 14) return;
-                    ctx.fillText(`${Math.round(v)}%`, bar.x, (bar.y + bar.base) / 2);
+                    ctx.fillText(tamFmtPct(v, 1), bar.x, (bar.y + bar.base) / 2);
                 });
             });
             ctx.restore();
