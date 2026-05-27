@@ -2463,7 +2463,7 @@ function marketShareTableInner() {
     </td>`;
     const yearHeads = model.years.map(year => `<th class="breakdown-year-head">${year}</th>`).join('');
     const totalCells = totalSeries.map((value, idx) => `<td class="breakdown-year-cell">
-        <div class="breakdown-total-band"><div class="breakdown-cell-main">${fmtNumberEN(value, 0)}</div></div>
+        <div class="breakdown-total-band"><div class="breakdown-cell-main">${fmtNumberEN(value / 1000, 1)}</div></div>
         <div class="breakdown-cell-sub">${msYoyHeatText(totalYoy[idx])}</div>
     </td>`).join('');
     const rowHtml = rows.map((row, rowIdx) => `<tr class="breakdown-brand-row">
@@ -2473,7 +2473,7 @@ function marketShareTableInner() {
             <div class="breakdown-row-sub">Market Share</div>
         </td>
         ${row.values.map((value, idx) => `<td class="breakdown-year-cell">
-            <div class="breakdown-cell-main">${fmtNumberEN(value, 0)}</div>
+            <div class="breakdown-cell-main">${fmtNumberEN(value / 1000, 1)}</div>
             <div class="breakdown-cell-sub">${msYoyHeatText(row.yoy[idx])}</div>
             <div class="breakdown-cell-sub">${msFmtPct(row.shares[idx], 1)}</div>
         </td>`).join('')}
@@ -2482,7 +2482,7 @@ function marketShareTableInner() {
     </tr>`).join('');
     const header = `<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;width:100%;margin-bottom:16px;">
         <div><h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">GMV Breakdown by Brand</h3>
-        <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(BRL mn, Percentage)</p></div>
+        <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(BRL bn, Percentage)</p></div>
         ${marketShareControlsHtml('ms-table')}</div>`;
     return `${header}<div class="breakdown-scroll"><table class="breakdown-table">
         <thead><tr><th class="breakdown-sticky"></th>${yearHeads}<th class="breakdown-gap-head"></th><th class="breakdown-side-head">CAGR or Var</th></tr></thead>
