@@ -1802,7 +1802,8 @@ function buildTamComboChart(canvas, selected) {
                     if (segHeight < 18) return;
                     const labelX = bar.x;
                     let labelY = bar.y + (bar.base - bar.y) / 2;
-                    const text = tamFmtNum(value, 0);
+                    const segTotal = stackTops[i] ? stackTops[i].sum : 0;
+                    const text = segTotal > 0 ? `${Math.round((value / segTotal) * 100)}%` : '';
                     const box = yoyBoxes[i];
                     if (box) {
                         const tw = ctx.measureText(text).width;
