@@ -2301,10 +2301,20 @@ const MS_VULCABRAS = ['Olympikus', 'Mizuno', 'Under Armour'];
 const MS_PALETTE = ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2C70', '#9AA8BB', '#CCD4DD'];
 const MS_OTHERS_COLOR = '#D02BB8';
 const MS_TOP_SERIES = 6;
-const MS_STATE = { category: 'footwear', from: 2016, to: 2025, vulcabras: 'separate' };
+const MS_STATE = { category: 'footwear', from: 2016, to: 2025, vulcabras: 'separate', shareBasis: 'reported' };
 let marketShareChart = null;
 
 function msData() { return window.SPORTSWEAR_BRAND_SHARES || { years: [], totals: {}, brands: {} }; }
+
+function msDenominatorSeries(category, basis) {
+    const d = msData();
+    const years = d.years || [];
+    const brands = d.brands[category] || {};
+    if (basis === 'named') {
+        return years.map((_, index) => Object.values(brands).reduce((sum, values) => sum + (Number.isFinite(values?.[index]) ? Number(values[index]) : 0), 0));
+    }
+    return (d.totals[category] || []).map(value => Number(value || 0));
+}
 
 function getMarketShareModel() {
     const d = msData();
@@ -2316,8 +2326,8 @@ function getMarketShareModel() {
     if (toIdx < 0) toIdx = years.length - 1;
     if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
     const shownYears = years.slice(fromIdx, toIdx + 1);
-    const totals = d.totals[cat] || [];
     const brands = d.brands[cat] || {};
+    const totals = msDenominatorSeries(cat, MS_STATE.shareBasis);
     const val = (name, i) => (brands[name] && Number.isFinite(brands[name][i])) ? brands[name][i] : 0;
     const rankIdx = toIdx;
     const rankShare = members => {
@@ -2342,7 +2352,12 @@ function getMarketShareModel() {
             return tot ? e.members.reduce((s, m) => s + val(m, i), 0) / tot * 100 : 0;
         })
     }));
-    series.push({ key: 'Others', label: 'Others', color: MS_OTHERS_COLOR, data: shownYears.map((_, si) => Math.max(0, 100 - series.reduce((s, ser) => s + ser.data[si], 0))) });
+    series.push({
+        key: MS_STATE.shareBasis === 'named' ? 'Other Named' : 'Others',
+        label: MS_STATE.shareBasis === 'named' ? 'Other Named' : 'Others',
+        color: MS_OTHERS_COLOR,
+        data: shownYears.map((_, si) => Math.max(0, 100 - series.reduce((s, ser) => s + ser.data[si], 0)))
+    });
     return { years: shownYears, fromIdx, toIdx, series };
 }
 
@@ -2379,9 +2394,11 @@ function marketShareControlsHtml(prefix) {
     const yearOpts = sel => (d.years || []).map(y => `<option value="${y}" ${y === sel ? 'selected' : ''}>${y}</option>`).join('');
     const catOpts = `<option value="total" ${MS_STATE.category === 'total' ? 'selected' : ''}>Total</option><option value="footwear" ${MS_STATE.category === 'footwear' ? 'selected' : ''}>Footwear</option><option value="apparel" ${MS_STATE.category === 'apparel' ? 'selected' : ''}>Apparel</option>`;
     const vulcOpts = `<option value="separate" ${MS_STATE.vulcabras === 'separate' ? 'selected' : ''}>Separate</option><option value="combined" ${MS_STATE.vulcabras === 'combined' ? 'selected' : ''}>Combined</option>`;
+    const basisOpts = `<option value="reported" ${MS_STATE.shareBasis === 'reported' ? 'selected' : ''}>Euromonitor</option><option value="named" ${MS_STATE.shareBasis === 'named' ? 'selected' : ''}>Named Players</option>`;
     return `<div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
         ${selectBlock('Category', `<select class="df-input" id="${prefix}-category" style="width:120px;">${catOpts}</select>`)}
         ${selectBlock('Vulcabras', `<select class="df-input" id="${prefix}-vulcabras" style="width:120px;">${vulcOpts}</select>`)}
+        ${selectBlock('Share Basis', `<select class="df-input" id="${prefix}-basis" style="width:150px;">${basisOpts}</select>`)}
         ${selectBlock('From', `<select class="df-input" id="${prefix}-from" style="width:90px;">${yearOpts(MS_STATE.from)}</select>`)}
         ${selectBlock('To', `<select class="df-input" id="${prefix}-to" style="width:90px;">${yearOpts(MS_STATE.to)}</select>`)}
     </div>`;
@@ -2444,9 +2461,10 @@ function marketShareTableInner() {
     const model = getMarketShareModel();
     if (!model) return '';
     const d = msData();
+    const denominator = msDenominatorSeries(MS_STATE.category, MS_STATE.shareBasis);
     const totalSeries = model.years.map(year => {
         const idx = (d.years || []).indexOf(year);
-        return idx >= 0 ? Number((d.totals[MS_STATE.category] || [])[idx] || 0) : 0;
+        return idx >= 0 ? Number(denominator[idx] || 0) : 0;
     });
     const totalYoy = msYoySeries(totalSeries);
     const rows = model.series.map(series => {
@@ -2494,7 +2512,7 @@ function marketShareTableInner() {
         <thead><tr><th class="breakdown-sticky"></th>${yearHeads}<th class="breakdown-gap-head"></th><th class="breakdown-side-head">CAGR or Var</th></tr></thead>
         <tbody>
             <tr class="breakdown-total-row">
-                <td class="breakdown-sticky"><div class="breakdown-total-label-band"><div class="breakdown-row-title">GMV</div></div><div class="breakdown-total-yoy-label">YoY (%)</div></td>
+                <td class="breakdown-sticky"><div class="breakdown-total-label-band"><div class="breakdown-row-title">${MS_STATE.shareBasis === 'named' ? 'Adjusted GMV' : 'GMV'}</div></div><div class="breakdown-total-yoy-label">YoY (%)</div></td>
                 ${totalCells}
                 <td class="breakdown-gap-cell"></td>
                 ${sideCell(side(totalSeries, null, true))}
@@ -2522,10 +2540,11 @@ function renderMarketShareChartOnly() {
 }
 
 function bindMarketShareControls(prefix = 'ms') {
-    const cat = document.getElementById(`${prefix}-category`), vu = document.getElementById(`${prefix}-vulcabras`), f = document.getElementById(`${prefix}-from`), t = document.getElementById(`${prefix}-to`);
+    const cat = document.getElementById(`${prefix}-category`), vu = document.getElementById(`${prefix}-vulcabras`), basis = document.getElementById(`${prefix}-basis`), f = document.getElementById(`${prefix}-from`), t = document.getElementById(`${prefix}-to`);
     const yrs = (msData().years || []);
     if (cat) cat.onchange = () => { MS_STATE.category = cat.value; refreshMarketShareSection(); };
     if (vu) vu.onchange = () => { MS_STATE.vulcabras = vu.value; refreshMarketShareSection(); };
+    if (basis) basis.onchange = () => { MS_STATE.shareBasis = basis.value; refreshMarketShareSection(); };
     if (f) f.onchange = () => { MS_STATE.from = +f.value; if (yrs.indexOf(MS_STATE.from) > yrs.indexOf(MS_STATE.to)) MS_STATE.to = MS_STATE.from; refreshMarketShareSection(); };
     if (t) t.onchange = () => { MS_STATE.to = +t.value; if (yrs.indexOf(MS_STATE.to) < yrs.indexOf(MS_STATE.from)) MS_STATE.from = MS_STATE.to; refreshMarketShareSection(); };
 }
@@ -4847,6 +4866,31 @@ function renderMethodologyPage() {
                 </tbody>
             </table>
             <p style="margin-top:12px;">A aderência é alta: com exceção de 2021, a diferença entre a estimativa via CAGED acumulado e a RAIS oficial fica abaixo de 1%. Isso aumenta a confiança no uso do CAGED como proxy mensal de evolução do quadro de funcionários no recorte Horizonte/CE + Itapetinga/BA.</p>
+        </section>
+
+        <section class="methodology-card" style="margin-top:18px;">
+            <h3>METODOLOGIA DE MARKET SHARE</h3>
+            <p>A aba Market Share usa a base Euromonitor Brand Shares de Sportswear, em retail value RSP, com recortes Total, Footwear e Apparel. O dashboard oferece duas bases de cálculo para participação de mercado.</p>
+            <table class="methodology-table">
+                <thead>
+                    <tr><th>Base</th><th>Denominador</th><th>Fórmula</th><th>Leitura</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Euromonitor</strong></td>
+                        <td>Total de mercado reportado pela Euromonitor</td>
+                        <td>Market Share = GMV da marca / GMV total da categoria</td>
+                        <td>É a leitura oficial contra o mercado total. O residual aparece como <strong>Others</strong>.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Named Players</strong></td>
+                        <td>Soma do GMV de todas as marcas nomeadas na base, excluindo o residual Others</td>
+                        <td>Market Share ajustado = GMV da marca / Σ GMV das marcas nomeadas</td>
+                        <td>É uma leitura de participação dentro do universo de players identificados. O residual exibido no gráfico/tabela é <strong>Other Named</strong>, ou seja, marcas nomeadas que não estão entre as principais séries exibidas.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p style="margin-top:12px;">Vulcabras consolidado é calculado como Olympikus + Mizuno + Under Armour. Quando o seletor está em Separate, essas três marcas aparecem separadas e sempre antes dos demais players.</p>
         </section>
 
         <section class="methodology-card" style="margin-top:18px;">
