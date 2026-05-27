@@ -2302,7 +2302,8 @@ const MS_PALETTE = ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2
 const MS_OTHERS_COLOR = '#D02BB8';
 const MS_TOP_SERIES = 6;
 const MS_STATE = { category: 'footwear', from: 2016, to: 2025, vulcabras: 'separate', shareBasis: 'named' };
-const MS_BRAND_GMV_STATE = { brand: 'Vulcabras', from: 2016, to: 2025 };
+const MS_BRAND_GMV_CHART_STATE = { brand: 'Vulcabras', from: 2016, to: 2025 };
+const MS_BRAND_GMV_TABLE_STATE = { brand: 'Vulcabras', from: 2016, to: 2025 };
 let marketShareChart = null;
 let marketShareBrandGmvChart = null;
 
@@ -2429,21 +2430,21 @@ function msBrandCategorySeries(category, brand) {
     }, 0));
 }
 
-function getMarketShareBrandGmvModel() {
+function getMarketShareBrandGmvModel(state = MS_BRAND_GMV_CHART_STATE) {
     const d = msData();
     const years = d.years || [];
     if (!years.length) return null;
-    let fromIdx = years.indexOf(MS_BRAND_GMV_STATE.from), toIdx = years.indexOf(MS_BRAND_GMV_STATE.to);
+    let fromIdx = years.indexOf(state.from), toIdx = years.indexOf(state.to);
     if (fromIdx < 0) fromIdx = 0;
     if (toIdx < 0) toIdx = years.length - 1;
     if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
-    const apparelMn = msBrandCategorySeries('apparel', MS_BRAND_GMV_STATE.brand);
-    const footwearMn = msBrandCategorySeries('footwear', MS_BRAND_GMV_STATE.brand);
+    const apparelMn = msBrandCategorySeries('apparel', state.brand);
+    const footwearMn = msBrandCategorySeries('footwear', state.brand);
     const totalMn = years.map((_, index) => apparelMn[index] + footwearMn[index]);
     const shownYears = years.slice(fromIdx, toIdx + 1);
     const sliceBn = values => values.slice(fromIdx, toIdx + 1).map(value => value / 1000);
     return {
-        brand: MS_BRAND_GMV_STATE.brand,
+        brand: state.brand,
         years: shownYears,
         values: sliceBn(totalMn),
         stackedSeries: [
@@ -2458,15 +2459,15 @@ function getMarketShareBrandGmvModel() {
     };
 }
 
-function marketShareBrandGmvControlsHtml(prefix = 'ms-brand-gmv') {
+function marketShareBrandGmvControlsHtml(prefix = 'ms-brand-gmv', state = MS_BRAND_GMV_CHART_STATE) {
     const years = msData().years || [];
     const yearOpts = sel => years.map(y => `<option value="${y}" ${y === sel ? 'selected' : ''}>${y}</option>`).join('');
     const brandNames = ['Vulcabras', ...msAllBrandNames().filter(name => name !== 'Vulcabras')];
-    const brandOpts = brandNames.map(name => `<option value="${name}" ${MS_BRAND_GMV_STATE.brand === name ? 'selected' : ''}>${name}</option>`).join('');
+    const brandOpts = brandNames.map(name => `<option value="${name}" ${state.brand === name ? 'selected' : ''}>${name}</option>`).join('');
     return `<div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
         ${selectBlock('Brand', `<select class="df-input" id="${prefix}-brand" style="width:190px;">${brandOpts}</select>`)}
-        ${selectBlock('From', `<select class="df-input" id="${prefix}-from" style="width:96px;">${yearOpts(MS_BRAND_GMV_STATE.from)}</select>`)}
-        ${selectBlock('To', `<select class="df-input" id="${prefix}-to" style="width:96px;">${yearOpts(MS_BRAND_GMV_STATE.to)}</select>`)}
+        ${selectBlock('From', `<select class="df-input" id="${prefix}-from" style="width:96px;">${yearOpts(state.from)}</select>`)}
+        ${selectBlock('To', `<select class="df-input" id="${prefix}-to" style="width:96px;">${yearOpts(state.to)}</select>`)}
     </div>`;
 }
 
@@ -2634,12 +2635,12 @@ function buildMarketShareBrandGmvChart(canvas, selected) {
 }
 
 function marketShareBrandGmvCardInner() {
-    const s = getMarketShareBrandGmvModel();
+    const s = getMarketShareBrandGmvModel(MS_BRAND_GMV_CHART_STATE);
     const pill = (label, val, bg) => `<div style="background:${bg};border-radius:10px;padding:9px 16px;text-align:center;min-width:118px;"><div style="font-size:11.5px;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;line-height:1;">${label}</div><div style="font-size:16px;color:#021C45;font-weight:700;line-height:1;margin-top:5px;">${val == null ? 'n.a.' : msFmtPct(val, 1)}</div></div>`;
     const header = `
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;width:100%;margin-bottom:10px;">
             <div>
-                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Brand GMV by Category</h3>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">${s?.brand || 'Brand'} GMV by Category</h3>
                 <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(BRL bn, Percentage)</p>
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
@@ -2647,7 +2648,7 @@ function marketShareBrandGmvCardInner() {
                 ${pill('Apparel CAGR', s?.apparelCagr, '#D4EDFD')}
                 ${pill('Footwear CAGR', s?.footwearCagr, '#C3F2EF')}
             </div>
-            ${marketShareBrandGmvControlsHtml('ms-brand-gmv')}
+            ${marketShareBrandGmvControlsHtml('ms-brand-gmv', MS_BRAND_GMV_CHART_STATE)}
         </div>`;
     const legend = legendHtml([
         { label: 'Footwear', color: C.azulEscuro },
@@ -2661,13 +2662,13 @@ function buildMarketShareBrandGmvTableHtml() {
     const d = msData();
     const years = d.years || [];
     if (!years.length) return '';
-    let fromIndex = years.indexOf(MS_BRAND_GMV_STATE.from), toIndex = years.indexOf(MS_BRAND_GMV_STATE.to);
+    let fromIndex = years.indexOf(MS_BRAND_GMV_TABLE_STATE.from), toIndex = years.indexOf(MS_BRAND_GMV_TABLE_STATE.to);
     if (fromIndex < 0) fromIndex = 0;
     if (toIndex < 0) toIndex = years.length - 1;
     if (fromIndex > toIndex) [fromIndex, toIndex] = [toIndex, fromIndex];
     const shown = years.slice(fromIndex, toIndex + 1);
-    const ftMn = msBrandCategorySeries('footwear', MS_BRAND_GMV_STATE.brand);
-    const apMn = msBrandCategorySeries('apparel', MS_BRAND_GMV_STATE.brand);
+    const ftMn = msBrandCategorySeries('footwear', MS_BRAND_GMV_TABLE_STATE.brand);
+    const apMn = msBrandCategorySeries('apparel', MS_BRAND_GMV_TABLE_STATE.brand);
     const totalMn = years.map((_, i) => ftMn[i] + apMn[i]);
     const totalValBn = shown.map((_, i) => totalMn[fromIndex + i] / 1000);
     const totalYoyFull = msYoySeries(totalMn);
@@ -2696,10 +2697,10 @@ function buildMarketShareBrandGmvTableHtml() {
     const headHtml = `
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:2px 0 12px 0;">
             <div>
-                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Brand GMV Breakdown by Category</h3>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">${MS_BRAND_GMV_TABLE_STATE.brand} GMV Breakdown by Category</h3>
                 <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(BRL bn, Percentage)</p>
             </div>
-            ${marketShareBrandGmvControlsHtml('ms-brand-gmv-table')}
+            ${marketShareBrandGmvControlsHtml('ms-brand-gmv-table', MS_BRAND_GMV_TABLE_STATE)}
         </div>`;
     const headerRow = `
         <tr>
@@ -2908,7 +2909,7 @@ function bindMarketShareBrandGmvLegend(chart) {
 
 function renderMarketShareBrandGmvChartOnly() {
     if (marketShareBrandGmvChart) { marketShareBrandGmvChart.destroy(); marketShareBrandGmvChart = null; }
-    marketShareBrandGmvChart = buildMarketShareBrandGmvChart(document.getElementById('market-share-brand-gmv-chart'), getMarketShareBrandGmvModel());
+    marketShareBrandGmvChart = buildMarketShareBrandGmvChart(document.getElementById('market-share-brand-gmv-chart'), getMarketShareBrandGmvModel(MS_BRAND_GMV_CHART_STATE));
     bindMarketShareBrandGmvLegend(marketShareBrandGmvChart);
 }
 
@@ -2922,21 +2923,21 @@ function bindMarketShareControls(prefix = 'ms') {
     if (t) t.onchange = () => { MS_STATE.to = +t.value; if (yrs.indexOf(MS_STATE.to) < yrs.indexOf(MS_STATE.from)) MS_STATE.from = MS_STATE.to; refreshMarketShareSection(); };
 }
 
-function bindMarketShareBrandGmvControls(prefix = 'ms-brand-gmv') {
+function bindMarketShareBrandGmvControls(prefix = 'ms-brand-gmv', state = MS_BRAND_GMV_CHART_STATE, refresh = refreshMarketShareBrandGmvCard) {
     const brand = document.getElementById(`${prefix}-brand`);
     const f = document.getElementById(`${prefix}-from`);
     const t = document.getElementById(`${prefix}-to`);
     const yrs = msData().years || [];
-    if (brand) brand.onchange = () => { MS_BRAND_GMV_STATE.brand = brand.value; refreshMarketShareBrandGmvSection(); };
+    if (brand) brand.onchange = () => { state.brand = brand.value; refresh(); };
     if (f) f.onchange = () => {
-        MS_BRAND_GMV_STATE.from = +f.value;
-        if (yrs.indexOf(MS_BRAND_GMV_STATE.from) > yrs.indexOf(MS_BRAND_GMV_STATE.to)) MS_BRAND_GMV_STATE.to = MS_BRAND_GMV_STATE.from;
-        refreshMarketShareBrandGmvSection();
+        state.from = +f.value;
+        if (yrs.indexOf(state.from) > yrs.indexOf(state.to)) state.to = state.from;
+        refresh();
     };
     if (t) t.onchange = () => {
-        MS_BRAND_GMV_STATE.to = +t.value;
-        if (yrs.indexOf(MS_BRAND_GMV_STATE.to) < yrs.indexOf(MS_BRAND_GMV_STATE.from)) MS_BRAND_GMV_STATE.from = MS_BRAND_GMV_STATE.to;
-        refreshMarketShareBrandGmvSection();
+        state.to = +t.value;
+        if (yrs.indexOf(state.to) < yrs.indexOf(state.from)) state.from = state.to;
+        refresh();
     };
 }
 
@@ -2959,7 +2960,7 @@ function refreshMarketShareBrandGmvCard() {
     const card = document.getElementById('market-share-brand-gmv-card');
     if (!card) return;
     card.innerHTML = marketShareBrandGmvCardInner();
-    bindMarketShareBrandGmvControls('ms-brand-gmv');
+    bindMarketShareBrandGmvControls('ms-brand-gmv', MS_BRAND_GMV_CHART_STATE, refreshMarketShareBrandGmvCard);
     renderMarketShareBrandGmvChartOnly();
 }
 
@@ -2967,7 +2968,7 @@ function refreshMarketShareBrandGmvTableCard() {
     const card = document.getElementById('market-share-brand-gmv-table-card');
     if (!card) return;
     card.innerHTML = buildMarketShareBrandGmvTableHtml();
-    bindMarketShareBrandGmvControls('ms-brand-gmv-table');
+    bindMarketShareBrandGmvControls('ms-brand-gmv-table', MS_BRAND_GMV_TABLE_STATE, refreshMarketShareBrandGmvTableCard);
 }
 
 function refreshMarketShareBrandGmvSection() {
@@ -3001,14 +3002,14 @@ function renderMarketShareCard() {
     brandGmvCard.style.cssText = cardStyle('margin-bottom:24px;');
     brandGmvCard.innerHTML = marketShareBrandGmvCardInner();
     content.appendChild(brandGmvCard);
-    bindMarketShareBrandGmvControls('ms-brand-gmv');
+    bindMarketShareBrandGmvControls('ms-brand-gmv', MS_BRAND_GMV_CHART_STATE, refreshMarketShareBrandGmvCard);
     renderMarketShareBrandGmvChartOnly();
     const brandGmvTableCard = document.createElement('section');
     brandGmvTableCard.id = 'market-share-brand-gmv-table-card';
     brandGmvTableCard.style.cssText = cardStyle('margin-bottom:24px;');
     brandGmvTableCard.innerHTML = buildMarketShareBrandGmvTableHtml();
     content.appendChild(brandGmvTableCard);
-    bindMarketShareBrandGmvControls('ms-brand-gmv-table');
+    bindMarketShareBrandGmvControls('ms-brand-gmv-table', MS_BRAND_GMV_TABLE_STATE, refreshMarketShareBrandGmvTableCard);
 }
 
 function renderIndustryDataCard() {
