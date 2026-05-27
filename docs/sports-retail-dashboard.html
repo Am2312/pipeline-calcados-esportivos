@@ -1685,8 +1685,381 @@ function renderIndustryBestTable() {
     </div>`;
 }
 
+// ===== Sportswear TAM (Euromonitor) — first cards in Sector Data =====
+// Source: Sportswear_Euromonitor.xlsx. Sportswear = Apparel + Footwear (BRL million, current prices).
+// 2011-2024 from Market size sheet; 2025 from Company/Brand shares totals (Footwear = Sportswear - Apparel).
+const SPORTSWEAR_TAM = {
+    years:    [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    apparel:  [9226.8, 10144.8, 11181.6, 11763.1, 11390.2, 10477.8, 11611, 11238, 11044.1, 9920.4, 10836.3, 11345.8, 12457.7, 13686, 15322.4],
+    footwear: [10275.3, 11211.8, 12278, 13697.3, 13278.2, 12709.9, 13008.4, 13355.2, 14077.8, 11732.6, 13769, 14778.9, 16679.2, 18717.4, 21486.7]
+};
+const TAM_STATE = { from: 2011, to: 2025 };
+const TAM_TABLE_STATE = { from: 2011, to: 2025 };
+let tamChart = null;
+
+function tamFmtNum(v, d = 0) { return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function tamFmtPct(v, d = 0) { return Number.isFinite(v) ? `${tamFmtNum(v, d)}%` : 'n.a.'; }
+function tamCagrCalc(s, e, p) { if (!Number.isFinite(s) || !Number.isFinite(e) || s <= 0 || e <= 0 || p <= 0) return null; return (Math.pow(e / s, 1 / p) - 1) * 100; }
+function tamYoySeries(vals) { return vals.map((v, i) => (i === 0 || !vals[i - 1]) ? null : ((v / vals[i - 1]) - 1) * 100); }
+
+function getTamSeries(state) {
+    const years = SPORTSWEAR_TAM.years;
+    const fromIndex = years.indexOf(state.from);
+    const toIndex = years.indexOf(state.to);
+    const apMn = SPORTSWEAR_TAM.apparel, ftMn = SPORTSWEAR_TAM.footwear;
+    const totalMn = years.map((_, i) => apMn[i] + ftMn[i]);
+    const bn = arr => arr.map(v => v / 1000);
+    return {
+        years: years.slice(fromIndex, toIndex + 1),
+        values: bn(totalMn).slice(fromIndex, toIndex + 1),
+        stackedSeries: [
+            { key: 'apparel', label: 'Apparel', color: C.azulEscuro, values: bn(apMn).slice(fromIndex, toIndex + 1) },
+            { key: 'footwear', label: 'Footwear', color: C.turquesa, values: bn(ftMn).slice(fromIndex, toIndex + 1) }
+        ],
+        yoy: tamYoySeries(totalMn).slice(fromIndex, toIndex + 1),
+        cagr: tamCagrCalc(totalMn[fromIndex], totalMn[toIndex], toIndex - fromIndex),
+        apparelCagr: tamCagrCalc(apMn[fromIndex], apMn[toIndex], toIndex - fromIndex),
+        footwearCagr: tamCagrCalc(ftMn[fromIndex], ftMn[toIndex], toIndex - fromIndex),
+        lineColor: C.cereja
+    };
+}
+
+function buildTamComboChart(canvas, selected) {
+    if (!canvas) return null;
+    const labels = selected.years;
+    const yoyData = selected.yoy;
+    const lineColor = selected.lineColor || C.cereja;
+    const barData = selected.values;
+    const barMax = Math.max(...barData) * 1.12;
+    const yoyValues = yoyData.filter(Number.isFinite);
+    const yoyObservedMax = Math.max(...yoyValues, 0);
+    const yoyObservedMin = Math.min(...yoyValues, 0);
+    const yoyRange = Math.max(10, yoyObservedMax - yoyObservedMin);
+    const yoyScaleMax = Math.ceil(yoyObservedMax + Math.max(4, yoyRange * 0.08));
+    const yoyScaleMin = Math.floor(yoyObservedMin - Math.max(4, yoyRange * 0.10));
+    const datasets = [];
+    selected.stackedSeries.forEach(s => datasets.push({
+        type: 'bar', label: s.label, data: s.values, stack: 'tam', yAxisID: 'y', order: 2,
+        backgroundColor: s.color, borderColor: s.color, borderWidth: 0, borderSkipped: false,
+        barPercentage: 0.74, categoryPercentage: 0.88
+    }));
+    datasets.push({
+        type: 'line', label: 'YoY', data: yoyData, yAxisID: 'y1', order: 1,
+        borderColor: lineColor, backgroundColor: lineColor, borderWidth: 2.5,
+        pointRadius: 3, pointBackgroundColor: lineColor, pointBorderColor: lineColor,
+        pointHoverRadius: 5, pointHitRadius: 18, tension: 0.25
+    });
+    const labelPlugin = {
+        id: 'tamLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx, chartArea } = chart;
+            const lineIndex = chart.data.datasets.findIndex(ds => ds.type === 'line');
+            const lineMeta = lineIndex >= 0 ? chart.getDatasetMeta(lineIndex) : null;
+            const lineVisible = lineIndex >= 0 && chart.isDatasetVisible(lineIndex);
+            const yoyBoxes = [];
+            const barInfos = [];
+            chart.data.datasets.forEach((ds, idx) => {
+                if (ds.type === 'bar' && chart.isDatasetVisible(idx)) barInfos.push({ meta: chart.getDatasetMeta(idx), data: ds.data });
+            });
+            const stackTops = labels.map((_, index) => {
+                let topY = null, barRef = null, sum = 0;
+                barInfos.forEach(info => {
+                    const bar = info.meta.data[index];
+                    if (!bar) return;
+                    if (topY === null || bar.y < topY) { topY = bar.y; barRef = bar; }
+                    const val = info.data[index];
+                    if (Number.isFinite(val)) sum += val;
+                });
+                return { topY, barRef, sum };
+            });
+            ctx.save();
+            ctx.font = '700 11px Verdana';
+            if (lineMeta && lineVisible) lineMeta.data.forEach((point, index) => {
+                const value = yoyData[index];
+                if (!point || !Number.isFinite(value)) return;
+                const text = `${Math.round(value)}%`;
+                const width = ctx.measureText(text).width + 14;
+                const height = 22;
+                let x = point.x - width / 2;
+                let y = point.y - height / 2;
+                x = Math.max(chartArea.left + 2, Math.min(x, chartArea.right - width - 2));
+                y = Math.max(chartArea.top + 4, y);
+                yoyBoxes[index] = { x, y, width, height };
+            });
+            ctx.restore();
+            ctx.save();
+            ctx.font = '700 12px Verdana';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = C.branco;
+            chart.data.datasets.forEach((ds, idx) => {
+                if (ds.type !== 'bar' || !chart.isDatasetVisible(idx)) return;
+                const meta = chart.getDatasetMeta(idx);
+                meta.data.forEach((bar, i) => {
+                    const value = ds.data[i];
+                    if (!bar || !Number.isFinite(value)) return;
+                    const segHeight = Math.abs(bar.base - bar.y);
+                    if (segHeight < 18) return;
+                    const labelX = bar.x;
+                    let labelY = bar.y + (bar.base - bar.y) / 2;
+                    const text = tamFmtNum(value, 0);
+                    const box = yoyBoxes[i];
+                    if (box) {
+                        const tw = ctx.measureText(text).width;
+                        const overlapsX = Math.abs(labelX - (box.x + box.width / 2)) < ((tw + box.width) / 2);
+                        const overlapsY = Math.abs(labelY - (box.y + box.height / 2)) < ((16 + box.height) / 2);
+                        if (overlapsX && overlapsY) {
+                            const segTop = Math.min(bar.y, bar.base), segBottom = Math.max(bar.y, bar.base);
+                            const candDown = box.y + box.height + 9, candUp = box.y - 9;
+                            if ((box.y + box.height / 2) <= labelY && candDown + 8 <= segBottom - 2) labelY = candDown;
+                            else if (candUp - 8 >= segTop + 2) labelY = candUp;
+                            else if (candDown + 8 <= segBottom - 2) labelY = candDown;
+                            labelY = Math.max(segTop + 10, Math.min(segBottom - 10, labelY));
+                        }
+                    }
+                    ctx.fillText(text, labelX, labelY);
+                });
+            });
+            ctx.fillStyle = C.azulEscuro;
+            stackTops.forEach((stack, index) => {
+                if (!stack || stack.topY == null || !stack.barRef) return;
+                const text = tamFmtNum(stack.sum, 0);
+                let labelX = stack.barRef.x;
+                let labelY = Math.max(chartArea.top + 9, stack.topY - 12);
+                const box = yoyBoxes[index];
+                if (box) {
+                    const tw = ctx.measureText(text).width;
+                    const overlapsX = Math.abs(labelX - (box.x + box.width / 2)) < ((tw + box.width) / 2);
+                    const overlapsY = Math.abs(labelY - (box.y + box.height / 2)) < ((14 + box.height) / 2);
+                    if (overlapsX && overlapsY) labelY = Math.max(chartArea.top + 9, box.y - 11);
+                }
+                ctx.fillText(text, labelX, labelY);
+            });
+            ctx.font = '700 11px Verdana';
+            ctx.textBaseline = 'middle';
+            if (lineMeta && lineVisible) lineMeta.data.forEach((point, index) => {
+                const value = yoyData[index];
+                if (!point || !Number.isFinite(value)) return;
+                const text = `${Math.round(value)}%`;
+                const width = ctx.measureText(text).width + 14;
+                const height = 22;
+                const box = yoyBoxes[index] || { x: Math.max(chartArea.left + 2, Math.min(point.x - width / 2, chartArea.right - width - 2)), y: Math.max(chartArea.top + 4, point.y - 11) };
+                ctx.fillStyle = lineColor;
+                roundedRect(ctx, box.x, box.y, width, height, 4);
+                ctx.fill();
+                ctx.fillStyle = C.branco;
+                ctx.fillText(text, box.x + width / 2, box.y + height / 2 + 0.5);
+            });
+            ctx.restore();
+        }
+    };
+    return new Chart(canvas.getContext('2d'), {
+        type: 'bar', plugins: [labelPlugin], data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            layout: { padding: { top: 52, right: 26, left: 0, bottom: 0 } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF',
+                    borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12,
+                    callbacks: {
+                        label(ctx2) {
+                            const v = ctx2.parsed.y;
+                            if (ctx2.dataset.yAxisID === 'y1') return v == null ? '' : `  YoY: ${tamFmtPct(v, 1)}`;
+                            return `  ${ctx2.dataset.label}: R$ ${tamFmtNum(v, 1)} bn`;
+                        },
+                        footer(items) {
+                            const total = items.filter(c => c.dataset.yAxisID !== 'y1').reduce((sum, c) => sum + (Number.isFinite(c.parsed.y) ? c.parsed.y : 0), 0);
+                            return total ? `  Total: R$ ${tamFmtNum(total, 1)} bn` : '';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true, ticks: { color: C.azulEscuro40, font: { family: 'Verdana', size: 10.5 }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: C.azulEscuro20 } },
+                y: { stacked: true, min: 0, max: barMax, ticks: { display: false }, grid: { display: false }, border: { display: false } },
+                y1: { position: 'right', min: yoyScaleMin, max: yoyScaleMax, ticks: { display: false }, grid: { display: false, drawOnChartArea: false }, border: { display: false } }
+            }
+        }
+    });
+}
+
+function tamChartCardInner() {
+    const s = getTamSeries(TAM_STATE);
+    const pill = (label, val, bg) => `<div style="background:${bg};border-radius:10px;padding:9px 16px;text-align:center;min-width:118px;"><div style="font-size:11.5px;color:#021C45;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;line-height:1;">${label}</div><div style="font-size:16px;color:#021C45;font-weight:700;line-height:1;margin-top:5px;">${val == null ? 'n.a.' : tamFmtPct(val, 0)}</div></div>`;
+    const yearOpts = sel => SPORTSWEAR_TAM.years.map(y => `<option value="${y}" ${y === sel ? 'selected' : ''}>${y}</option>`).join('');
+    const header = `
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;width:100%;margin-bottom:10px;">
+            <div>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Brazil Sportswear Total Market</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(BRL bn, Percentage)</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                ${pill('TAM CAGR', s.cagr, '#EDF1F5')}
+                ${pill('Apparel CAGR', s.apparelCagr, '#D4EDFD')}
+                ${pill('Footwear CAGR', s.footwearCagr, '#C3F2EF')}
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+                ${selectBlock('From', `<select class="df-input" id="tam-from" style="width:96px;">${yearOpts(TAM_STATE.from)}</select>`)}
+                ${selectBlock('To', `<select class="df-input" id="tam-to" style="width:96px;">${yearOpts(TAM_STATE.to)}</select>`)}
+            </div>
+        </div>`;
+    const legend = legendHtml([
+        { label: 'Apparel', color: C.azulEscuro },
+        { label: 'Footwear', color: C.turquesa },
+        { label: 'YoY', color: C.cereja }
+    ]);
+    return `${header}<div style="position:relative;height:560px;overflow:hidden;">${legend}<canvas id="tam-chart" style="position:absolute;left:0;top:0;width:100%;height:100%;"></canvas></div>`;
+}
+
+function renderTamChart() {
+    if (tamChart) { tamChart.destroy(); tamChart = null; }
+    tamChart = buildTamComboChart(document.getElementById('tam-chart'), getTamSeries(TAM_STATE));
+}
+
+function bindTamControls() {
+    const f = document.getElementById('tam-from'), t = document.getElementById('tam-to');
+    if (!f || !t) return;
+    const yrs = SPORTSWEAR_TAM.years;
+    f.onchange = () => { TAM_STATE.from = +f.value; if (yrs.indexOf(TAM_STATE.from) > yrs.indexOf(TAM_STATE.to)) TAM_STATE.to = TAM_STATE.from; refreshTamChartCard(); };
+    t.onchange = () => { TAM_STATE.to = +t.value; if (yrs.indexOf(TAM_STATE.to) < yrs.indexOf(TAM_STATE.from)) TAM_STATE.from = TAM_STATE.to; refreshTamChartCard(); };
+}
+
+function refreshTamChartCard() {
+    const card = document.getElementById('tam-chart-card');
+    if (!card) return;
+    card.innerHTML = tamChartCardInner();
+    bindTamControls();
+    renderTamChart();
+}
+
+function buildTamTableHtml() {
+    const years = SPORTSWEAR_TAM.years;
+    const fromIndex = years.indexOf(TAM_TABLE_STATE.from);
+    const toIndex = years.indexOf(TAM_TABLE_STATE.to);
+    const shown = years.slice(fromIndex, toIndex + 1);
+    const apMn = SPORTSWEAR_TAM.apparel, ftMn = SPORTSWEAR_TAM.footwear;
+    const totalMn = years.map((_, i) => apMn[i] + ftMn[i]);
+    const tamValBn = shown.map((_, i) => totalMn[fromIndex + i] / 1000);
+    const tamYoyFull = years.map((_, i) => (i === 0 || !totalMn[i - 1]) ? null : (totalMn[i] / totalMn[i - 1] - 1) * 100);
+    const tamYoy = tamYoyFull.slice(fromIndex, toIndex + 1); if (fromIndex > 0) tamYoy[0] = null;
+    const tamCagrV = tamCagrCalc(totalMn[fromIndex], totalMn[toIndex], toIndex - fromIndex);
+    const catRows = [{ label: 'Apparel', mn: apMn }, { label: 'Footwear', mn: ftMn }].map(cat => {
+        const valBn = cat.mn.slice(fromIndex, toIndex + 1).map(v => v / 1000);
+        const yoyFull = years.map((_, i) => (i === 0 || !cat.mn[i - 1]) ? null : (cat.mn[i] / cat.mn[i - 1] - 1) * 100);
+        const yoy = yoyFull.slice(fromIndex, toIndex + 1); if (fromIndex > 0) yoy[0] = null;
+        const share = years.map((_, i) => totalMn[i] > 0 ? (cat.mn[i] / totalMn[i]) * 100 : 0).slice(fromIndex, toIndex + 1);
+        const cCagr = tamCagrCalc(cat.mn[fromIndex], cat.mn[toIndex], toIndex - fromIndex);
+        const ppVar = share.length >= 2 ? share[share.length - 1] - share[0] : 0;
+        return { label: cat.label, valBn, yoy, share, cCagr, ppVar };
+    });
+    const ppPill = v => {
+        if (!Number.isFinite(v) || Math.abs(v) < 0.5) return `<span style="display:inline-block;padding:2px 8px;border-radius:5px;background:#EEF2F6;color:#7A879B;font-size:12px;font-weight:400;border:1px solid #E2E8F0;">0pp</span>`;
+        const sign = v > 0 ? '+' : '';
+        const style = v > 0 ? 'background:#DAF1ED;color:#0D8B80;border:1px solid #CCE9E3;' : 'background:#F8D5DC;color:#C2384E;border:1px solid #F0C5CE;';
+        return `<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:12px;font-weight:400;${style}">${sign}${tamFmtNum(v, 0)}pp</span>`;
+    };
+    const yoyCellStyle = 'color:#021C45;font-size:11.5px;line-height:1.35;';
+    const yoyColored = v => { if (v == null) return `<span style="color:#667D99;">n.a.</span>`; const color = v >= 0 ? '#0D8B80' : '#C2384E'; return `<span style="color:${color};">${tamFmtPct(v, 0)}</span>`; };
+    const gapCell = `<td style="width:22px;min-width:22px;padding:0;border:none;background:transparent;"></td>`;
+    const gapHead = `<th style="width:22px;min-width:22px;padding:0;border:none;background:transparent;"></th>`;
+    const yearOpts = sel => SPORTSWEAR_TAM.years.map(y => `<option value="${y}" ${y === sel ? 'selected' : ''}>${y}</option>`).join('');
+    const headHtml = `
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:2px 0 12px 0;">
+            <div>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">TAM Breakdown by Category</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(BRL bn, Percentage)</p>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+                ${selectBlock('From', `<select class="df-input" id="tam-table-from" style="width:96px;">${yearOpts(TAM_TABLE_STATE.from)}</select>`)}
+                ${selectBlock('To', `<select class="df-input" id="tam-table-to" style="width:96px;">${yearOpts(TAM_TABLE_STATE.to)}</select>`)}
+            </div>
+        </div>`;
+    const headerRow = `
+        <tr>
+            <th style="background:#082654;color:#FFFFFF;text-align:left;padding:14px 14px;font-size:12.5px;font-weight:700;width:230px;min-width:230px;position:sticky;left:0;z-index:2;border-radius:6px 0 0 0;"></th>
+            ${shown.map((y, i) => `<th style="background:#082654;color:#FFFFFF;font-size:12.5px;font-weight:700;padding:14px 10px;text-align:center;white-space:nowrap;${i === shown.length - 1 ? 'border-radius:0 6px 0 0;' : ''}">${y}</th>`).join('')}
+            ${gapHead}
+            <th style="background:#FF5B76;color:#FFFFFF;font-size:12.5px;font-weight:700;padding:14px 12px;text-align:center;white-space:nowrap;width:110px;min-width:110px;border-radius:6px 6px 0 0;">CAGR or Var</th>
+        </tr>`;
+    const tamRows = `
+        <tr>
+            <td style="padding:6px 14px;font-size:13px;font-weight:700;color:#021C45;position:sticky;left:0;background:#A7DDDB;white-space:nowrap;">TAM</td>
+            ${tamValBn.map(v => `<td style="text-align:center;padding:6px 10px;font-size:13px;font-weight:700;color:#021C45;background:#A7DDDB;">${tamFmtNum(v, 0)}</td>`).join('')}
+            ${gapCell}
+            <td style="text-align:center;padding:6px 12px;font-size:13px;font-weight:700;color:#021C45;background:#FFFFFF;white-space:nowrap;">${tamCagrV == null ? 'n.a.' : tamFmtPct(tamCagrV, 0)}</td>
+        </tr>
+        <tr style="background:#FFFFFF;">
+            <td style="padding:6px 14px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;position:sticky;left:0;background:#FFFFFF;white-space:nowrap;">YoY (%)</td>
+            ${tamYoy.map(v => `<td style="text-align:center;padding:6px 10px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;">${yoyColored(v)}</td>`).join('')}
+            ${gapCell}
+            <td style="padding:6px 12px 10px;background:#FFFFFF;border-bottom:1px solid #CFD8E3;"></td>
+        </tr>`;
+    const catHtml = catRows.map((row, idx) => {
+        const name = `${idx + 1}. ${row.label}`;
+        const valueCells = row.valBn.map(v => `<td style="text-align:center;padding:10px 10px 2px;font-size:13px;font-weight:700;color:#021C45;">${tamFmtNum(v, 0)}</td>`).join('');
+        const yoyCells = row.yoy.map(v => `<td style="text-align:center;padding:2px 10px;${yoyCellStyle}">${yoyColored(v)}</td>`).join('');
+        const shareCells = row.share.map(v => `<td style="text-align:center;padding:2px 10px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;">${tamFmtNum(v, 0)}%</td>`).join('');
+        return `
+            <tr style="background:#FFFFFF;">
+                <td style="padding:10px 14px 2px;font-size:13px;font-weight:700;color:#021C45;position:sticky;left:0;background:#FFFFFF;white-space:nowrap;">${name}</td>
+                ${valueCells}
+                ${gapCell}
+                <td style="text-align:center;padding:10px 12px 2px;font-size:13px;font-weight:700;color:#021C45;background:#FFFFFF;white-space:nowrap;">${row.cCagr == null ? 'n.a.' : tamFmtPct(row.cCagr, 0)}</td>
+            </tr>
+            <tr style="background:#FFFFFF;">
+                <td style="padding:2px 14px;${yoyCellStyle}position:sticky;left:0;background:#FFFFFF;white-space:nowrap;">YoY (%)</td>
+                ${yoyCells}
+                ${gapCell}
+                <td style="background:#FFFFFF;"></td>
+            </tr>
+            <tr style="background:#FFFFFF;">
+                <td style="padding:2px 14px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;position:sticky;left:0;background:#FFFFFF;white-space:nowrap;">% of Total</td>
+                ${shareCells}
+                ${gapCell}
+                <td style="text-align:center;padding:2px 12px 10px;border-bottom:1px solid #CFD8E3;background:#FFFFFF;white-space:nowrap;">${ppPill(row.ppVar)}</td>
+            </tr>`;
+    }).join('');
+    return `${headHtml}<div style="overflow-x:auto;"><table style="border-collapse:separate;border-spacing:0;width:100%;min-width:1000px;background:#FFFFFF;"><thead>${headerRow}</thead><tbody>${tamRows}${catHtml}</tbody></table></div>`;
+}
+
+function bindTamTableControls() {
+    const f = document.getElementById('tam-table-from'), t = document.getElementById('tam-table-to');
+    if (!f || !t) return;
+    const yrs = SPORTSWEAR_TAM.years;
+    f.onchange = () => { TAM_TABLE_STATE.from = +f.value; if (yrs.indexOf(TAM_TABLE_STATE.from) > yrs.indexOf(TAM_TABLE_STATE.to)) TAM_TABLE_STATE.to = TAM_TABLE_STATE.from; refreshTamTableCard(); };
+    t.onchange = () => { TAM_TABLE_STATE.to = +t.value; if (yrs.indexOf(TAM_TABLE_STATE.to) < yrs.indexOf(TAM_TABLE_STATE.from)) TAM_TABLE_STATE.from = TAM_TABLE_STATE.to; refreshTamTableCard(); };
+}
+
+function refreshTamTableCard() {
+    const card = document.getElementById('tam-table-card');
+    if (!card) return;
+    card.innerHTML = buildTamTableHtml();
+    bindTamTableControls();
+}
+
+function renderSportswearTamCards() {
+    const content = document.getElementById('tab-content');
+    const chartCard = document.createElement('section');
+    chartCard.id = 'tam-chart-card';
+    chartCard.style.cssText = cardStyle('margin-bottom:24px;');
+    chartCard.innerHTML = tamChartCardInner();
+    content.appendChild(chartCard);
+    bindTamControls();
+    renderTamChart();
+    const tableCard = document.createElement('section');
+    tableCard.id = 'tam-table-card';
+    tableCard.style.cssText = cardStyle('margin-bottom:24px;');
+    tableCard.innerHTML = buildTamTableHtml();
+    content.appendChild(tableCard);
+    bindTamTableControls();
+}
+
 function renderIndustryDataCard() {
     const content = document.getElementById('tab-content');
+    renderSportswearTamCards();
     ensureSectorRange();
     ensureSectorBreakdownRange();
 
