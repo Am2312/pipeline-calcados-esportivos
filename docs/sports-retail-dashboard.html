@@ -1385,8 +1385,31 @@ function vulcabrasMarketShareRows() {
 }
 
 function selectedVulcabrasMarketShareRows() {
-    ensureSectorBreakdownRange();
-    return vulcabrasMarketShareRows().filter(row => String(row.year) >= String(sectorBreakdownState.from) && String(row.year) <= String(sectorBreakdownState.to));
+    const totalByYear = new Map(vulcabrasMarketShareRows().map(row => [Number(row.year), row]));
+    const d = msData();
+    const years = d.years || [];
+    const brands = d.brands?.footwear || {};
+    const namedDenominator = msDenominatorSeries('footwear', 'named');
+    return years
+        .filter(year => year >= MS_STATE.from && year <= MS_STATE.to)
+        .map(year => {
+            const index = years.indexOf(year);
+            const namedTotal = Number(namedDenominator[index] || 0);
+            const vulcabrasNamedGmv = MS_VULCABRAS.reduce((sum, brand) => {
+                const value = brands[brand]?.[index];
+                return sum + (Number.isFinite(value) ? Number(value) : 0);
+            }, 0);
+            const total = totalByYear.get(Number(year));
+            return {
+                year,
+                label: String(year),
+                totalShare: Number.isFinite(total?.share) ? total.share : null,
+                namedShare: namedTotal ? vulcabrasNamedGmv / namedTotal : null,
+                vulcabrasVolumeMn: total?.vulcabrasVolumeMn ?? null,
+                abicalVolumeMn: total?.abicalVolumeMn ?? null,
+            };
+        })
+        .filter(row => Number.isFinite(row.totalShare) || Number.isFinite(row.namedShare));
 }
 
 function vulcabrasShareAxis(values) {
@@ -1410,8 +1433,9 @@ function renderVulcabrasShareChart() {
     if (!el) return;
     const rows = selectedVulcabrasMarketShareRows();
     const labels = rows.map(row => row.label);
-    const shares = rows.map(row => row.share);
-    const axis = vulcabrasShareAxis(shares);
+    const totalShares = rows.map(row => row.totalShare);
+    const namedShares = rows.map(row => row.namedShare);
+    const axis = vulcabrasShareAxis([...totalShares, ...namedShares]);
     const labelPlugin = {
         id: 'vulcabrasShareLabels',
         afterDraw(chart) {
@@ -1426,43 +1450,81 @@ function renderVulcabrasShareChart() {
             ctx.restore();
         },
         afterDatasetsDraw(chart) {
-            const meta = chart.getDatasetMeta(0);
-            if (!meta.visible) return;
             const ctx = chart.ctx;
+            const badgesByIndex = new Map();
             ctx.save();
             ctx.font = '800 11px Verdana';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            meta.data.forEach((point, i) => {
-                const value = shares[i];
-                if (!point || !Number.isFinite(value)) return;
-                const text = fmtPctEN(value, 1);
-                const bw = ctx.measureText(text).width + 14;
-                const bh = 22;
-                const x = point.x - bw / 2;
-                const y = Math.max(chart.chartArea.top + 4, Math.min(point.y - bh / 2, chart.chartArea.bottom - bh - 4));
-                ctx.fillStyle = C.azulEscuro;
-                roundedRect(ctx, x, y, bw, bh, 4);
-                ctx.fill();
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
+            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                if (!chart.isDatasetVisible(datasetIndex)) return;
+                const meta = chart.getDatasetMeta(datasetIndex);
+                (meta.data || []).forEach((point, i) => {
+                    const value = dataset.data[i];
+                    if (!point || !Number.isFinite(value)) return;
+                    const text = fmtPctEN(value, 1);
+                    const width = ctx.measureText(text).width + 14;
+                    const height = 22;
+                    if (!badgesByIndex.has(i)) badgesByIndex.set(i, []);
+                    badgesByIndex.get(i).push({
+                        text,
+                        color: dataset.borderColor,
+                        x: point.x - width / 2,
+                        desiredY: point.y - height / 2,
+                        width,
+                        height,
+                    });
+                });
+            });
+            badgesByIndex.forEach(badges => {
+                badges.sort((a, b) => a.desiredY - b.desiredY);
+                const gap = 4;
+                badges.forEach((badge, index) => {
+                    const minY = index ? badges[index - 1].y + badges[index - 1].height + gap : chart.chartArea.top + 2;
+                    badge.y = Math.max(minY, Math.min(badge.desiredY, chart.chartArea.bottom - badge.height - 2));
+                });
+                const overflow = badges.length ? badges[badges.length - 1].y + badges[badges.length - 1].height - (chart.chartArea.bottom - 2) : 0;
+                if (overflow > 0) badges.forEach(badge => { badge.y = Math.max(chart.chartArea.top + 2, badge.y - overflow); });
+                badges.forEach(badge => {
+                    badge.x = Math.max(chart.chartArea.left + 2, Math.min(badge.x, chart.chartArea.right - badge.width - 2));
+                    ctx.fillStyle = badge.color;
+                    roundedRect(ctx, badge.x, badge.y, badge.width, badge.height, 4);
+                    ctx.fill();
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillText(badge.text, badge.x + badge.width / 2, badge.y + badge.height / 2 + 0.5);
+                });
             });
             ctx.restore();
         }
     };
     vulcabrasShareChartInstance = new Chart(el.getContext('2d'), {
         type: 'line',
-        data: { labels, datasets: [{
-            label: 'Market Share',
-            data: shares,
-            borderColor: C.azulEscuro,
-            backgroundColor: C.azulEscuro,
-            borderWidth: 2.5,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHitRadius: 18,
-            tension: 0.25
-        }] },
+        data: { labels, datasets: [
+            {
+                label: 'Total Market Share',
+                data: totalShares,
+                borderColor: C.azulEscuro,
+                backgroundColor: C.azulEscuro,
+                borderWidth: 2.5,
+                pointRadius: 0,
+                pointHoverRadius: 5,
+                pointHitRadius: 18,
+                tension: 0.25,
+                spanGaps: false,
+            },
+            {
+                label: 'Vulcabras - Named Players',
+                data: namedShares,
+                borderColor: C.turquesa,
+                backgroundColor: C.turquesa,
+                borderWidth: 2.5,
+                pointRadius: 0,
+                pointHoverRadius: 5,
+                pointHitRadius: 18,
+                tension: 0.25,
+                spanGaps: false,
+            }
+        ] },
         plugins: [labelPlugin],
         options: {
             responsive: true,
@@ -1482,7 +1544,8 @@ function renderVulcabrasShareChart() {
                     callbacks: {
                         label: c => {
                             const row = rows[c.dataIndex];
-                            return `  Share: ${fmtPctEN(row.share, 1)} | Vulcabras: ${fmtNumberEN(row.vulcabrasVolumeMn, 1)}mn / Abicalcados: ${fmtNumberEN(row.abicalVolumeMn, 1)}mn`;
+                            if (c.datasetIndex === 1) return `  Vulcabras - Named Players: ${fmtPctEN(row.namedShare, 1)}`;
+                            return `  Total Market Share: ${fmtPctEN(row.totalShare, 1)}${Number.isFinite(row.vulcabrasVolumeMn) ? ` | Vulcabras: ${fmtNumberEN(row.vulcabrasVolumeMn, 1)}mn / Abicalcados: ${fmtNumberEN(row.abicalVolumeMn, 1)}mn` : ''}`;
                         }
                     }
                 }
@@ -1495,6 +1558,28 @@ function renderVulcabrasShareChart() {
     });
 }
 
+function bindVulcabrasShareLegend(chart) {
+    if (!chart) return;
+    const sync = () => document.querySelectorAll('#vulcabras-share-card .chart-legend-item[data-dataset-index]').forEach(item => {
+        item.classList.toggle('is-hidden', !chart.isDatasetVisible(Number(item.dataset.datasetIndex)));
+    });
+    document.querySelectorAll('#vulcabras-share-card .chart-legend-item[data-dataset-index]').forEach(item => {
+        const toggle = () => {
+            const index = Number(item.dataset.datasetIndex);
+            chart.setDatasetVisibility(index, !chart.isDatasetVisible(index));
+            chart.update();
+            sync();
+        };
+        item.addEventListener('click', toggle);
+        item.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            toggle();
+        });
+    });
+    sync();
+}
+
 function renderVulcabrasShareCard() {
     const content = document.getElementById('tab-content');
     const existing = document.getElementById('vulcabras-share-card');
@@ -1502,11 +1587,15 @@ function renderVulcabrasShareCard() {
     card.id = 'vulcabras-share-card';
     card.style.cssText = cardStyle('margin-bottom:24px;');
     card.innerHTML = `
-        ${sectionTitle('Vulcabras Volume Market Share', '(Percentage)', '')}
-        <div style="margin-top:18px;">${legendHtml([{ label: 'Market Share', color: C.azulEscuro, datasetIndex: 0 }])}</div>
+        ${sectionTitle('Vulcabras Market Share', '(Percentage)', '')}
+        <div style="margin-top:18px;">${legendHtml([
+            { label: 'Total Market Share', color: C.azulEscuro, datasetIndex: 0 },
+            { label: 'Vulcabras - Named Players', color: C.turquesa, datasetIndex: 1 }
+        ])}</div>
         <div style="position:relative;height:420px;margin-top:-6px;"><canvas id="vulcabras-share-chart"></canvas></div>`;
     if (!existing) content.appendChild(card);
     renderVulcabrasShareChart();
+    bindVulcabrasShareLegend(vulcabrasShareChartInstance);
 }
 
 function niceSectorAxisMax(maxValue) {
@@ -2356,8 +2445,8 @@ function getMarketShareModel() {
         })
     }));
     series.push({
-        key: MS_STATE.shareBasis === 'named' ? 'Other Named' : 'Others',
-        label: MS_STATE.shareBasis === 'named' ? 'Other Named' : 'Others',
+        key: 'Others',
+        label: 'Others',
         color: MS_OTHERS_COLOR,
         data: shownYears.map((_, si) => Math.max(0, 100 - series.reduce((s, ser) => s + ser.data[si], 0)))
     });
@@ -2979,6 +3068,7 @@ function refreshMarketShareBrandGmvSection() {
 function refreshMarketShareSection() {
     refreshMarketShareCard();
     refreshMarketShareTableCard();
+    renderVulcabrasShareCard();
     refreshMarketShareBrandGmvSection();
 }
 
@@ -2997,6 +3087,7 @@ function renderMarketShareCard() {
     tableCard.innerHTML = marketShareTableInner();
     content.appendChild(tableCard);
     bindMarketShareControls('ms-table');
+    renderVulcabrasShareCard();
     const brandGmvCard = document.createElement('section');
     brandGmvCard.id = 'market-share-brand-gmv-card';
     brandGmvCard.style.cssText = cardStyle('margin-bottom:24px;');
@@ -3056,7 +3147,6 @@ function renderIndustryDataCard() {
         </div>`;
     if (!tableExisting) content.appendChild(tableCard);
 
-    renderVulcabrasShareCard();
 }
 
 function cagedSourceRows() {
@@ -5312,7 +5402,7 @@ function renderMethodologyPage() {
                         <td><strong>Named Players</strong></td>
                         <td>Soma do GMV de todas as marcas nomeadas na base, excluindo o residual Others</td>
                         <td>Market Share ajustado = GMV da marca / Σ GMV das marcas nomeadas</td>
-                        <td>É uma leitura de participação dentro do universo de players identificados. O residual exibido no gráfico/tabela é <strong>Other Named</strong>, ou seja, marcas nomeadas que não estão entre as principais séries exibidas.</td>
+                        <td>É uma leitura de participação dentro do universo de players identificados. O residual exibido no gráfico/tabela é <strong>Others</strong>, ou seja, marcas nomeadas que não estão entre as principais séries exibidas.</td>
                     </tr>
                 </tbody>
             </table>
