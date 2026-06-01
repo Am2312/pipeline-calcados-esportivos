@@ -1577,5 +1577,6 @@ window.toggleAvgDiscSeriesPanel     = toggleAvgDiscSeriesPanel;
 window.onAvgDiscSeriesToggle        = onAvgDiscSeriesToggle;
 window.onAvgDiscGranChange          = onAvgDiscGranChange;
 window.buildAvgDiscAll              = buildAvgDiscAll;
+window.toggleLegendSeries           = toggleLegendSeries;  // legend click-to-hide (price/disc/avgdisc)
 
 })(); // end IIFE
