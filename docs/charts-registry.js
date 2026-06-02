@@ -285,3 +285,260 @@ registerChart({
   estadoAtual: function () { return { category: presentationMsState.category, vulcabras: presentationMsState.vulcabras, basis: presentationMsState.basis, from: presentationMsState.from, to: presentationMsState.to }; },
   aplicarEstado: function (e) { if (e) Object.assign(presentationMsState, e); }
 });
+
+/* ---------------------------------------------------------------------
+   E-commerce (Price/Disc/AvgDisc/Franchise) — relocados VERBATIM da
+   apresentação. Dependem de helpers GLOBAIS do presentation-v2.html
+   (ecomSetGlobalSport, legendaDoChart, ajustarFontesTemplate, legendaHTML)
+   e dos módulos window._ecom… / window._fr… (ecom-chart.js / franchise-chart.js).
+   Só são invocados na apresentação. dashboardNative (o dash renderiza ecom
+   nativamente via _ecomInit). Método-shorthand é válido aqui.
+   --------------------------------------------------------------------- */
+registerChart({
+  id: 'ecom-price', titulo: 'Average Price — Sports Footwear E-commerce', unidade: '(BRL)', dashboardNative: true,
+  legendaDinamica() { return legendaDoChart(this._lastChart); },
+  desenhar(canvas) {
+    canvas.id = 'price-chart';
+    const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
+    ecomSetGlobalSport(sp ? sp.value : 'performance');
+    if (window._ecomBuildPriceOnly) window._ecomBuildPriceOnly();
+    const c = Chart.getChart(canvas); this._lastChart = c; return c;
+  },
+  montarControles() {
+    return `<label>Sport <select data-ecom-sport>
+              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>
+            <label>View <select id="view-mode">
+              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option></select></label>
+            <label id="comp-channel-block">Channel <select id="comp-channel">
+              <option value="total">Total</option><option value="website">Website</option><option value="netshoes">Netshoes</option><option value="centauro">Centauro</option><option value="free" selected>Free Choice</option></select></label>
+            <label id="breakdown-brand-block" style="display:none;">Company <select id="breakdown-brand">
+              <option value="adidas">Adidas</option><option value="nike">Nike</option><option value="ua">Under Armour</option><option value="asics">Asics</option><option value="olympikus">Olympikus</option><option value="mizuno">Mizuno</option></select></label>
+            <label id="series-trigger-block">Series <span class="series-trigger" id="series-trigger"><span id="series-trigger-label">5 series</span> ▼</span></label>
+            <label>Price <select id="metric-select"><option value="p_sale" selected>Sale</option><option value="p_list">List</option></select></label>
+            <label>Gran <select id="gran-select"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
+            <label>From <select id="from-select"></select></label>
+            <label>To <select id="to-select"></select></label>
+            <div id="series-panel"></div>`;
+  },
+  ligarControles(box, redesenhar) {
+    const $ = s => box.querySelector(s);
+    const setState = patch => { if (window._ecomSetState) window._ecomSetState('price', patch); redesenhar(); };
+    $('[data-ecom-sport]').addEventListener('change', e => { ecomSetGlobalSport(e.target.value); redesenhar(); });
+    $('#view-mode').addEventListener('change', e => setState({ view: e.target.value }));
+    $('#comp-channel').addEventListener('change', e => setState({ channel: e.target.value }));
+    $('#breakdown-brand').addEventListener('change', e => setState({ brand: e.target.value }));
+    $('#gran-select').addEventListener('change', redesenhar);
+    $('#metric-select').addEventListener('change', redesenhar);
+    $('#from-select').addEventListener('change', redesenhar);
+    $('#to-select').addEventListener('change', redesenhar);
+    $('#series-trigger').addEventListener('click', () => window.toggleSeriesPanel());
+    if (!window.__ecomToggleWrapped) {
+      const orig = window.onSeriesToggle;
+      window.onSeriesToggle = function (k) { try { orig(k); } catch (e) {} redesenhar(); };
+      window.__ecomToggleWrapped = true;
+    }
+  },
+  estadoAtual() {
+    const g = id => { const e = document.getElementById(id); return e ? e.value : undefined; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]');
+    return { sport: sp ? sp.value : 'performance', view: g('view-mode'), channel: g('comp-channel'), brand: g('breakdown-brand'), metric: g('metric-select'), gran: g('gran-select'), from: g('from-select'), to: g('to-select') };
+  },
+  aplicarEstado(e) {
+    if (!e) return;
+    if (window._ecomSetState) window._ecomSetState('price', { view: e.view, channel: e.channel, brand: e.brand });
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]'); if (sp && e.sport != null) sp.value = e.sport;
+    ecomSetGlobalSport(e.sport);
+    set('view-mode', e.view); set('comp-channel', e.channel); set('breakdown-brand', e.brand);
+    set('metric-select', e.metric); set('gran-select', e.gran); set('from-select', e.from); set('to-select', e.to);
+  }
+});
+
+registerChart({
+  id: 'ecom-disc', titulo: '% of Discounted SKUs — E-commerce', unidade: '(Percentage)', dashboardNative: true,
+  legendaDinamica() { return legendaDoChart(this._lastChart); },
+  desenhar(canvas) {
+    canvas.id = 'disc-chart';
+    const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
+    ecomSetGlobalSport(sp ? sp.value : 'performance');
+    if (window._ecomBuildDiscOnly) window._ecomBuildDiscOnly();
+    const c = Chart.getChart(canvas); this._lastChart = c; return c;
+  },
+  montarControles() {
+    return `<label>Sport <select data-ecom-sport>
+              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>
+            <label>View <select id="disc-view-mode">
+              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option></select></label>
+            <label id="disc-comp-channel-block">Channel <select id="disc-comp-channel">
+              <option value="total">Total</option><option value="website">Website</option><option value="netshoes">Netshoes</option><option value="centauro">Centauro</option><option value="free" selected>Free Choice</option></select></label>
+            <label id="disc-breakdown-brand-block" style="display:none;">Company <select id="disc-breakdown-brand">
+              <option value="adidas">Adidas</option><option value="nike">Nike</option><option value="ua">Under Armour</option><option value="asics">Asics</option><option value="olympikus">Olympikus</option><option value="mizuno">Mizuno</option></select></label>
+            <label id="disc-series-trigger-block">Series <span class="series-trigger" id="disc-series-trigger"><span id="disc-series-trigger-label">5 series</span> ▼</span></label>
+            <label>Gran <select id="disc-gran-select"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
+            <label>From <select id="disc-from-select"></select></label>
+            <label>To <select id="disc-to-select"></select></label>
+            <div id="disc-series-panel"></div>`;
+  },
+  ligarControles(box, redesenhar) {
+    const $ = s => box.querySelector(s);
+    const setState = patch => { if (window._ecomSetState) window._ecomSetState('disc', patch); redesenhar(); };
+    $('[data-ecom-sport]').addEventListener('change', e => { ecomSetGlobalSport(e.target.value); redesenhar(); });
+    $('#disc-view-mode').addEventListener('change', e => setState({ view: e.target.value }));
+    $('#disc-comp-channel').addEventListener('change', e => setState({ channel: e.target.value }));
+    $('#disc-breakdown-brand').addEventListener('change', e => setState({ brand: e.target.value }));
+    $('#disc-gran-select').addEventListener('change', redesenhar);
+    $('#disc-from-select').addEventListener('change', redesenhar);
+    $('#disc-to-select').addEventListener('change', redesenhar);
+    $('#disc-series-trigger').addEventListener('click', () => window.toggleDiscSeriesPanel());
+    if (!window.__ecomDiscToggleWrapped) {
+      const orig = window.onDiscSeriesToggle;
+      window.onDiscSeriesToggle = function (k) { try { orig(k); } catch (e) {} redesenhar(); };
+      window.__ecomDiscToggleWrapped = true;
+    }
+  },
+  estadoAtual() {
+    const g = id => { const e = document.getElementById(id); return e ? e.value : undefined; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]');
+    return { sport: sp ? sp.value : 'performance', view: g('disc-view-mode'), channel: g('disc-comp-channel'), brand: g('disc-breakdown-brand'), gran: g('disc-gran-select'), from: g('disc-from-select'), to: g('disc-to-select') };
+  },
+  aplicarEstado(e) {
+    if (!e) return;
+    if (window._ecomSetState) window._ecomSetState('disc', { view: e.view, channel: e.channel, brand: e.brand });
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]'); if (sp && e.sport != null) sp.value = e.sport;
+    ecomSetGlobalSport(e.sport);
+    set('disc-view-mode', e.view); set('disc-comp-channel', e.channel); set('disc-breakdown-brand', e.brand);
+    set('disc-gran-select', e.gran); set('disc-from-select', e.from); set('disc-to-select', e.to);
+  }
+});
+
+registerChart({
+  id: 'ecom-avgdisc', titulo: 'Average Discount — E-commerce', unidade: '(Percentage)', dashboardNative: true,
+  legendaDinamica() { return legendaDoChart(this._lastChart); },
+  desenhar(canvas) {
+    canvas.id = 'avgdisc-chart';
+    const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
+    ecomSetGlobalSport(sp ? sp.value : 'performance');
+    if (window._ecomBuildAvgDiscOnly) window._ecomBuildAvgDiscOnly();
+    const c = Chart.getChart(canvas); this._lastChart = c; return c;
+  },
+  montarControles() {
+    return `<label>Sport <select data-ecom-sport>
+              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>
+            <label>View <select id="avgdisc-view-mode">
+              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option></select></label>
+            <label id="avgdisc-comp-channel-block">Channel <select id="avgdisc-comp-channel">
+              <option value="total">Total</option><option value="website">Website</option><option value="netshoes">Netshoes</option><option value="centauro">Centauro</option><option value="free" selected>Free Choice</option></select></label>
+            <label id="avgdisc-breakdown-brand-block" style="display:none;">Company <select id="avgdisc-breakdown-brand">
+              <option value="adidas">Adidas</option><option value="nike">Nike</option><option value="ua">Under Armour</option><option value="asics">Asics</option><option value="olympikus">Olympikus</option><option value="mizuno">Mizuno</option></select></label>
+            <label id="avgdisc-series-trigger-block">Series <span class="series-trigger" id="avgdisc-series-trigger"><span id="avgdisc-series-trigger-label">5 series</span> ▼</span></label>
+            <label>Scope <select id="avgdisc-scope"><option value="all" selected>All items</option><option value="promo">Discounted only</option></select></label>
+            <label>Gran <select id="avgdisc-gran-select"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
+            <label>From <select id="avgdisc-from-select"></select></label>
+            <label>To <select id="avgdisc-to-select"></select></label>
+            <div id="avgdisc-series-panel"></div>`;
+  },
+  ligarControles(box, redesenhar) {
+    const $ = s => box.querySelector(s);
+    const setState = patch => { if (window._ecomSetState) window._ecomSetState('avgdisc', patch); redesenhar(); };
+    $('[data-ecom-sport]').addEventListener('change', e => { ecomSetGlobalSport(e.target.value); redesenhar(); });
+    $('#avgdisc-view-mode').addEventListener('change', e => setState({ view: e.target.value }));
+    $('#avgdisc-comp-channel').addEventListener('change', e => setState({ channel: e.target.value }));
+    $('#avgdisc-breakdown-brand').addEventListener('change', e => setState({ brand: e.target.value }));
+    $('#avgdisc-scope').addEventListener('change', redesenhar);
+    $('#avgdisc-gran-select').addEventListener('change', redesenhar);
+    $('#avgdisc-from-select').addEventListener('change', redesenhar);
+    $('#avgdisc-to-select').addEventListener('change', redesenhar);
+    $('#avgdisc-series-trigger').addEventListener('click', () => window.toggleAvgDiscSeriesPanel());
+    if (!window.__ecomAvgToggleWrapped) {
+      const orig = window.onAvgDiscSeriesToggle;
+      window.onAvgDiscSeriesToggle = function (k) { try { orig(k); } catch (e) {} redesenhar(); };
+      window.__ecomAvgToggleWrapped = true;
+    }
+  },
+  estadoAtual() {
+    const g = id => { const e = document.getElementById(id); return e ? e.value : undefined; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]');
+    return { sport: sp ? sp.value : 'performance', view: g('avgdisc-view-mode'), channel: g('avgdisc-comp-channel'), brand: g('avgdisc-breakdown-brand'), scope: g('avgdisc-scope'), gran: g('avgdisc-gran-select'), from: g('avgdisc-from-select'), to: g('avgdisc-to-select') };
+  },
+  aplicarEstado(e) {
+    if (!e) return;
+    if (window._ecomSetState) window._ecomSetState('avgdisc', { view: e.view, channel: e.channel, brand: e.brand });
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]'); if (sp && e.sport != null) sp.value = e.sport;
+    ecomSetGlobalSport(e.sport);
+    set('avgdisc-view-mode', e.view); set('avgdisc-comp-channel', e.channel); set('avgdisc-breakdown-brand', e.brand);
+    set('avgdisc-scope', e.scope); set('avgdisc-gran-select', e.gran); set('avgdisc-from-select', e.from); set('avgdisc-to-select', e.to);
+  }
+});
+
+registerChart({
+  id: 'ecom-franchise', titulo: 'Price Pass-Through — Sports Footwear E-commerce', unidade: '(Percentage, price change vs prior period)', dashboardNative: true,
+  legendaDinamica() { return legendaDoChart(this._lastChart); },
+  desenhar(canvas) {
+    canvas.id = 'fr-chart';
+    const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
+    ecomSetGlobalSport(sp ? sp.value : 'all');
+    if (!window.__frAfterRenderSet) {
+      window.__frAfterRender = function () {
+        const cv = document.getElementById('fr-chart'); const ch = cv && Chart.getChart(cv);
+        if (!ch || !cv) return;
+        const slideEl = cv.closest('.slide');
+        const su = ((slideEl ? slideEl.getBoundingClientRect().height : 0) || 800) / 100;
+        ajustarFontesTemplate(ch, su);
+        const legEl = slideEl && slideEl.querySelector('.chart-legend');
+        if (legEl) legEl.innerHTML = legendaHTML(legendaDoChart(ch));
+      };
+      window.__frAfterRenderSet = true;
+    }
+    const vEl = document.getElementById('fr-view'), cEl = document.getElementById('fr-channel');
+    if (window._frSetState) window._frSetState({ view: vEl ? vEl.value : undefined, channel: cEl ? cEl.value : undefined });
+    if (window._frInit) window._frInit();
+    const c = Chart.getChart(canvas); this._lastChart = c; return c;
+  },
+  montarControles() {
+    return `<label>Sport <select data-ecom-sport>
+              <option value="corrida">Corrida</option><option value="performance">Performance</option><option value="all" selected>All</option></select></label>
+            <label>View <select id="fr-view">
+              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option><option value="model">Model Breakdown</option></select></label>
+            <label id="fr-channel-block">Channel <select id="fr-channel">
+              <option value="total">Total</option><option value="website">Website</option><option value="centauro">Centauro</option><option value="netshoes">Netshoes</option><option value="free" selected>Free Choice</option></select></label>
+            <label id="fr-brand-block" style="display:none;">Company <select id="fr-brand">
+              <option value="Adidas">Adidas</option><option value="Nike">Nike</option><option value="Under Armour">Under Armour</option><option value="Asics">Asics</option><option value="Olympikus">Olympikus</option><option value="Mizuno">Mizuno</option></select></label>
+            <label id="fr-model-channel-block" style="display:none;">Model channel <select id="fr-model-channel">
+              <option value="total">Total</option><option value="website">Website</option><option value="centauro">Centauro</option><option value="netshoes">Netshoes</option></select></label>
+            <label id="fr-series-trigger-block">Series <span class="series-trigger" id="fr-series-trigger"><span id="fr-series-trigger-label">5 series</span> ▼</span></label>
+            <label>Method <select id="fr-method"><option value="A" selected>A · Mean vs Mean</option><option value="B">B · Gen vs Gen</option></select></label>
+            <label>Price <select id="fr-price"><option value="sale" selected>Sale</option><option value="list">List</option></select></label>
+            <label>Window <select id="fr-window">
+              <option value="1w">WoW</option><option value="1m">MoM</option><option value="3m" selected>QoQ</option><option value="1y">YoY</option><option value="ytd">YTD</option></select></label>
+            <label>Gran <select id="fr-gran"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
+            <label>From <select id="fr-from"></select></label>
+            <label>To <select id="fr-to"></select></label>`;
+  },
+  ligarControles(box, redesenhar) {
+    const $ = s => box.querySelector(s);
+    $('[data-ecom-sport]').addEventListener('change', e => { ecomSetGlobalSport(e.target.value); redesenhar(); });
+    ['#fr-view', '#fr-channel', '#fr-brand', '#fr-model-channel', '#fr-method', '#fr-price', '#fr-window', '#fr-gran', '#fr-from', '#fr-to']
+      .forEach(sel => { const el = $(sel); if (el) el.addEventListener('change', redesenhar); });
+    const trig = $('#fr-series-trigger');
+    if (trig) trig.addEventListener('click', () => window.toggleFrSeriesPanel && window.toggleFrSeriesPanel());
+  },
+  estadoAtual() {
+    const g = id => { const e = document.getElementById(id); return e ? e.value : undefined; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]');
+    return { sport: sp ? sp.value : 'all', view: g('fr-view'), channel: g('fr-channel'), brand: g('fr-brand'),
+             modelChannel: g('fr-model-channel'), method: g('fr-method'), price: g('fr-price'),
+             window: g('fr-window'), gran: g('fr-gran'), from: g('fr-from'), to: g('fr-to') };
+  },
+  aplicarEstado(e) {
+    if (!e) return;
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const sp = document.querySelector('.slide:not([hidden]) [data-ecom-sport]'); if (sp && e.sport != null) sp.value = e.sport;
+    ecomSetGlobalSport(e.sport);
+    set('fr-view', e.view); set('fr-channel', e.channel); set('fr-brand', e.brand); set('fr-model-channel', e.modelChannel);
+    set('fr-method', e.method); set('fr-price', e.price); set('fr-window', e.window); set('fr-gran', e.gran);
+    set('fr-from', e.from); set('fr-to', e.to);
+    if (window._frSetState) window._frSetState({ view: e.view, channel: e.channel });
+  }
+});
