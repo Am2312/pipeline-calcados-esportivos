@@ -218,3 +218,70 @@ registerChart({
   estadoAtual: function () { return { from: DASH.VULCABRAS_SHARE_STATE.from, to: DASH.VULCABRAS_SHARE_STATE.to }; },
   aplicarEstado: function (e) { if (e) Object.assign(DASH.VULCABRAS_SHARE_STATE, e); }
 });
+
+/* ---------------------------------------------------------------------
+   Flash-case (TAM, TAM Highlight, Market Share) — funções/estado globais
+   de charts_dashboard.js (resolvem por nome no momento do desenho; só são
+   invocados na apresentação). dashboardNative.
+   --------------------------------------------------------------------- */
+registerChart({
+  id: 'tam-mercado',
+  titulo: 'Brazilian Sportswear — Total Market',
+  unidade: '(BRL bn, Percentage)',
+  dashboardNative: true,
+  desenhar: function (canvas) { return buildPresentationTamChart(canvas); },
+  montarControles: function () {
+    var ops = sportswearTamData.years.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
+    return '<label>From <select data-tam-control="from">' + ops + '</select></label><label>To <select data-tam-control="to">' + ops + '</select></label>';
+  },
+  ligarControles: function (box, redesenhar) {
+    var from = box.querySelector('[data-tam-control="from"]'), to = box.querySelector('[data-tam-control="to"]');
+    from.value = presentationTamState.from; to.value = presentationTamState.to;
+    from.addEventListener('change', function (e) { presentationTamState.from = Number(e.target.value); redesenhar(); });
+    to.addEventListener('change', function (e) { presentationTamState.to = Number(e.target.value); redesenhar(); });
+  },
+  estadoAtual: function () { return { from: presentationTamState.from, to: presentationTamState.to }; },
+  aplicarEstado: function (e) { if (e) Object.assign(presentationTamState, e); }
+});
+
+registerChart({
+  id: 'tam-destaque',
+  titulo: 'Brazilian Sportswear — Recent Acceleration',
+  unidade: '(BRL bn, Percentage)',
+  dashboardNative: true,
+  desenhar: function (canvas) { return buildTamHighlightChart(canvas); }
+});
+
+registerChart({
+  id: 'market-share',
+  titulo: 'Sportswear Market Share',
+  unidade: '(Percentage)',
+  dashboardNative: true,
+  legendaDinamica: function () {
+    var model = getPresentationMsModel();
+    if (!model) return [];
+    return model.series.map(function (s) { return { cor: s.color, texto: s.label }; });
+  },
+  desenhar: function (canvas) { return buildPresentationMsChart(canvas, getPresentationMsModel()); },
+  montarControles: function () {
+    var ops = sportswearBrandShares.years.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
+    return '<label>Category <select data-ms="category"><option value="footwear">Footwear</option><option value="apparel">Apparel</option><option value="total">Total</option></select></label>' +
+           '<label>Vulcabras <select data-ms="vulcabras"><option value="combined">Combined</option><option value="separate">Separate</option></select></label>' +
+           '<label>Basis <select data-ms="basis"><option value="named">Named brands</option><option value="total">Total market</option></select></label>' +
+           '<label>From <select data-ms="from">' + ops + '</select></label>' +
+           '<label>To <select data-ms="to">' + ops + '</select></label>';
+  },
+  ligarControles: function (box, redesenhar) {
+    var cat = box.querySelector('[data-ms="category"]'), vulc = box.querySelector('[data-ms="vulcabras"]'), basis = box.querySelector('[data-ms="basis"]');
+    var fromSel = box.querySelector('[data-ms="from"]'), toSel = box.querySelector('[data-ms="to"]');
+    cat.value = presentationMsState.category; vulc.value = presentationMsState.vulcabras; basis.value = presentationMsState.basis;
+    fromSel.value = presentationMsState.from; toSel.value = presentationMsState.to;
+    cat.addEventListener('change', function (e) { presentationMsState.category = e.target.value; redesenhar(); });
+    vulc.addEventListener('change', function (e) { presentationMsState.vulcabras = e.target.value; redesenhar(); });
+    basis.addEventListener('change', function (e) { presentationMsState.basis = e.target.value; redesenhar(); });
+    fromSel.addEventListener('change', function (e) { presentationMsState.from = Number(e.target.value); redesenhar(); });
+    toSel.addEventListener('change', function (e) { presentationMsState.to = Number(e.target.value); redesenhar(); });
+  },
+  estadoAtual: function () { return { category: presentationMsState.category, vulcabras: presentationMsState.vulcabras, basis: presentationMsState.basis, from: presentationMsState.from, to: presentationMsState.to }; },
+  aplicarEstado: function (e) { if (e) Object.assign(presentationMsState, e); }
+});
