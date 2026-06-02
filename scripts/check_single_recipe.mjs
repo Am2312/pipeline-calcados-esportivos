@@ -87,8 +87,12 @@ check(franchise.includes('_frSetState'),
    Conta <select> (montarControles) + entradas {key:...} (controles declarativos)
    dentro do bloco registerChart de cada id. Usa >= (adicionar caixa nunca falha;
    só falha se faltar). Ao mudar caixas no dashboard, atualize o número aqui. */
+// NOTA: gráficos migrados para "lista única" (spec compartilhado lido pelos 2 lados,
+// ex.: imports-data via window.IMPORTS_CONTROL_SPEC) saem deste manifesto — neles a
+// divergência é impossível por construção (uma só definição) e a contagem estática
+// de <select> não se aplica (as caixas são montadas em runtime a partir do array).
 const EXPECTED_CONTROLS = {
-  'footwear-decomp': 2, 'brand-gmv': 3, 'sector-data': 3, 'imports-data': 6,
+  'footwear-decomp': 2, 'brand-gmv': 3, 'sector-data': 3,
   'vulcabras-share': 3, 'tam-mercado': 2, 'tam-destaque': 0, 'market-share': 5,
   'caged-jobs': 3, 'headcount-volume': 4, 'cost-index': 5,
   'ecom-price': 8, 'ecom-disc': 7, 'ecom-avgdisc': 8, 'ecom-franchise': 11

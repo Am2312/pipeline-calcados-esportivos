@@ -216,6 +216,18 @@ registerChart({
   aplicarEstado: function (e) { if (e) Object.assign(DASH.sectorState, e); }
 });
 
+/* ---- LISTA ÚNICA DE CAIXAS do Imports (fonte de verdade dos seletores) ------
+   O dashboard E a apresentação carregam este arquivo e montam as caixas a partir
+   DESTA lista. Adicionar/remover uma caixa aqui = aparece/some nos DOIS lados,
+   sem editar mais nada. (From/To são dinâmicos e ficam fora da lista; cada lado
+   os monta com seu próprio helper de período.) onchange = handler nativo do dash. */
+window.IMPORTS_CONTROL_SPEC = window.IMPORTS_CONTROL_SPEC || [
+  { key: 'view',   label: 'View',   width: 148, onchange: 'setImportsView()',   options: [{ v: 'line', t: 'Line' }, { v: 'stacked', t: 'Stacked bar' }] },
+  { key: 'grain',  label: 'Grain',  width: 126, onchange: 'setImportsGrain()',  options: [{ v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'annual', t: 'Annual' }] },
+  { key: 'base',   label: 'Base',   width: 126, onchange: 'setImportsBase()',   disableWhenAnnual: true, options: [{ v: 'spot', t: 'Spot' }, { v: 'ltm', t: 'LTM' }] },
+  { key: 'metric', label: 'Metric', width: 116, onchange: 'setImportsMetric()', options: [{ v: 'fob', t: 'FOB' }, { v: 'volume', t: 'Volume' }] }
+];
+
 registerChart({
   id: 'imports-data',
   titulo: 'Sports Footwear Imports',
@@ -225,10 +237,12 @@ registerChart({
   subtituloDinamico: function () { return DASH.importsState.metric === 'volume' ? '(mn pairs)' : '(USD mn)'; },
   desenhar: function (canvas) { regClaimId(canvas, 'imports-main-chart'); DASH.renderImportsChart(); return Chart.getChart(canvas); },
   montarControles: function () {
-    return '<label>View <select data-im="view"><option value="line">Total</option><option value="stacked">By country</option></select></label>' +
-           '<label>Grain <select data-im="grain"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>' +
-           '<label>Base <select data-im="base"><option value="spot">Spot</option><option value="ltm">LTM</option></select></label>' +
-           '<label>Metric <select data-im="metric"><option value="fob">FOB</option><option value="volume">Volume</option></select></label>' +
+    // monta as caixas simples a partir da LISTA ÚNICA + acrescenta From/To
+    var simples = window.IMPORTS_CONTROL_SPEC.map(function (c) {
+      var opts = c.options.map(function (o) { return '<option value="' + o.v + '">' + o.t + '</option>'; }).join('');
+      return '<label>' + c.label + ' <select data-im="' + c.key + '">' + opts + '</select></label>';
+    }).join('');
+    return simples +
            '<label>From <select data-im="from"></select></label>' +
            '<label>To <select data-im="to"></select></label>';
   },

@@ -777,11 +777,19 @@ function selectBlock(label, html) {
 function importsControlsHtml() {
     ensureRange();
     const baseDisabled = importsState.grain === 'annual';
+    // Caixas simples (View/Grain/Base/Metric) vêm da LISTA ÚNICA do charts-registry.js
+    // (window.IMPORTS_CONTROL_SPEC) → o mesmo array que a apresentação usa. Adicionar
+    // uma caixa lá faz ela aparecer aqui E no PPT. Fallback defensivo se o registry
+    // ainda não carregou. From/To continuam dinâmicos (helper de período).
+    const spec = window.IMPORTS_CONTROL_SPEC || [];
+    const simples = spec.map(sp => {
+        const disabled = (sp.disableWhenAnnual && baseDisabled) ? ' disabled' : '';
+        const opts = sp.options.map(o => `<option value="${o.v}" ${importsState[sp.key] === o.v ? 'selected' : ''}>${o.t}</option>`).join('');
+        const sel = `<select id="imports-${sp.key}-select" class="df-input" onchange="${sp.onchange}" style="width:${sp.width}px;"${disabled}>${opts}</select>`;
+        return selectBlock(sp.label, sel);
+    }).join('');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin-left:auto;">
-        ${selectBlock('View', `<select id="imports-view-select" class="df-input" onchange="setImportsView()" style="width:148px;"><option value="line" ${importsState.view === 'line' ? 'selected' : ''}>Line</option><option value="stacked" ${importsState.view === 'stacked' ? 'selected' : ''}>Stacked bar</option></select>`)}
-        ${selectBlock('Grain', `<select id="imports-grain-select" class="df-input" onchange="setImportsGrain()" style="width:126px;"><option value="monthly" ${importsState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${importsState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${importsState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
-        ${selectBlock('Base', `<select id="imports-base-select" class="df-input" onchange="setImportsBase()" style="width:126px;" ${baseDisabled ? 'disabled' : ''}><option value="spot" ${importsState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${importsState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
-        ${selectBlock('Metric', `<select id="imports-metric-select" class="df-input" onchange="setImportsMetric()" style="width:116px;"><option value="fob" ${importsState.metric === 'fob' ? 'selected' : ''}>FOB</option><option value="volume" ${importsState.metric === 'volume' ? 'selected' : ''}>Volume</option></select>`)}
+        ${simples}
         ${selectBlock('From', buildPeriodSelect('imports-from-select', importsState.from, 'setImportsRange()'))}
         ${selectBlock('To', buildPeriodSelect('imports-to-select', importsState.to, 'setImportsRange()'))}
     </div>`;
