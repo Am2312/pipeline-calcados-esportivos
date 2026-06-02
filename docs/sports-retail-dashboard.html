@@ -20,6 +20,8 @@
     <script src="./data/vulcabras_volume_data.js"></script>
     <script src="./data/sports_retail_cost_index_data.js"></script>
     <script src="./data/sportswear_brand_shares_data.js"></script>
+    <!-- ÍNDICE DE GRÁFICOS COMPARTILHADO (single source: este dashboard + apresentação Vulcabras) -->
+    <script src="./charts-registry.js"></script>
     <script>
         tailwind.config = {
             theme: { extend: { colors: {
@@ -6113,11 +6115,59 @@ function renderEcomDataTab() {
     if (window._ecomInit) window._ecomInit();
 }
 
+// Renderiza um gráfico vindo do ÍNDICE COMPARTILHADO (charts-registry.js) num card padrão.
+// Aditivo: não interfere nos gráficos hard-coded; só roda quando a aba ativa é um id do registry.
+function renderRegistryChart(def) {
+    const content = document.getElementById('tab-content');
+    const canvasId = 'registry-canvas-' + def.id;
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:14px;padding:24px 28px 28px;max-width:1800px;margin:0 auto;box-shadow:0 1px 3px rgba(2,28,69,0.08);';
+    card.innerHTML =
+        '<div style="font-size:18px;font-weight:800;color:#021C45;">' + (def.titulo || def.id) + '</div>' +
+        '<div style="font-size:12px;color:#667D99;margin:2px 0 18px;">' + (def.unidade || '') + '</div>' +
+        '<div class="registry-controls" style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:18px;"></div>' +
+        '<div style="position:relative;height:520px;"><canvas id="' + canvasId + '"></canvas></div>';
+    content.appendChild(card);
+
+    const cv = document.getElementById(canvasId);
+    const draw = function() { const ex = Chart.getChart(cv); if (ex) ex.destroy(); def.desenhar(cv); };
+
+    const ctlBox = card.querySelector('.registry-controls');
+    const controles = Array.isArray(def.controles) ? def.controles : [];
+    controles.forEach(function(c) {
+        const ops = (typeof c.opcoes === 'function' ? c.opcoes() : (c.opcoes || []));
+        const sel = document.createElement('select');
+        sel.className = 'control-select';
+        sel.innerHTML = ops.map(function(o) {
+            const v = (o && o.v !== undefined) ? o.v : o;
+            const t = (o && o.t !== undefined) ? o.t : v;
+            return '<option value="' + v + '">' + t + '</option>';
+        }).join('');
+        if (c.get) { const v = c.get(); if (v != null) sel.value = v; }
+        sel.addEventListener('change', function(e) { if (c.set) c.set(e.target.value); draw(); });
+        const lbl = document.createElement('label');
+        lbl.className = 'control-block';
+        lbl.innerHTML = '<span class="control-label" style="color:#667D99;">' + (c.label || c.key) + '</span>';
+        lbl.appendChild(sel);
+        ctlBox.appendChild(lbl);
+    });
+    if (!controles.length) ctlBox.style.display = 'none';
+
+    draw();
+}
+
 function renderContent() {
     // Destroy ecom chart instances before wiping DOM (prevents orphaned Chart.js references)
     if (window._ecomDestroy) window._ecomDestroy();
     const content = document.getElementById('tab-content');
     content.innerHTML = '';
+    // ÍNDICE COMPARTILHADO: se a aba ativa é um gráfico do registry, renderiza e sai.
+    const _regDef = (window.DASHBOARD_CHARTS || []).find(function(d) { return d.id === activeTab; });
+    if (_regDef) {
+        renderRegistryChart(_regDef);
+        document.getElementById('footer-source').textContent = _regDef.fonte || '';
+        return;
+    }
     if (activeTab === 'ecom-data') {
         renderEcomDataTab();
         return;
@@ -6160,7 +6210,14 @@ function renderContent() {
 
 document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', { year:'numeric', month:'short', day:'2-digit' });
 // renderTabs/renderContent run after DOMContentLoaded so the <template> element below is available
-document.addEventListener('DOMContentLoaded', function() { renderTabs(); renderContent(); });
+document.addEventListener('DOMContentLoaded', function() {
+    // ÍNDICE COMPARTILHADO: gráficos do registry que ainda não são abas hard-coded viram abas novas (no fim).
+    (window.DASHBOARD_CHARTS || []).forEach(function(d) {
+        if (!d || !d.id || d.dashboardNative) return;   // legados já têm aba própria no dashboard
+        if (!TABS.some(function(t) { return t.id === d.id; })) TABS.push({ id: d.id, label: d.titulo || d.id });
+    });
+    renderTabs(); renderContent();
+});
 </script>
 <template id="ecom-tab-template">
 <div style="max-width:1800px;margin:0 auto;">
