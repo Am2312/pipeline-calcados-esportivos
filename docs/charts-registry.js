@@ -108,6 +108,10 @@ window.SPORTSWEAR_TAM = window.SPORTSWEAR_TAM || {
    Constante duplicada (dashboard CAGED_RAIS_2019_BASE × apresentação cagedRais2019Base). */
 window.CAGED_RAIS_2019_BASE = window.CAGED_RAIS_2019_BASE || 13105;
 
+/* ---- Market Share / Brand GMV: paleta de cores (cosmética) -------------
+   Duplicada (dashboard MS_PALETTE × apresentação MS_PALETTE). */
+window.MS_PALETTE = window.MS_PALETTE || ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2C70', '#9AA8BB', '#CCD4DD'];
+
 /* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
