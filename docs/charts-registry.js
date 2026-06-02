@@ -95,6 +95,15 @@ window.COST_INDEX = window.COST_INDEX || (function () {
   return { CONFIG: CONFIG, WEIGHTS: WEIGHTS, ORDER: ORDER, blendedSeries: blendedSeries, seriesMap: seriesMap };
 })();
 
+/* ---- SPORTSWEAR TAM (Euromonitor) — dados de mercado p/ TAM + Highlight -
+   Dado duplicado historicamente (dashboard SPORTSWEAR_TAM × apresentação
+   sportswearTamData). Agora mora aqui; os 2 lados leem daqui. -------------- */
+window.SPORTSWEAR_TAM = window.SPORTSWEAR_TAM || {
+  years:    [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  apparel:  [9226.8, 10144.8, 11181.6, 11763.1, 11390.2, 10477.8, 11611, 11238, 11044.1, 9920.4, 10836.3, 11345.8, 12457.7, 13686, 15322.4],
+  footwear: [10275.3, 11211.8, 12278, 13697.3, 13278.2, 12709.9, 13008.4, 13355.2, 14077.8, 11732.6, 13769, 14778.9, 16679.2, 18717.4, 21486.7]
+};
+
 /* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
