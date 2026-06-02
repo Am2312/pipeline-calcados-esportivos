@@ -264,7 +264,8 @@ registerChart({
   montarControles: function () {
     var yrs = DASH.msData().years || [];
     var ops = yrs.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
-    return '<label>From <select data-vs="from">' + ops + '</select></label><label>To <select data-vs="to">' + ops + '</select></label>';
+    return '<label>Frequency <select data-vs="frequency"><option value="annual">Annual</option></select></label>' +
+           '<label>From <select data-vs="from">' + ops + '</select></label><label>To <select data-vs="to">' + ops + '</select></label>';
   },
   ligarControles: function (box, redesenhar) {
     var f = box.querySelector('[data-vs="from"]'), t = box.querySelector('[data-vs="to"]');
@@ -647,11 +648,14 @@ registerChart({
   montarControles() {
     return `<label>View <select data-vy="mode">
               <option value="quarterly">Quarterly YoY</option><option value="ltm">LTM YoY</option></select></label>
+            <label>Jobs Shift <select data-vy="shift">
+              <option value="0">No shift</option><option value="1">+3M</option><option value="2">+6M</option></select></label>
             <label>From <select data-vy="from"></select></label>
             <label>To <select data-vy="to"></select></label>`;
   },
   ligarControles(box, redesenhar) {
     const mode = box.querySelector('[data-vy="mode"]');
+    const shift = box.querySelector('[data-vy="shift"]');
     const fromSel = box.querySelector('[data-vy="from"]');
     const toSel = box.querySelector('[data-vy="to"]');
     const popular = () => {
@@ -663,12 +667,14 @@ registerChart({
       fromSel.value = presentationVolumeYoyState.from; toSel.value = presentationVolumeYoyState.to;
     };
     mode.value = presentationVolumeYoyState.mode;
+    shift.value = String(presentationVolumeYoyState.shiftQuarters);
     popular();
     mode.addEventListener('change', () => { presentationVolumeYoyState.from = null; presentationVolumeYoyState.to = null; popular(); redesenhar(); });
+    shift.addEventListener('change', () => { presentationVolumeYoyState.shiftQuarters = Number(shift.value); presentationVolumeYoyState.from = null; presentationVolumeYoyState.to = null; popular(); redesenhar(); });
     fromSel.addEventListener('change', () => { presentationVolumeYoyState.from = fromSel.value; redesenhar(); });
     toSel.addEventListener('change', () => { presentationVolumeYoyState.to = toSel.value; redesenhar(); });
   },
-  estadoAtual() { return { mode: presentationVolumeYoyState.mode, from: presentationVolumeYoyState.from, to: presentationVolumeYoyState.to }; },
+  estadoAtual() { return { mode: presentationVolumeYoyState.mode, shiftQuarters: presentationVolumeYoyState.shiftQuarters, from: presentationVolumeYoyState.from, to: presentationVolumeYoyState.to }; },
   aplicarEstado(e) { if (e) Object.assign(presentationVolumeYoyState, e); }
 });
 

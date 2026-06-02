@@ -80,6 +80,41 @@ check(franchise.includes('_frSetState'),
   'franchise-chart.js expõe _frSetState',
   'franchise-chart.js NÃO tem _frSetState — a apresentação quebra');
 
+/* 6) PARIDADE DE CONTROLES: cada gráfico precisa expor no índice pelo menos
+   tantas caixas seletoras quanto o dashboard tem. Pega o bug de "caixa que some
+   silenciosamente" (foi o caso do Metric no imports-data e do Jobs Shift no
+   headcount-volume). EXPECTED = nº de caixas do dashboard p/ cada gráfico.
+   Conta <select> (montarControles) + entradas {key:...} (controles declarativos)
+   dentro do bloco registerChart de cada id. Usa >= (adicionar caixa nunca falha;
+   só falha se faltar). Ao mudar caixas no dashboard, atualize o número aqui. */
+const EXPECTED_CONTROLS = {
+  'footwear-decomp': 2, 'brand-gmv': 3, 'sector-data': 3, 'imports-data': 6,
+  'vulcabras-share': 3, 'tam-mercado': 2, 'tam-destaque': 0, 'market-share': 5,
+  'caged-jobs': 3, 'headcount-volume': 4, 'cost-index': 5,
+  'ecom-price': 8, 'ecom-disc': 7, 'ecom-avgdisc': 8, 'ecom-franchise': 11
+};
+function chartBlocks(src) {
+  const blocks = {};
+  const idxs = [];
+  const re = /registerChart\(\{/g;
+  let m;
+  while ((m = re.exec(src))) idxs.push(m.index);
+  for (let i = 0; i < idxs.length; i++) {
+    const seg = src.slice(idxs[i], i + 1 < idxs.length ? idxs[i + 1] : src.length);
+    const idm = seg.match(/id:\s*['"]([^'"]+)['"]/);
+    if (idm) blocks[idm[1]] = seg;
+  }
+  return blocks;
+}
+const _blocks = chartBlocks(registry);
+for (const [id, exp] of Object.entries(EXPECTED_CONTROLS)) {
+  const seg = _blocks[id] || '';
+  const count = (seg.match(/<select/g) || []).length + (seg.match(/\bkey:\s*['"]/g) || []).length;
+  check(count >= exp,
+    `controles de "${id}" presentes (${count}/${exp})`,
+    `gráfico "${id}" expõe só ${count} caixa(s) de controle no índice, esperado >= ${exp} (paridade com o dashboard) — um seletor sumiu/faltou. Veja montarControles/controles do "${id}" no charts-registry.js`);
+}
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));
