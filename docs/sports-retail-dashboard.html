@@ -6161,8 +6161,10 @@ function renderContent() {
     if (window._ecomDestroy) window._ecomDestroy();
     const content = document.getElementById('tab-content');
     content.innerHTML = '';
-    // ÍNDICE COMPARTILHADO: se a aba ativa é um gráfico do registry, renderiza e sai.
-    const _regDef = (window.DASHBOARD_CHARTS || []).find(function(d) { return d.id === activeTab; });
+    // ÍNDICE COMPARTILHADO: se a aba ativa é um gráfico NÃO-nativo do registry, renderiza e sai.
+    // (dashboardNative = o dashboard já desenha nativamente; nunca rotear pelo registry — evita
+    //  colisão de id com abas hard-coded, ex: 'imports-data', e o uso de DASH ausente aqui.)
+    const _regDef = (window.DASHBOARD_CHARTS || []).find(function(d) { return d.id === activeTab && !d.dashboardNative; });
     if (_regDef) {
         renderRegistryChart(_regDef);
         document.getElementById('footer-source').textContent = _regDef.fonte || '';

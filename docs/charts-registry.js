@@ -128,3 +128,93 @@ registerChart({
     ]
   });
 })();
+
+/* ---------------------------------------------------------------------
+   DASH render*-based (Sector, Imports, Vulcabras Share) — relocados
+   VERBATIM da apresentação. Imperativos (trazem os próprios controles);
+   usam window.DASH (só são invocados na apresentação). dashboardNative.
+   legendaDinamica omitida de propósito → a engine usa legendaDoChart.
+   --------------------------------------------------------------------- */
+registerChart({
+  id: 'sector-data',
+  titulo: 'Sports Footwear — Sector Data',
+  unidade: '(mn pairs, Percentage)',
+  dashboardNative: true,
+  desenhar: function (canvas) { canvas.id = 'industry-main-chart'; DASH.renderIndustryChart(); return Chart.getChart(canvas); },
+  montarControles: function () {
+    var metricOps = Object.keys(DASH.SECTOR_METRICS).map(function (k) { return '<option value="' + k + '">' + DASH.SECTOR_METRICS[k].label + '</option>'; }).join('');
+    var yrs = Array.from(new Set(DASH.sectorRows().map(function (r) { return String(r.data_year); })));
+    var ops = yrs.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    return '<label>Metric <select data-sec="metric">' + metricOps + '</select></label>' +
+           '<label>From <select data-sec="from">' + ops + '</select></label>' +
+           '<label>To <select data-sec="to">' + ops + '</select></label>';
+  },
+  ligarControles: function (box, redesenhar) {
+    var m = box.querySelector('[data-sec="metric"]'), f = box.querySelector('[data-sec="from"]'), t = box.querySelector('[data-sec="to"]');
+    var yrs = Array.from(new Set(DASH.sectorRows().map(function (r) { return String(r.data_year); })));
+    if (!DASH.sectorState.from) DASH.sectorState.from = yrs[0];
+    if (!DASH.sectorState.to) DASH.sectorState.to = yrs[yrs.length - 1];
+    m.value = DASH.sectorState.metric; f.value = String(DASH.sectorState.from); t.value = String(DASH.sectorState.to);
+    m.addEventListener('change', function () { DASH.sectorState.metric = m.value; redesenhar(); });
+    f.addEventListener('change', function () { DASH.sectorState.from = f.value; redesenhar(); });
+    t.addEventListener('change', function () { DASH.sectorState.to = t.value; redesenhar(); });
+  },
+  estadoAtual: function () { return { metric: DASH.sectorState.metric, from: DASH.sectorState.from, to: DASH.sectorState.to }; },
+  aplicarEstado: function (e) { if (e) Object.assign(DASH.sectorState, e); }
+});
+
+registerChart({
+  id: 'imports-data',
+  titulo: 'Sports Footwear Imports',
+  unidade: '(USD mn)',
+  dashboardNative: true,
+  desenhar: function (canvas) { canvas.id = 'imports-main-chart'; DASH.renderImportsChart(); return Chart.getChart(canvas); },
+  montarControles: function () {
+    return '<label>View <select data-im="view"><option value="line">Total</option><option value="stacked">By country</option></select></label>' +
+           '<label>Grain <select data-im="grain"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>' +
+           '<label>Base <select data-im="base"><option value="spot">Spot</option><option value="ltm">LTM</option></select></label>' +
+           '<label>From <select data-im="from"></select></label>' +
+           '<label>To <select data-im="to"></select></label>';
+  },
+  ligarControles: function (box, redesenhar) {
+    var view = box.querySelector('[data-im="view"]'), grain = box.querySelector('[data-im="grain"]'), base = box.querySelector('[data-im="base"]');
+    var fromSel = box.querySelector('[data-im="from"]'), toSel = box.querySelector('[data-im="to"]');
+    var popular = function () {
+      DASH.ensureRange();
+      var rows = DASH.totalSeries();
+      var ops = rows.map(function (r) { return '<option value="' + r.key + '">' + r.label + '</option>'; }).join('');
+      fromSel.innerHTML = ops; toSel.innerHTML = ops;
+      fromSel.value = DASH.importsState.from; toSel.value = DASH.importsState.to;
+    };
+    view.value = DASH.importsState.view; grain.value = DASH.importsState.grain; base.value = DASH.importsState.base;
+    popular();
+    view.addEventListener('change', function () { DASH.importsState.view = view.value; redesenhar(); });
+    grain.addEventListener('change', function () { DASH.importsState.grain = grain.value; DASH.importsState.from = null; DASH.importsState.to = null; popular(); redesenhar(); });
+    base.addEventListener('change', function () { DASH.importsState.base = base.value; DASH.importsState.from = null; DASH.importsState.to = null; popular(); redesenhar(); });
+    fromSel.addEventListener('change', function () { DASH.importsState.from = fromSel.value; redesenhar(); });
+    toSel.addEventListener('change', function () { DASH.importsState.to = toSel.value; redesenhar(); });
+  },
+  estadoAtual: function () { return { view: DASH.importsState.view, grain: DASH.importsState.grain, base: DASH.importsState.base, from: DASH.importsState.from, to: DASH.importsState.to }; },
+  aplicarEstado: function (e) { if (e) Object.assign(DASH.importsState, e); }
+});
+
+registerChart({
+  id: 'vulcabras-share',
+  titulo: 'Vulcabras — Market Share (Footwear)',
+  unidade: '(Percentage)',
+  dashboardNative: true,
+  desenhar: function (canvas) { canvas.id = 'vulcabras-share-chart'; DASH.renderVulcabrasShareChart(); return Chart.getChart(canvas); },
+  montarControles: function () {
+    var yrs = DASH.msData().years || [];
+    var ops = yrs.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+    return '<label>From <select data-vs="from">' + ops + '</select></label><label>To <select data-vs="to">' + ops + '</select></label>';
+  },
+  ligarControles: function (box, redesenhar) {
+    var f = box.querySelector('[data-vs="from"]'), t = box.querySelector('[data-vs="to"]');
+    f.value = DASH.VULCABRAS_SHARE_STATE.from; t.value = DASH.VULCABRAS_SHARE_STATE.to;
+    f.addEventListener('change', function () { DASH.VULCABRAS_SHARE_STATE.from = Number(f.value); redesenhar(); });
+    t.addEventListener('change', function () { DASH.VULCABRAS_SHARE_STATE.to = Number(t.value); redesenhar(); });
+  },
+  estadoAtual: function () { return { from: DASH.VULCABRAS_SHARE_STATE.from, to: DASH.VULCABRAS_SHARE_STATE.to }; },
+  aplicarEstado: function (e) { if (e) Object.assign(DASH.VULCABRAS_SHARE_STATE, e); }
+});
