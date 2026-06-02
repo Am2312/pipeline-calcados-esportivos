@@ -395,9 +395,10 @@ registerChart({
   desenhar: function (canvas) { return buildPresentationMsChart(canvas, getPresentationMsModel()); },
   montarControles: function () {
     var ops = sportswearBrandShares.years.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
-    return '<label>Category <select data-ms="category"><option value="footwear">Footwear</option><option value="apparel">Apparel</option><option value="total">Total</option></select></label>' +
-           '<label>Vulcabras <select data-ms="vulcabras"><option value="combined">Combined</option><option value="separate">Separate</option></select></label>' +
-           '<label>Basis <select data-ms="basis"><option value="named">Named brands</option><option value="total">Total market</option></select></label>' +
+    // Rótulos/ordem espelham o dashboard (mesma análise; 'reported' e 'total' = mercado total — o chart só trata 'named' à parte)
+    return '<label>Category <select data-ms="category"><option value="total">Total</option><option value="footwear">Footwear</option><option value="apparel">Apparel</option></select></label>' +
+           '<label>Vulcabras <select data-ms="vulcabras"><option value="separate">Separate</option><option value="combined">Combined</option></select></label>' +
+           '<label>Share Basis <select data-ms="basis"><option value="reported">Euromonitor</option><option value="named">Named Players</option></select></label>' +
            '<label>From <select data-ms="from">' + ops + '</select></label>' +
            '<label>To <select data-ms="to">' + ops + '</select></label>';
   },
