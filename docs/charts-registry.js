@@ -542,3 +542,122 @@ registerChart({
     if (window._frSetState) window._frSetState({ view: e.view, channel: e.channel });
   }
 });
+
+/* ---------------------------------------------------------------------
+   CAGED + Cost Index (flash-case render*-based) — globais de charts_dashboard.js.
+   dashboardNative (o dash desenha nativamente; Cost Index lá tem TABELA junto,
+   que segue nativa — aqui vai só o gráfico). Só invocados na apresentação.
+   --------------------------------------------------------------------- */
+registerChart({
+  id: 'caged-jobs', titulo: "Estimated Formal Jobs — Vulcabras' Factories", unidade: '(Formal Jobs, YoY)', dashboardNative: true,
+  legenda: [{ cor: '#021C45', texto: 'Estimated jobs' }, { cor: '#6FDDCB', texto: 'YoY %' }],
+  desenhar(canvas) { canvas.id = 'presentation-caged-jobs-chart'; renderPresentationCagedJobsChart(); return Chart.getChart(canvas); },
+  montarControles() {
+    return `<label>View <select data-cg="grain">
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option></select></label>
+            <label>From <select data-cg="from"></select></label>
+            <label>To <select data-cg="to"></select></label>`;
+  },
+  ligarControles(box, redesenhar) {
+    const grainSel = box.querySelector('[data-cg="grain"]');
+    const fromSel = box.querySelector('[data-cg="from"]');
+    const toSel = box.querySelector('[data-cg="to"]');
+    const popular = () => {
+      presentationCagedState.grain = grainSel.value;
+      ensurePresentationCagedRange();
+      const rows = presentationCagedRowsForGrain();
+      const ops = rows.map(r => `<option value="${r.key}">${r.label}</option>`).join('');
+      fromSel.innerHTML = ops; toSel.innerHTML = ops;
+      fromSel.value = presentationCagedState.from;
+      toSel.value = presentationCagedState.to;
+    };
+    grainSel.value = presentationCagedState.grain;
+    popular();
+    grainSel.addEventListener('change', () => { presentationCagedState.from = null; presentationCagedState.to = null; popular(); redesenhar(); });
+    fromSel.addEventListener('change', () => { presentationCagedState.from = fromSel.value; redesenhar(); });
+    toSel.addEventListener('change', () => { presentationCagedState.to = toSel.value; redesenhar(); });
+  },
+  estadoAtual() { return { grain: presentationCagedState.grain, from: presentationCagedState.from, to: presentationCagedState.to }; },
+  aplicarEstado(e) { if (e) Object.assign(presentationCagedState, e); }
+});
+
+registerChart({
+  id: 'headcount-volume', titulo: 'Factory Headcount Growth vs Volume Growth', unidade: '(Percentage)', dashboardNative: true,
+  legenda: [{ cor: '#021C45', texto: 'Employees YoY' }, { cor: '#6FDDCB', texto: 'Volume YoY' }],
+  desenhar(canvas) { canvas.id = 'presentation-volume-yoy-chart'; renderPresentationVolumeYoyChart(); return Chart.getChart(canvas); },
+  montarControles() {
+    return `<label>View <select data-vy="mode">
+              <option value="quarterly">Quarterly YoY</option><option value="ltm">LTM YoY</option></select></label>
+            <label>From <select data-vy="from"></select></label>
+            <label>To <select data-vy="to"></select></label>`;
+  },
+  ligarControles(box, redesenhar) {
+    const mode = box.querySelector('[data-vy="mode"]');
+    const fromSel = box.querySelector('[data-vy="from"]');
+    const toSel = box.querySelector('[data-vy="to"]');
+    const popular = () => {
+      presentationVolumeYoyState.mode = mode.value;
+      ensurePresentationVolumeRange();
+      const rows = presentationVolumeAllRows();
+      const ops = rows.map(r => `<option value="${r.key}">${r.label}</option>`).join('');
+      fromSel.innerHTML = ops; toSel.innerHTML = ops;
+      fromSel.value = presentationVolumeYoyState.from; toSel.value = presentationVolumeYoyState.to;
+    };
+    mode.value = presentationVolumeYoyState.mode;
+    popular();
+    mode.addEventListener('change', () => { presentationVolumeYoyState.from = null; presentationVolumeYoyState.to = null; popular(); redesenhar(); });
+    fromSel.addEventListener('change', () => { presentationVolumeYoyState.from = fromSel.value; redesenhar(); });
+    toSel.addEventListener('change', () => { presentationVolumeYoyState.to = toSel.value; redesenhar(); });
+  },
+  estadoAtual() { return { mode: presentationVolumeYoyState.mode, from: presentationVolumeYoyState.from, to: presentationVolumeYoyState.to }; },
+  aplicarEstado(e) { if (e) Object.assign(presentationVolumeYoyState, e); }
+});
+
+registerChart({
+  id: 'cost-index', titulo: 'Cost Index — Historical Distribution', unidade: '(x, average of weekly observations)', dashboardNative: true,
+  legendaDinamica() {
+    const cfg = (typeof costIndexConfig !== 'undefined' && costIndexConfig[presentationCostState.variable]) || { label: 'Index' };
+    const sd = presentationCostState.stdDev;
+    return [
+      { cor: '#021C45', texto: cfg.label },
+      { cor: '#5D2A2C', texto: 'Average' },
+      { cor: '#FF4F6C', texto: '+' + sd + ' SD' },
+      { cor: '#6FDDCB', texto: '−' + sd + ' SD' }
+    ];
+  },
+  desenhar(canvas) { canvas.id = 'presentation-cost-index-chart'; renderPresentationCostIndexChart(); return Chart.getChart(canvas); },
+  montarControles() {
+    return `<label>Index <select data-co="variable">
+              <option value="eva">EVA</option><option value="pvc">PVC</option><option value="rubber">Rubber</option></select></label>
+            <label>Cur <select data-co="currency"><option value="usd">USD</option><option value="brl">BRL</option></select></label>
+            <label>±SD <select data-co="sd"><option value="0.5">0.5</option><option value="1">1.0</option><option value="1.5">1.5</option><option value="2">2.0</option></select></label>
+            <label>From <select data-co="from"></select></label>
+            <label>To <select data-co="to"></select></label>`;
+  },
+  ligarControles(box, redesenhar) {
+    const variable = box.querySelector('[data-co="variable"]');
+    const currency = box.querySelector('[data-co="currency"]');
+    const sd = box.querySelector('[data-co="sd"]');
+    const fromSel = box.querySelector('[data-co="from"]');
+    const toSel = box.querySelector('[data-co="to"]');
+    const popular = () => {
+      const rows = ensureCostRange();
+      const ops = rows.map(r => `<option value="${r.key}">${r.label}</option>`).join('');
+      fromSel.innerHTML = ops; toSel.innerHTML = ops;
+      fromSel.value = presentationCostState.from; toSel.value = presentationCostState.to;
+    };
+    variable.value = presentationCostState.variable;
+    currency.value = presentationCostState.currency;
+    sd.value = String(presentationCostState.stdDev);
+    popular();
+    variable.addEventListener('change', () => { presentationCostState.variable = variable.value; redesenhar(); });
+    currency.addEventListener('change', () => { presentationCostState.currency = currency.value; redesenhar(); });
+    sd.addEventListener('change', () => { presentationCostState.stdDev = Number(sd.value); redesenhar(); });
+    fromSel.addEventListener('change', () => { presentationCostState.from = fromSel.value; redesenhar(); });
+    toSel.addEventListener('change', () => { presentationCostState.to = toSel.value; redesenhar(); });
+  },
+  estadoAtual() { return { variable: presentationCostState.variable, currency: presentationCostState.currency, stdDev: presentationCostState.stdDev, from: presentationCostState.from, to: presentationCostState.to }; },
+  aplicarEstado(e) { if (e) Object.assign(presentationCostState, e); }
+});
