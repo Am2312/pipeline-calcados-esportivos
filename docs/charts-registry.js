@@ -44,31 +44,6 @@
   };
 })();
 
-/* ---------------------------------------------------------------------
-   GRÁFICO DE TESTE (auto-gerado) — prova o trilho índice → apresentação.
-   Remover quando os gráficos reais estiverem registrados.
-   --------------------------------------------------------------------- */
-registerChart({
-  id: 'registry-selftest',
-  titulo: 'Registry Self-Test',
-  unidade: '(auto-gerado pelo índice compartilhado)',
-  desenhar: function (canvas) {
-    return new Chart(canvas.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: ['2023', '2024', '2025'],
-        datasets: [{ label: 'Demo', data: [12, 19, 15], backgroundColor: '#002554', borderRadius: 4 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } }
-      }
-    });
-  }
-  // sem controles — o teste só valida a geração + render no molde
-});
-
 /* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
