@@ -221,6 +221,8 @@ registerChart({
   titulo: 'Sports Footwear Imports',
   unidade: '(USD mn)',
   dashboardNative: true,
+  // subtítulo dinâmico: acompanha a caixa Metric (FOB = USD mn, Volume = mn pairs), igual ao dashboard
+  subtituloDinamico: function () { return DASH.importsState.metric === 'volume' ? '(mn pairs)' : '(USD mn)'; },
   desenhar: function (canvas) { regClaimId(canvas, 'imports-main-chart'); DASH.renderImportsChart(); return Chart.getChart(canvas); },
   montarControles: function () {
     return '<label>View <select data-im="view"><option value="line">Total</option><option value="stacked">By country</option></select></label>' +
