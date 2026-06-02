@@ -110,6 +110,92 @@ window.CONTROL_SPECS['vulcabras-share'] = [
     options: [{ v: 'annual', t: 'Annual' }] }
 ];
 
+/* ===================================================================
+   E-COMMERCE — lista única das caixas dos 4 cards (price/disc/avgdisc/franchise).
+   Mesmo módulo (ecom-chart.js) nos 2 lados; aqui mora a barra de controles, lida
+   pelo DASHBOARD (window.ecomDashControlBar → markup control-block/control-select)
+   e pela APRESENTAÇÃO (window.ecomPresControlBar → <label>). Adicionar/remover uma
+   caixa AQUI muda os dois lados. Cada caixa: {kind, id, label, onchange, options,
+   block?, hidden?, width?} | série: {kind:'series', id, labelId, onclick, block, hidden?}.
+   =================================================================== */
+window.ECOM_SPECS = window.ECOM_SPECS || {
+  price: [
+    { kind: 'select', id: 'view-mode', label: 'View', onchange: 'onViewModeChange()', options: [{ v: 'comparison', t: 'Company Comparison' }, { v: 'breakdown', t: 'Channel Breakdown' }] },
+    { kind: 'select', id: 'comp-channel', label: 'Channel', block: 'comp-channel-block', onchange: 'onCompChannelChange()', options: [{ v: 'total', t: 'Total' }, { v: 'website', t: 'Website' }, { v: 'netshoes', t: 'Netshoes' }, { v: 'centauro', t: 'Centauro' }, { v: 'free', t: 'Free Choice', sel: true }] },
+    { kind: 'select', id: 'breakdown-brand', label: 'Company', block: 'breakdown-brand-block', hidden: true, onchange: 'onBreakdownBrandChange()', options: [{ v: 'adidas', t: 'Adidas' }, { v: 'nike', t: 'Nike' }, { v: 'ua', t: 'Under Armour' }, { v: 'asics', t: 'Asics' }, { v: 'olympikus', t: 'Olympikus' }, { v: 'mizuno', t: 'Mizuno' }] },
+    { kind: 'series', id: 'series-trigger', labelId: 'series-trigger-label', block: 'series-trigger-block', onclick: 'toggleSeriesPanel()' },
+    { kind: 'select', id: 'metric-select', label: 'Price basis', width: 130, onchange: 'renderAll()', options: [{ v: 'p_sale', t: 'Sale Price', sel: true }, { v: 'p_list', t: 'List Price' }] },
+    { kind: 'select', id: 'gran-select', label: 'Granularity', width: 130, onchange: 'onGranChange()', options: [{ v: 'weekly', t: 'Weekly', sel: true }, { v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'annual', t: 'Annual' }] },
+    { kind: 'select', id: 'from-select', label: 'From', width: 130, onchange: 'renderAll()', options: [] },
+    { kind: 'select', id: 'to-select', label: 'To', width: 130, onchange: 'renderAll()', options: [] }
+  ],
+  disc: [
+    { kind: 'select', id: 'disc-view-mode', label: 'View', onchange: 'onDiscViewModeChange()', options: [{ v: 'comparison', t: 'Company Comparison' }, { v: 'breakdown', t: 'Channel Breakdown' }] },
+    { kind: 'select', id: 'disc-comp-channel', label: 'Channel', block: 'disc-comp-channel-block', onchange: 'onDiscCompChannelChange()', options: [{ v: 'total', t: 'Total' }, { v: 'website', t: 'Website' }, { v: 'netshoes', t: 'Netshoes' }, { v: 'centauro', t: 'Centauro' }, { v: 'free', t: 'Free Choice', sel: true }] },
+    { kind: 'select', id: 'disc-breakdown-brand', label: 'Company', block: 'disc-breakdown-brand-block', hidden: true, onchange: 'onDiscBreakdownBrandChange()', options: [{ v: 'adidas', t: 'Adidas' }, { v: 'nike', t: 'Nike' }, { v: 'ua', t: 'Under Armour' }, { v: 'asics', t: 'Asics' }, { v: 'olympikus', t: 'Olympikus' }, { v: 'mizuno', t: 'Mizuno' }] },
+    { kind: 'series', id: 'disc-series-trigger', labelId: 'disc-series-trigger-label', block: 'disc-series-trigger-block', onclick: 'toggleDiscSeriesPanel()' },
+    { kind: 'select', id: 'disc-gran-select', label: 'Granularity', width: 130, onchange: 'onDiscGranChange()', options: [{ v: 'weekly', t: 'Weekly', sel: true }, { v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'annual', t: 'Annual' }] },
+    { kind: 'select', id: 'disc-from-select', label: 'From', width: 130, onchange: 'buildDiscAll()', options: [] },
+    { kind: 'select', id: 'disc-to-select', label: 'To', width: 130, onchange: 'buildDiscAll()', options: [] }
+  ],
+  avgdisc: [
+    { kind: 'select', id: 'avgdisc-view-mode', label: 'View', onchange: 'onAvgDiscViewModeChange()', options: [{ v: 'comparison', t: 'Company Comparison' }, { v: 'breakdown', t: 'Channel Breakdown' }] },
+    { kind: 'select', id: 'avgdisc-comp-channel', label: 'Channel', block: 'avgdisc-comp-channel-block', onchange: 'onAvgDiscCompChannelChange()', options: [{ v: 'total', t: 'Total' }, { v: 'website', t: 'Website' }, { v: 'netshoes', t: 'Netshoes' }, { v: 'centauro', t: 'Centauro' }, { v: 'free', t: 'Free Choice', sel: true }] },
+    { kind: 'select', id: 'avgdisc-breakdown-brand', label: 'Company', block: 'avgdisc-breakdown-brand-block', hidden: true, onchange: 'onAvgDiscBreakdownBrandChange()', options: [{ v: 'adidas', t: 'Adidas' }, { v: 'nike', t: 'Nike' }, { v: 'ua', t: 'Under Armour' }, { v: 'asics', t: 'Asics' }, { v: 'olympikus', t: 'Olympikus' }, { v: 'mizuno', t: 'Mizuno' }] },
+    { kind: 'series', id: 'avgdisc-series-trigger', labelId: 'avgdisc-series-trigger-label', block: 'avgdisc-series-trigger-block', onclick: 'toggleAvgDiscSeriesPanel()' },
+    { kind: 'select', id: 'avgdisc-scope', label: 'Scope', onchange: 'buildAvgDiscAll()', options: [{ v: 'all', t: 'All items', sel: true }, { v: 'promo', t: 'Discounted items only' }] },
+    { kind: 'select', id: 'avgdisc-gran-select', label: 'Granularity', width: 130, onchange: 'onAvgDiscGranChange()', options: [{ v: 'weekly', t: 'Weekly', sel: true }, { v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'annual', t: 'Annual' }] },
+    { kind: 'select', id: 'avgdisc-from-select', label: 'From', width: 130, onchange: 'buildAvgDiscAll()', options: [] },
+    { kind: 'select', id: 'avgdisc-to-select', label: 'To', width: 130, onchange: 'buildAvgDiscAll()', options: [] }
+  ],
+  franchise: [
+    { kind: 'select', id: 'fr-view', label: 'View', onchange: 'onFrViewChange()', options: [{ v: 'comparison', t: 'Company Comparison', sel: true }, { v: 'breakdown', t: 'Channel Breakdown' }, { v: 'model', t: 'Model Breakdown' }] },
+    { kind: 'select', id: 'fr-channel', label: 'Channel', block: 'fr-channel-block', onchange: 'onFrChannelChange()', options: [{ v: 'total', t: 'Total' }, { v: 'website', t: 'Website' }, { v: 'centauro', t: 'Centauro', sel: true }, { v: 'netshoes', t: 'Netshoes' }, { v: 'free', t: 'Free Choice' }] },
+    { kind: 'select', id: 'fr-brand', label: 'Company', block: 'fr-brand-block', hidden: true, onchange: 'window._frRender && window._frRender()', options: [{ v: 'Adidas', t: 'Adidas' }, { v: 'Nike', t: 'Nike' }, { v: 'Under Armour', t: 'Under Armour' }, { v: 'Asics', t: 'Asics' }, { v: 'Olympikus', t: 'Olympikus', sel: true }, { v: 'Mizuno', t: 'Mizuno' }] },
+    { kind: 'select', id: 'fr-model-channel', label: 'Channel', block: 'fr-model-channel-block', hidden: true, onchange: 'window._frRender && window._frRender()', options: [{ v: 'website', t: 'Website' }, { v: 'centauro', t: 'Centauro', sel: true }, { v: 'netshoes', t: 'Netshoes' }] },
+    { kind: 'series', id: 'fr-series-trigger', labelId: 'fr-series-trigger-label', block: 'fr-series-trigger-block', hidden: true, onclick: 'toggleFrSeriesPanel()' },
+    { kind: 'select', id: 'fr-method', label: 'Method', onchange: 'window._frRender && window._frRender()', options: [{ v: 'A', t: 'A: Média vs Média', sel: true }, { v: 'B', t: 'B: Geração vs Geração' }] },
+    { kind: 'select', id: 'fr-price', label: 'Price', onchange: 'window._frRender && window._frRender()', options: [{ v: 'sale', t: 'Sale', sel: true }, { v: 'list', t: 'List' }] },
+    { kind: 'select', id: 'fr-window', label: 'Window (chart)', onchange: 'window._frRender && window._frRender()', options: [{ v: '1w', t: 'Δ WoW' }, { v: '1m', t: 'Δ MoM' }, { v: '3m', t: 'Δ QoQ' }, { v: '1y', t: 'Δ YoY' }, { v: 'ytd', t: 'Δ YTD', sel: true }] },
+    { kind: 'select', id: 'fr-gran', label: 'Granularity', width: 130, onchange: 'window._frRender && window._frRender()', options: [{ v: 'weekly', t: 'Weekly', sel: true }, { v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'annual', t: 'Annual' }] },
+    { kind: 'select', id: 'fr-from', label: 'From', width: 130, onchange: 'window._frRender && window._frRender()', options: [] },
+    { kind: 'select', id: 'fr-to', label: 'To', width: 130, onchange: 'window._frRender && window._frRender()', options: [] }
+  ]
+};
+// markup estilo DASHBOARD (control-block + control-select), idêntico ao template atual
+window.ecomDashControlBar = function (key) {
+  var spec = (window.ECOM_SPECS && window.ECOM_SPECS[key]) || [];
+  return spec.map(function (c) {
+    var blockAttrs = (c.block ? ' id="' + c.block + '"' : '') + (c.hidden ? ' style="display:none;"' : '');
+    var inner;
+    if (c.kind === 'series') {
+      inner = '<div class="series-trigger" id="' + c.id + '" onclick="' + c.onclick + '">' +
+              '<span id="' + c.labelId + '">5 series selected</span>' +
+              '<span style="font-size:9px;color:#9AA8BB;flex-shrink:0;">&#9660;</span></div>';
+    } else {
+      var w = c.width ? ' style="min-width:' + c.width + 'px;"' : '';
+      var opts = c.options.map(function (o) { return '<option value="' + o.v + '"' + (o.sel ? ' selected' : '') + '>' + o.t + '</option>'; }).join('');
+      inner = '<select class="control-select" id="' + c.id + '" onchange="' + c.onchange + '"' + w + '>' + opts + '</select>';
+    }
+    return '<div class="control-block"' + blockAttrs + '><div class="control-label">' + c.label + '</div>' + inner + '</div>';
+  }).join('');
+};
+// markup estilo APRESENTAÇÃO (<label> + <select id>); MESMOS ids do dashboard → o
+// ligarControles/módulo ecom (que consultam por id) continuam funcionando sem mudança.
+window.ecomPresControlBar = function (key) {
+  var spec = (window.ECOM_SPECS && window.ECOM_SPECS[key]) || [];
+  return spec.map(function (c) {
+    var idAttr = c.block ? ' id="' + c.block + '"' : '';
+    var hid = c.hidden ? ' style="display:none;"' : '';
+    if (c.kind === 'series') {
+      return '<label' + idAttr + hid + '>Series <span class="series-trigger" id="' + c.id + '">' +
+             '<span id="' + c.labelId + '">5 series</span> &#9660;</span></label>';
+    }
+    var opts = c.options.map(function (o) { return '<option value="' + o.v + '"' + (o.sel ? ' selected' : '') + '>' + o.t + '</option>'; }).join('');
+    return '<label' + idAttr + hid + '>' + c.label + ' <select id="' + c.id + '">' + opts + '</select></label>';
+  }).join('');
+};
+
 /* =====================================================================
    DADOS/LÓGICA COMPARTILHADA — "receita única" por gráfico.
    A config + o cálculo das séries moram AQUI (1 lugar) e os dois lados
@@ -436,20 +522,11 @@ registerChart({
     const c = Chart.getChart(canvas); this._lastChart = c; return c;
   },
   montarControles() {
+    // Sport (per-slide) + caixas da LISTA ÚNICA (window.ECOM_SPECS.price, mesma do dashboard) + painel de séries
     return `<label>Sport <select data-ecom-sport>
-              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>
-            <label>View <select id="view-mode">
-              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option></select></label>
-            <label id="comp-channel-block">Channel <select id="comp-channel">
-              <option value="total">Total</option><option value="website">Website</option><option value="netshoes">Netshoes</option><option value="centauro">Centauro</option><option value="free" selected>Free Choice</option></select></label>
-            <label id="breakdown-brand-block" style="display:none;">Company <select id="breakdown-brand">
-              <option value="adidas">Adidas</option><option value="nike">Nike</option><option value="ua">Under Armour</option><option value="asics">Asics</option><option value="olympikus">Olympikus</option><option value="mizuno">Mizuno</option></select></label>
-            <label id="series-trigger-block">Series <span class="series-trigger" id="series-trigger"><span id="series-trigger-label">5 series</span> ▼</span></label>
-            <label>Price <select id="metric-select"><option value="p_sale" selected>Sale</option><option value="p_list">List</option></select></label>
-            <label>Gran <select id="gran-select"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
-            <label>From <select id="from-select"></select></label>
-            <label>To <select id="to-select"></select></label>
-            <div id="series-panel"></div>`;
+              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>`
+      + ecomPresControlBar('price')
+      + `<div id="series-panel"></div>`;
   },
   ligarControles(box, redesenhar) {
     const $ = s => box.querySelector(s);
@@ -497,18 +574,9 @@ registerChart({
   },
   montarControles() {
     return `<label>Sport <select data-ecom-sport>
-              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>
-            <label>View <select id="disc-view-mode">
-              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option></select></label>
-            <label id="disc-comp-channel-block">Channel <select id="disc-comp-channel">
-              <option value="total">Total</option><option value="website">Website</option><option value="netshoes">Netshoes</option><option value="centauro">Centauro</option><option value="free" selected>Free Choice</option></select></label>
-            <label id="disc-breakdown-brand-block" style="display:none;">Company <select id="disc-breakdown-brand">
-              <option value="adidas">Adidas</option><option value="nike">Nike</option><option value="ua">Under Armour</option><option value="asics">Asics</option><option value="olympikus">Olympikus</option><option value="mizuno">Mizuno</option></select></label>
-            <label id="disc-series-trigger-block">Series <span class="series-trigger" id="disc-series-trigger"><span id="disc-series-trigger-label">5 series</span> ▼</span></label>
-            <label>Gran <select id="disc-gran-select"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
-            <label>From <select id="disc-from-select"></select></label>
-            <label>To <select id="disc-to-select"></select></label>
-            <div id="disc-series-panel"></div>`;
+              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>`
+      + ecomPresControlBar('disc')
+      + `<div id="disc-series-panel"></div>`;
   },
   ligarControles(box, redesenhar) {
     const $ = s => box.querySelector(s);
@@ -555,19 +623,9 @@ registerChart({
   },
   montarControles() {
     return `<label>Sport <select data-ecom-sport>
-              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>
-            <label>View <select id="avgdisc-view-mode">
-              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option></select></label>
-            <label id="avgdisc-comp-channel-block">Channel <select id="avgdisc-comp-channel">
-              <option value="total">Total</option><option value="website">Website</option><option value="netshoes">Netshoes</option><option value="centauro">Centauro</option><option value="free" selected>Free Choice</option></select></label>
-            <label id="avgdisc-breakdown-brand-block" style="display:none;">Company <select id="avgdisc-breakdown-brand">
-              <option value="adidas">Adidas</option><option value="nike">Nike</option><option value="ua">Under Armour</option><option value="asics">Asics</option><option value="olympikus">Olympikus</option><option value="mizuno">Mizuno</option></select></label>
-            <label id="avgdisc-series-trigger-block">Series <span class="series-trigger" id="avgdisc-series-trigger"><span id="avgdisc-series-trigger-label">5 series</span> ▼</span></label>
-            <label>Scope <select id="avgdisc-scope"><option value="all" selected>All items</option><option value="promo">Discounted only</option></select></label>
-            <label>Gran <select id="avgdisc-gran-select"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
-            <label>From <select id="avgdisc-from-select"></select></label>
-            <label>To <select id="avgdisc-to-select"></select></label>
-            <div id="avgdisc-series-panel"></div>`;
+              <option value="corrida">Corrida</option><option value="performance" selected>Performance</option><option value="all">All</option></select></label>`
+      + ecomPresControlBar('avgdisc')
+      + `<div id="avgdisc-series-panel"></div>`;
   },
   ligarControles(box, redesenhar) {
     const $ = s => box.querySelector(s);
@@ -628,24 +686,10 @@ registerChart({
     const c = Chart.getChart(canvas); this._lastChart = c; return c;
   },
   montarControles() {
+    // Sport (per-slide, default All no franchise) + caixas da LISTA ÚNICA (window.ECOM_SPECS.franchise, mesma do dashboard)
     return `<label>Sport <select data-ecom-sport>
-              <option value="corrida">Corrida</option><option value="performance">Performance</option><option value="all" selected>All</option></select></label>
-            <label>View <select id="fr-view">
-              <option value="comparison" selected>Company Comparison</option><option value="breakdown">Channel Breakdown</option><option value="model">Model Breakdown</option></select></label>
-            <label id="fr-channel-block">Channel <select id="fr-channel">
-              <option value="total">Total</option><option value="website">Website</option><option value="centauro">Centauro</option><option value="netshoes">Netshoes</option><option value="free" selected>Free Choice</option></select></label>
-            <label id="fr-brand-block" style="display:none;">Company <select id="fr-brand">
-              <option value="Adidas">Adidas</option><option value="Nike">Nike</option><option value="Under Armour">Under Armour</option><option value="Asics">Asics</option><option value="Olympikus">Olympikus</option><option value="Mizuno">Mizuno</option></select></label>
-            <label id="fr-model-channel-block" style="display:none;">Model channel <select id="fr-model-channel">
-              <option value="total">Total</option><option value="website">Website</option><option value="centauro">Centauro</option><option value="netshoes">Netshoes</option></select></label>
-            <label id="fr-series-trigger-block">Series <span class="series-trigger" id="fr-series-trigger"><span id="fr-series-trigger-label">5 series</span> ▼</span></label>
-            <label>Method <select id="fr-method"><option value="A" selected>A · Mean vs Mean</option><option value="B">B · Gen vs Gen</option></select></label>
-            <label>Price <select id="fr-price"><option value="sale" selected>Sale</option><option value="list">List</option></select></label>
-            <label>Window <select id="fr-window">
-              <option value="1w">WoW</option><option value="1m">MoM</option><option value="3m" selected>QoQ</option><option value="1y">YoY</option><option value="ytd">YTD</option></select></label>
-            <label>Gran <select id="fr-gran"><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
-            <label>From <select id="fr-from"></select></label>
-            <label>To <select id="fr-to"></select></label>`;
+              <option value="corrida">Corrida</option><option value="performance">Performance</option><option value="all" selected>All</option></select></label>`
+      + ecomPresControlBar('franchise');
   },
   ligarControles(box, redesenhar) {
     const $ = s => box.querySelector(s);

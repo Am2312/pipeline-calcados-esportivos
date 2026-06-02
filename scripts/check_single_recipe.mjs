@@ -91,13 +91,13 @@ check(franchise.includes('_frSetState'),
 // ex.: imports-data via window.IMPORTS_CONTROL_SPEC) saem deste manifesto — neles a
 // divergência é impossível por construção (uma só definição) e a contagem estática
 // de <select> não se aplica (as caixas são montadas em runtime a partir do array).
-// Migrados p/ lista única (window.CONTROL_SPECS) e portanto FORA deste manifesto:
-// imports-data, caged-jobs, headcount-volume, vulcabras-share. Nesses, divergência é
-// impossível por construção. Os de baixo ainda têm controles hardcoded em cada lado.
+// Migrados p/ lista única (window.CONTROL_SPECS ou window.ECOM_SPECS) e portanto FORA
+// deste manifesto: imports-data, caged-jobs, headcount-volume, vulcabras-share e os 4
+// ecom (price/disc/avgdisc/franchise). Nesses, divergência é impossível por construção.
+// Os de baixo ainda têm controles hardcoded em cada lado (contagem estática vale).
 const EXPECTED_CONTROLS = {
   'footwear-decomp': 2, 'brand-gmv': 3, 'sector-data': 3,
-  'tam-mercado': 2, 'tam-destaque': 0, 'market-share': 5, 'cost-index': 5,
-  'ecom-price': 8, 'ecom-disc': 7, 'ecom-avgdisc': 8, 'ecom-franchise': 11
+  'tam-mercado': 2, 'tam-destaque': 0, 'market-share': 5, 'cost-index': 5
 };
 function chartBlocks(src) {
   const blocks = {};
@@ -119,6 +119,21 @@ for (const [id, exp] of Object.entries(EXPECTED_CONTROLS)) {
   check(count >= exp,
     `controles de "${id}" presentes (${count}/${exp})`,
     `gráfico "${id}" expõe só ${count} caixa(s) de controle no índice, esperado >= ${exp} (paridade com o dashboard) — um seletor sumiu/faltou. Veja montarControles/controles do "${id}" no charts-registry.js`);
+}
+
+/* 7) Motor de controles compartilhado precisa continuar existindo e ligado nos 2 lados. */
+for (const fn of ['CONTROL_SPECS', 'regDashBoxes', 'regPresBoxes', 'ECOM_SPECS', 'ecomDashControlBar', 'ecomPresControlBar']) {
+  check(registry.includes('window.' + fn),
+    `registry define window.${fn}`,
+    `charts-registry.js NÃO define window.${fn} — o motor de "lista única" de controles quebrou (dashboard/PPT divergem)`);
+}
+check(dash.includes('ecomDashControlBar'),
+  'dashboard usa ecomDashControlBar (controles ecom da lista única)',
+  'dashboard NÃO chama ecomDashControlBar — voltou a hardcodar os controles do e-commerce (vai divergir do PPT)');
+for (const key of ['price', 'disc', 'avgdisc', 'franchise']) {
+  check(new RegExp('\\n\\s*' + key + ':\\s*\\[').test(registry),
+    `ECOM_SPECS tem "${key}"`,
+    `ECOM_SPECS NÃO tem "${key}" — card de e-commerce perdeu a lista única`);
 }
 
 /* ---- resultado ---- */

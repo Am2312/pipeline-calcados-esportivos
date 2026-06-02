@@ -6132,6 +6132,15 @@ function renderEcomDataTab() {
     const tmpl = document.getElementById('ecom-tab-template');
     if (tmpl) content.appendChild(tmpl.content.cloneNode(true));
     document.getElementById('footer-source').textContent = 'Source: Aster BQ (Olympikus/Mizuno/Centauro/UA), Adidas/Nike/Asics/Netshoes scrapers';
+    // LISTA ÚNICA: monta a barra de controles do ecom a partir do charts-registry.js
+    // (mesma lista do PPT). Só sobrescreve se o builder existir e devolver conteúdo.
+    if (window.ecomDashControlBar) {
+        ['price', 'disc', 'avgdisc', 'franchise'].forEach(function (key) {
+            const bar = window.ecomDashControlBar(key);
+            const cont = content.querySelector('#ecom-' + key + '-controls');
+            if (cont && bar) cont.innerHTML = bar;
+        });
+    }
     if (window._ecomInit) window._ecomInit();
 }
 
@@ -6269,7 +6278,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Average Price</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(BRL)</p>
                 </div>
-                <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
+                <!-- Controles preenchidos da LISTA ÚNICA (window.ecomDashControlBar('price')) em renderEcomDataTab.
+                     O markup abaixo é fallback idêntico, caso o registry não carregue. -->
+                <div id="ecom-price-controls" style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
                         <div class="control-label">View</div>
                         <select class="control-select" id="view-mode" onchange="onViewModeChange()">
@@ -6352,7 +6363,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">% of Discounted SKUs</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
-                <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
+                <div id="ecom-disc-controls" style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
                         <div class="control-label">View</div>
                         <select class="control-select" id="disc-view-mode" onchange="onDiscViewModeChange()">
@@ -6424,7 +6435,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Average Discount</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
-                <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
+                <div id="ecom-avgdisc-controls" style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
                         <div class="control-label">View</div>
                         <select class="control-select" id="avgdisc-view-mode" onchange="onAvgDiscViewModeChange()">
@@ -6503,7 +6514,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <h3 style="color:#021C45;font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Price Pass-Through</h3>
                     <p style="color:#667D99;font-size:12px;margin:0;">(Percentage)</p>
                 </div>
-                <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
+                <div id="ecom-franchise-controls" style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-left:auto;">
                     <div class="control-block">
                         <div class="control-label">View</div>
                         <select class="control-select" id="fr-view" onchange="onFrViewChange()">
