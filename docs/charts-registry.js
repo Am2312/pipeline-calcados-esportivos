@@ -45,6 +45,57 @@
 })();
 
 /* =====================================================================
+   DADOS/LÓGICA COMPARTILHADA — "receita única" por gráfico.
+   A config + o cálculo das séries moram AQUI (1 lugar) e os dois lados
+   (dashboard inline + apresentação charts_dashboard.js) consomem daqui.
+   Assim, uma mudança de opção/série não diverge mais entre as telas.
+   ===================================================================== */
+
+/* ---- COST INDEX (Cost Index — Historical Distribution) -------------- */
+window.COST_INDEX = window.COST_INDEX || (function () {
+  // Pesos: 20.0% EVA + 7.5% Rubber + 7.5% PVC do custo total, renormalizados p/ 35% → 100%.
+  var WEIGHTS = { eva: 0.20 / 0.35, rubber: 0.075 / 0.35, pvc: 0.075 / 0.35 };
+  var CONFIG = {
+    eva:     { label: 'EVA', description: '75% Ethylene CFR SE Asia + 25% Vinyl Acetate Huadong converted to USD', fields: { usd: 'eva_usd', brl: 'eva_brl' } },
+    pvc:     { label: 'PVC', description: 'PVC Houston FAS', fields: { usd: 'pvc_usd', brl: 'pvc_brl' } },
+    rubber:  { label: 'Rubber', description: '50% Butadiene Rotterdam + 50% Styrene FOB US Gulf', fields: { usd: 'rubber_usd', brl: 'rubber_brl' } },
+    blended: { label: 'Petrochemical Cost Index', description: 'Weighted basket — 57.1% EVA + 21.4% Rubber + 21.4% PVC (the 20.0% / 7.5% / 7.5% of total cost, renormalized to 100%). Each component rebased to 1.0 at 2014-05-23, the first week all three series are available, so the index reflects only relative variation.', fields: { usd: 'eva_usd', brl: 'eva_brl' } }
+  };
+  // ordem dos seletores (default primeiro = blended, igual ao dashboard)
+  var ORDER = ['blended', 'eva', 'pvc', 'rubber'];
+  function blendedSeries(currency) {
+    var f = { eva: 'eva_' + currency, pvc: 'pvc_' + currency, rubber: 'rubber_' + currency };
+    var data = (window.SPORTS_RETAIL_COST_INDEX_DATA || [])
+      .filter(function (row) { return [f.eva, f.pvc, f.rubber].every(function (k) { return row[k] !== null && row[k] !== undefined; }); })
+      .sort(function (a, b) { return a.week_date.localeCompare(b.week_date); });
+    var map = new Map();
+    if (!data.length) return map;
+    var base = data[0];
+    var b = { eva: Number(base[f.eva]), pvc: Number(base[f.pvc]), rubber: Number(base[f.rubber]) };
+    data.forEach(function (row) {
+      map.set(row.week_date,
+        WEIGHTS.eva * (Number(row[f.eva]) / b.eva) +
+        WEIGHTS.rubber * (Number(row[f.rubber]) / b.rubber) +
+        WEIGHTS.pvc * (Number(row[f.pvc]) / b.pvc));
+    });
+    return map;
+  }
+  // Map<week_date, value> p/ qualquer variável (blended computa a cesta; senão lookup do campo).
+  function seriesMap(variable, currency) {
+    if (variable === 'blended') return blendedSeries(currency);
+    var cfg = CONFIG[variable] || CONFIG.eva;
+    var field = cfg.fields[currency] || cfg.fields.usd;
+    var map = new Map();
+    (window.SPORTS_RETAIL_COST_INDEX_DATA || []).forEach(function (row) {
+      var v = row[field];
+      if (v !== null && v !== undefined && Number.isFinite(Number(v))) map.set(row.week_date, Number(v));
+    });
+    return map;
+  }
+  return { CONFIG: CONFIG, WEIGHTS: WEIGHTS, ORDER: ORDER, blendedSeries: blendedSeries, seriesMap: seriesMap };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico
@@ -604,8 +655,11 @@ registerChart({
   },
   desenhar(canvas) { canvas.id = 'presentation-cost-index-chart'; renderPresentationCostIndexChart(); return Chart.getChart(canvas); },
   montarControles() {
-    return `<label>Index <select data-co="variable">
-              <option value="eva">EVA</option><option value="pvc">PVC</option><option value="rubber">Rubber</option></select></label>
+    // Opções do "Index" vêm da receita única (window.COST_INDEX) → inclui Petrochemical (blended) e bate com o dashboard.
+    const C = window.COST_INDEX;
+    const order = (C && C.ORDER) || ['eva', 'pvc', 'rubber'];
+    const opts = order.map(k => `<option value="${k}">${(C && C.CONFIG[k] && C.CONFIG[k].label) || k}</option>`).join('');
+    return `<label>Index <select data-co="variable">${opts}</select></label>
             <label>Cur <select data-co="currency"><option value="usd">USD</option><option value="brl">BRL</option></select></label>
             <label>±SD <select data-co="sd"><option value="0.5">0.5</option><option value="1">1.0</option><option value="1.5">1.5</option><option value="2">2.0</option></select></label>
             <label>From <select data-co="from"></select></label>

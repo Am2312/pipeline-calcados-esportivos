@@ -5507,16 +5507,19 @@ function renderMethodologyPage() {
         </section>`;
 }
 
-const COST_INDEX_CONFIG = {
+// RECEITA ÚNICA: config + pesos + cálculo da cesta vêm do índice compartilhado (charts-registry.js,
+// window.COST_INDEX) → a apresentação consome a MESMA lógica; mudar uma série aqui propaga pros 2 lados.
+// Fallback local idêntico, só pro caso (improvável) do registry não ter carregado.
+const COST_INDEX_CONFIG = (window.COST_INDEX && window.COST_INDEX.CONFIG) || {
     eva: { label: 'EVA', description: '75% Ethylene CFR SE Asia + 25% Vinyl Acetate Huadong converted to USD', fields: { usd: 'eva_usd', brl: 'eva_brl' } },
     pvc: { label: 'PVC', description: 'PVC Houston FAS', fields: { usd: 'pvc_usd', brl: 'pvc_brl' } },
     rubber: { label: 'Rubber', description: '50% Butadiene Rotterdam + 50% Styrene FOB US Gulf', fields: { usd: 'rubber_usd', brl: 'rubber_brl' } },
     blended: { label: 'Petrochemical Cost Index', description: 'Weighted basket — 57.1% EVA + 21.4% Rubber + 21.4% PVC (the 20.0% / 7.5% / 7.5% of total cost, renormalized to 100%). Each component rebased to 1.0 at 2014-05-23, the first week all three series are available, so the index reflects only relative variation.', fields: { usd: 'eva_usd', brl: 'eva_brl' } },
 };
 
-const COST_INDEX_BLEND_WEIGHTS = { eva: 0.20 / 0.35, rubber: 0.075 / 0.35, pvc: 0.075 / 0.35 };
-
 function costIndexBlendedSeries(currency) {
+    if (window.COST_INDEX && window.COST_INDEX.blendedSeries) return window.COST_INDEX.blendedSeries(currency);
+    const WEIGHTS = { eva: 0.20 / 0.35, rubber: 0.075 / 0.35, pvc: 0.075 / 0.35 };
     const f = { eva: `eva_${currency}`, pvc: `pvc_${currency}`, rubber: `rubber_${currency}` };
     const data = (window.SPORTS_RETAIL_COST_INDEX_DATA || [])
         .filter(row => [f.eva, f.pvc, f.rubber].every(k => row[k] !== null && row[k] !== undefined))
@@ -5527,9 +5530,9 @@ function costIndexBlendedSeries(currency) {
     const b = { eva: Number(base[f.eva]), pvc: Number(base[f.pvc]), rubber: Number(base[f.rubber]) };
     data.forEach(row => {
         map.set(row.week_date,
-            COST_INDEX_BLEND_WEIGHTS.eva * (Number(row[f.eva]) / b.eva) +
-            COST_INDEX_BLEND_WEIGHTS.rubber * (Number(row[f.rubber]) / b.rubber) +
-            COST_INDEX_BLEND_WEIGHTS.pvc * (Number(row[f.pvc]) / b.pvc));
+            WEIGHTS.eva * (Number(row[f.eva]) / b.eva) +
+            WEIGHTS.rubber * (Number(row[f.rubber]) / b.rubber) +
+            WEIGHTS.pvc * (Number(row[f.pvc]) / b.pvc));
     });
     return map;
 }
