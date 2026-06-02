@@ -717,19 +717,3 @@ registerChart({
   estadoAtual() { return { variable: presentationCostState.variable, currency: presentationCostState.currency, stdDev: presentationCostState.stdDev, from: presentationCostState.from, to: presentationCostState.to }; },
   aplicarEstado(e) { if (e) Object.assign(presentationCostState, e); }
 });
-
-/* ---- GRÁFICO DE TESTE (ponta-a-ponta) — REMOVER após validar -----------
-   Sem dashboardNative → vira aba nova no dashboard E opção de slide na
-   apresentação, sem editar nenhum HTML. É só prova da receita única. */
-registerChart({
-  id: 'teste-novo-grafico',
-  titulo: 'Teste — Gráfico Novo',
-  unidade: '(unidade de teste)',
-  desenhar(canvas) {
-    return new Chart(canvas.getContext('2d'), {
-      type: 'bar',
-      data: { labels: ['2023', '2024', '2025'], datasets: [{ label: 'Demo', data: [10, 14, 12], backgroundColor: '#002554' }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-    });
-  }
-});
