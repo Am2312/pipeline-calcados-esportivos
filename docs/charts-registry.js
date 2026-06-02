@@ -42,6 +42,16 @@
     if (window.DASH && window.DASH[name] !== undefined) return window.DASH[name];
     return window[name];
   };
+  // Vários gráficos legados desenham via getElementById(id FIXO). Se o mesmo gráfico
+  // aparece em 2+ slides, o id colide e o desenho vai pro canvas errado (slide visível
+  // fica em branco). regClaimId garante que o id fixo SEMPRE aponte pro canvas atual:
+  // remove o id de qualquer outro elemento e o crava no canvas que vai ser desenhado agora.
+  window.regClaimId = function (canvas, id) {
+    var prev = document.getElementById(id);
+    if (prev && prev !== canvas) prev.removeAttribute('id');
+    canvas.id = id;
+    return canvas;
+  };
 })();
 
 /* =====================================================================
@@ -183,7 +193,7 @@ registerChart({
   titulo: 'Sports Footwear — Sector Data',
   unidade: '(mn pairs, Percentage)',
   dashboardNative: true,
-  desenhar: function (canvas) { canvas.id = 'industry-main-chart'; DASH.renderIndustryChart(); return Chart.getChart(canvas); },
+  desenhar: function (canvas) { regClaimId(canvas, 'industry-main-chart'); DASH.renderIndustryChart(); return Chart.getChart(canvas); },
   montarControles: function () {
     var metricOps = Object.keys(DASH.SECTOR_METRICS).map(function (k) { return '<option value="' + k + '">' + DASH.SECTOR_METRICS[k].label + '</option>'; }).join('');
     var yrs = Array.from(new Set(DASH.sectorRows().map(function (r) { return String(r.data_year); })));
@@ -211,7 +221,7 @@ registerChart({
   titulo: 'Sports Footwear Imports',
   unidade: '(USD mn)',
   dashboardNative: true,
-  desenhar: function (canvas) { canvas.id = 'imports-main-chart'; DASH.renderImportsChart(); return Chart.getChart(canvas); },
+  desenhar: function (canvas) { regClaimId(canvas, 'imports-main-chart'); DASH.renderImportsChart(); return Chart.getChart(canvas); },
   montarControles: function () {
     return '<label>View <select data-im="view"><option value="line">Total</option><option value="stacked">By country</option></select></label>' +
            '<label>Grain <select data-im="grain"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>' +
@@ -246,7 +256,7 @@ registerChart({
   titulo: 'Vulcabras — Market Share (Footwear)',
   unidade: '(Percentage)',
   dashboardNative: true,
-  desenhar: function (canvas) { canvas.id = 'vulcabras-share-chart'; DASH.renderVulcabrasShareChart(); return Chart.getChart(canvas); },
+  desenhar: function (canvas) { regClaimId(canvas, 'vulcabras-share-chart'); DASH.renderVulcabrasShareChart(); return Chart.getChart(canvas); },
   montarControles: function () {
     var yrs = DASH.msData().years || [];
     var ops = yrs.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
@@ -341,7 +351,7 @@ registerChart({
   id: 'ecom-price', titulo: 'Average Price — Sports Footwear E-commerce', unidade: '(BRL)', dashboardNative: true,
   legendaDinamica() { return legendaDoChart(this._lastChart); },
   desenhar(canvas) {
-    canvas.id = 'price-chart';
+    regClaimId(canvas, 'price-chart');
     const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
     ecomSetGlobalSport(sp ? sp.value : 'performance');
     if (window._ecomBuildPriceOnly) window._ecomBuildPriceOnly();
@@ -401,7 +411,7 @@ registerChart({
   id: 'ecom-disc', titulo: '% of Discounted SKUs — E-commerce', unidade: '(Percentage)', dashboardNative: true,
   legendaDinamica() { return legendaDoChart(this._lastChart); },
   desenhar(canvas) {
-    canvas.id = 'disc-chart';
+    regClaimId(canvas, 'disc-chart');
     const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
     ecomSetGlobalSport(sp ? sp.value : 'performance');
     if (window._ecomBuildDiscOnly) window._ecomBuildDiscOnly();
@@ -459,7 +469,7 @@ registerChart({
   id: 'ecom-avgdisc', titulo: 'Average Discount — E-commerce', unidade: '(Percentage)', dashboardNative: true,
   legendaDinamica() { return legendaDoChart(this._lastChart); },
   desenhar(canvas) {
-    canvas.id = 'avgdisc-chart';
+    regClaimId(canvas, 'avgdisc-chart');
     const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
     ecomSetGlobalSport(sp ? sp.value : 'performance');
     if (window._ecomBuildAvgDiscOnly) window._ecomBuildAvgDiscOnly();
@@ -519,7 +529,7 @@ registerChart({
   id: 'ecom-franchise', titulo: 'Price Pass-Through — Sports Footwear E-commerce', unidade: '(Percentage, price change vs prior period)', dashboardNative: true,
   legendaDinamica() { return legendaDoChart(this._lastChart); },
   desenhar(canvas) {
-    canvas.id = 'fr-chart';
+    regClaimId(canvas, 'fr-chart');
     const sl = canvas.closest('.slide'); const sp = sl && sl.querySelector('[data-ecom-sport]');
     ecomSetGlobalSport(sp ? sp.value : 'all');
     if (!window.__frAfterRenderSet) {
@@ -594,7 +604,7 @@ registerChart({
 registerChart({
   id: 'caged-jobs', titulo: "Estimated Formal Jobs — Vulcabras' Factories", unidade: '(Formal Jobs, YoY)', dashboardNative: true,
   legenda: [{ cor: '#021C45', texto: 'Estimated jobs' }, { cor: '#6FDDCB', texto: 'YoY %' }],
-  desenhar(canvas) { canvas.id = 'presentation-caged-jobs-chart'; renderPresentationCagedJobsChart(); return Chart.getChart(canvas); },
+  desenhar(canvas) { regClaimId(canvas, 'presentation-caged-jobs-chart'); renderPresentationCagedJobsChart(); return Chart.getChart(canvas); },
   montarControles() {
     return `<label>View <select data-cg="grain">
               <option value="monthly">Monthly</option>
@@ -629,7 +639,7 @@ registerChart({
 registerChart({
   id: 'headcount-volume', titulo: 'Factory Headcount Growth vs Volume Growth', unidade: '(Percentage)', dashboardNative: true,
   legenda: [{ cor: '#021C45', texto: 'Employees YoY' }, { cor: '#6FDDCB', texto: 'Volume YoY' }],
-  desenhar(canvas) { canvas.id = 'presentation-volume-yoy-chart'; renderPresentationVolumeYoyChart(); return Chart.getChart(canvas); },
+  desenhar(canvas) { regClaimId(canvas, 'presentation-volume-yoy-chart'); renderPresentationVolumeYoyChart(); return Chart.getChart(canvas); },
   montarControles() {
     return `<label>View <select data-vy="mode">
               <option value="quarterly">Quarterly YoY</option><option value="ltm">LTM YoY</option></select></label>
@@ -670,7 +680,7 @@ registerChart({
       { cor: '#6FDDCB', texto: '−' + sd + ' SD' }
     ];
   },
-  desenhar(canvas) { canvas.id = 'presentation-cost-index-chart'; renderPresentationCostIndexChart(); return Chart.getChart(canvas); },
+  desenhar(canvas) { regClaimId(canvas, 'presentation-cost-index-chart'); renderPresentationCostIndexChart(); return Chart.getChart(canvas); },
   montarControles() {
     // Opções do "Index" vêm da receita única (window.COST_INDEX) → inclui Petrochemical (blended) e bate com o dashboard.
     const C = window.COST_INDEX;
