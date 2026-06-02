@@ -510,7 +510,8 @@
     return `<span class="chart-legend-swatch" style="background:repeating-linear-gradient(90deg,${color} 0,${color} 2px,transparent 2px,transparent 5px);"></span>`;
   }
   function renderLegend(series) {
-    $('fr-legend').innerHTML = series.map(s => {
+    const _leg = $('fr-legend'); if (!_leg) return;   // absent in presentation engine (template legend used instead)
+    _leg.innerHTML = series.map(s => {
       const cls = FR_HIDDEN.has(s.key) ? 'chart-legend-item legend-hidden' : 'chart-legend-item';
       return `<span class="${cls}" onclick="window._frLegendToggle('${s.key}')">${makeDashSwatch(s.color, s.dash || [])}${s.label}</span>`;
     }).join('');
@@ -592,6 +593,7 @@
   }
 
   function renderTable() {
+    if (!$('fr-table')) return;   // absent in presentation engine (chart-only slide)
     const price = getPrice();
     const series = getActiveSeries();
     if (!series.length) { $('fr-table').innerHTML = ''; return; }
@@ -691,10 +693,21 @@
     // Clear cache so stale empty results don't persist across renders
     _totalValidWeeksCache.clear();
     populateFromTo(); renderChart(); renderTable();
+    // presentation engine reapplies template fonts/legend after EVERY render path
+    // (init, poll-on-load, control change, series/legend toggle) — internal render() is the choke point.
+    if (window.__frAfterRender) { try { window.__frAfterRender(); } catch (e) {} }
   }
   // Guard: only render if elements are live in the DOM (not inside a <template>)
   window._frRender = function() { if (document.getElementById('fr-chart')) render(); };
   window._frInit   = init;
+  // Sync the module-private viewMode/compChannel from selects (they're NOT read live).
+  // Used by the presentation engine's aplicarEstado/desenhar to keep state consistent.
+  window._frSetState = function(s) {
+    if (!s) return;
+    if (s.view != null)    { const el = $('fr-view');    if (el) el.value = s.view;    viewMode    = s.view; }
+    if (s.channel != null) { const el = $('fr-channel'); if (el) el.value = s.channel; compChannel = s.channel; }
+    try { updateViewControls(); } catch (e) {}
+  };
 
   function initRender() {
     // Guard: if elements aren't in live DOM yet, bail — _frInit will be called by _ecomInit when ready

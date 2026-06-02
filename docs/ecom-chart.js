@@ -1579,4 +1579,33 @@ window.onAvgDiscGranChange          = onAvgDiscGranChange;
 window.buildAvgDiscAll              = buildAvgDiscAll;
 window.toggleLegendSeries           = toggleLegendSeries;  // legend click-to-hide (price/disc/avgdisc)
 
+// ── ADITIVO p/ a apresentação Vulcabras (presentation-v2): builders POR-GRÁFICO ──
+// Cada um faz só o setup + o gráfico do seu card (sem legenda/tabela do dashboard;
+// a apresentação usa a legenda do template). Permite 1 gráfico por slide sem
+// disparar renderAll (que construiria os 4 e quebraria em canvas ausente).
+// O dashboard NÃO chama estes (usa renderAll); ficam aqui só p/ a apresentação carregar
+// ESTE MESMO módulo da nuvem (receita única — sem cópia local divergente).
+window._ecomBuildPriceOnly = function () {
+    buildSeriesPanel(); updateViewControls();
+    populateFromTo((document.getElementById('gran-select') || {}).value || 'weekly');
+    buildPriceChart();
+};
+window._ecomBuildDiscOnly = function () {
+    buildDiscSeriesPanel(); updateDiscViewControls();
+    populateDiscFromTo((document.getElementById('disc-gran-select') || {}).value || 'weekly');
+    buildDiscChart();
+};
+window._ecomBuildAvgDiscOnly = function () {
+    buildAvgDiscSeriesPanel(); updateAvgDiscViewControls();
+    populateAvgDiscFromTo((document.getElementById('avgdisc-gran-select') || {}).value || 'weekly');
+    buildAvgDiscChart();
+};
+// sincroniza o estado de módulo (vars privadas) a partir da seleção salva, SEM disparar rebuild
+window._ecomSetState = function (scope, s) {
+    if (!s) return;
+    if (scope === 'price')   { if (s.view != null) viewMode = s.view;            if (s.channel != null) compChannel = s.channel;            if (s.brand != null) breakdownBrand = s.brand; }
+    if (scope === 'disc')    { if (s.view != null) discViewMode = s.view;        if (s.channel != null) discCompChannel = s.channel;        if (s.brand != null) discBreakdownBrand = s.brand; }
+    if (scope === 'avgdisc') { if (s.view != null) avgDiscViewMode = s.view;     if (s.channel != null) avgDiscCompChannel = s.channel;     if (s.brand != null) avgDiscBreakdownBrand = s.brand; }
+};
+
 })(); // end IIFE
