@@ -28,6 +28,12 @@ pela nuvem (GitHub Pages) e lido pelos DOIS lados: o dashboard (`docs/sports-ret
 3. **file://.** A apresentação NÃO funciona aberta com 2 cliques (origem `file://` bloqueia
    carregamentos). Abrir via servidor local — há o `Abrir Apresentacao.bat` na pasta do Drive.
 
+## 🔒 Trava automática (CI)
+Existe um check em `.github/workflows/charts-registry-check.yml` (roda `scripts/check_single_recipe.mjs`
+a cada push) que **FALHA** se o padrão for quebrado: gráfico removido do índice, `canvas.id` fixo de
+volta (em vez de `regClaimId`), dado re-hardcodado no dashboard, ou módulos ecom/franchise sem os
+builders. Rode local antes de empurrar: `node scripts/check_single_recipe.mjs`. Se o CI falhar, leia a saída.
+
 ## ✔️ Antes de dar como pronto
 
 1. Testar **os dois lados** localmente (dashboard via servidor em `docs/`; apresentação via servidor
