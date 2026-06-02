@@ -226,11 +226,13 @@ registerChart({
     return '<label>View <select data-im="view"><option value="line">Total</option><option value="stacked">By country</option></select></label>' +
            '<label>Grain <select data-im="grain"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>' +
            '<label>Base <select data-im="base"><option value="spot">Spot</option><option value="ltm">LTM</option></select></label>' +
+           '<label>Metric <select data-im="metric"><option value="fob">FOB</option><option value="volume">Volume</option></select></label>' +
            '<label>From <select data-im="from"></select></label>' +
            '<label>To <select data-im="to"></select></label>';
   },
   ligarControles: function (box, redesenhar) {
     var view = box.querySelector('[data-im="view"]'), grain = box.querySelector('[data-im="grain"]'), base = box.querySelector('[data-im="base"]');
+    var metric = box.querySelector('[data-im="metric"]');
     var fromSel = box.querySelector('[data-im="from"]'), toSel = box.querySelector('[data-im="to"]');
     var popular = function () {
       DASH.ensureRange();
@@ -240,14 +242,16 @@ registerChart({
       fromSel.value = DASH.importsState.from; toSel.value = DASH.importsState.to;
     };
     view.value = DASH.importsState.view; grain.value = DASH.importsState.grain; base.value = DASH.importsState.base;
+    metric.value = DASH.importsState.metric;
     popular();
     view.addEventListener('change', function () { DASH.importsState.view = view.value; redesenhar(); });
     grain.addEventListener('change', function () { DASH.importsState.grain = grain.value; DASH.importsState.from = null; DASH.importsState.to = null; popular(); redesenhar(); });
     base.addEventListener('change', function () { DASH.importsState.base = base.value; DASH.importsState.from = null; DASH.importsState.to = null; popular(); redesenhar(); });
+    metric.addEventListener('change', function () { DASH.importsState.metric = metric.value; redesenhar(); });
     fromSel.addEventListener('change', function () { DASH.importsState.from = fromSel.value; redesenhar(); });
     toSel.addEventListener('change', function () { DASH.importsState.to = toSel.value; redesenhar(); });
   },
-  estadoAtual: function () { return { view: DASH.importsState.view, grain: DASH.importsState.grain, base: DASH.importsState.base, from: DASH.importsState.from, to: DASH.importsState.to }; },
+  estadoAtual: function () { return { view: DASH.importsState.view, grain: DASH.importsState.grain, base: DASH.importsState.base, metric: DASH.importsState.metric, from: DASH.importsState.from, to: DASH.importsState.to }; },
   aplicarEstado: function (e) { if (e) Object.assign(DASH.importsState, e); }
 });
 
