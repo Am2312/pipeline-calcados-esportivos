@@ -104,6 +104,10 @@ window.SPORTSWEAR_TAM = window.SPORTSWEAR_TAM || {
   footwear: [10275.3, 11211.8, 12278, 13697.3, 13278.2, 12709.9, 13008.4, 13355.2, 14077.8, 11732.6, 13769, 14778.9, 16679.2, 18717.4, 21486.7]
 };
 
+/* ---- CAGED: base RAIS 2019 (calibra o estoque de empregos formais) -----
+   Constante duplicada (dashboard CAGED_RAIS_2019_BASE × apresentação cagedRais2019Base). */
+window.CAGED_RAIS_2019_BASE = window.CAGED_RAIS_2019_BASE || 13105;
+
 /* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
