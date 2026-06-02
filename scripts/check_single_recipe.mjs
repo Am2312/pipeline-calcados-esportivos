@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+/* =====================================================================
+   TRAVA DURA da "receita única" (dashboard ↔ apresentação Vulcabras).
+   Roda no CI (.github/workflows/charts-registry-check.yml) a cada push.
+   Falha (exit 1) se alguém quebrar o padrão — protege contra regressão
+   feita por outra sessão/edição. Regras completas: CLAUDE.md (raiz).
+   Só lê texto dos arquivos do repo (sem browser, sem dependências).
+   ===================================================================== */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const read = (p) => readFileSync(join(ROOT, p), 'utf8');
+
+const fails = [];
+const oks = [];
+function check(cond, msgOk, msgFail) {
+  if (cond) oks.push('  ✓ ' + msgOk);
+  else fails.push('  ✗ ' + msgFail);
+}
+
+let registry = '', dash = '', ecom = '', franchise = '';
+try {
+  registry  = read('docs/charts-registry.js');
+  dash      = read('docs/sports-retail-dashboard.html');
+  ecom      = read('docs/ecom-chart.js');
+  franchise = read('docs/franchise-chart.js');
+} catch (e) {
+  console.error('ERRO lendo arquivos do repo:', e.message);
+  process.exit(2);
+}
+
+/* 1) Índice compartilhado: os 15 gráficos conhecidos precisam continuar registrados. */
+const EXPECTED_IDS = [
+  'footwear-decomp', 'brand-gmv', 'sector-data', 'imports-data', 'vulcabras-share',
+  'tam-mercado', 'tam-destaque', 'market-share',
+  'ecom-price', 'ecom-disc', 'ecom-avgdisc', 'ecom-franchise',
+  'caged-jobs', 'headcount-volume', 'cost-index'
+];
+for (const id of EXPECTED_IDS) {
+  check(new RegExp(`id:\\s*['"]${id}['"]`).test(registry),
+    `gráfico "${id}" presente no índice`,
+    `gráfico "${id}" SUMIU do charts-registry.js (removido?) — ele deixaria de existir no dashboard E na apresentação`);
+}
+
+/* 2) Bug do slide em branco: nada de canvas.id fixo; tem que usar regClaimId. */
+check(!/canvas\.id\s*=\s*['"]/.test(registry),
+  'nenhum "canvas.id = ..." cru no índice (usa regClaimId)',
+  'há "canvas.id = ..." cru no charts-registry.js — reintroduz o bug de slide em branco com gráfico duplicado. Use regClaimId(canvas, "id")');
+check(/window\.regClaimId\s*=\s*function/.test(registry),
+  'helper regClaimId definido',
+  'regClaimId NÃO está definido no charts-registry.js (necessário p/ ids fixos)');
+
+/* 3) Dados/config centralizados no índice (receita única). */
+const SHARED = ['window.COST_INDEX', 'window.SPORTSWEAR_TAM', 'window.CAGED_RAIS_2019_BASE', 'window.MS_PALETTE'];
+for (const w of SHARED) {
+  check(registry.includes(w + ' ='),
+    `${w} definido no índice`,
+    `${w} NÃO está definido no charts-registry.js (dado compartilhado removido?)`);
+}
+
+/* 4) Dashboard CONSOME o compartilhado (não voltou a hardcodar cópia divergente). */
+check(/charts-registry\.js/.test(dash),
+  'dashboard inclui charts-registry.js',
+  'dashboard NÃO inclui charts-registry.js');
+for (const w of SHARED) {
+  check(dash.includes(w),
+    `dashboard consome ${w}`,
+    `dashboard NÃO referencia ${w} — provável reintrodução de cópia hardcoded (vai divergir da apresentação)`);
+}
+
+/* 5) Módulos que a apresentação carrega da nuvem precisam ter os builders por-gráfico. */
+for (const fn of ['_ecomBuildPriceOnly', '_ecomBuildDiscOnly', '_ecomBuildAvgDiscOnly', '_ecomSetState']) {
+  check(ecom.includes(fn),
+    `ecom-chart.js expõe ${fn}`,
+    `ecom-chart.js NÃO tem ${fn} — a apresentação (que carrega ESTE módulo da nuvem) quebra`);
+}
+check(franchise.includes('_frSetState'),
+  'franchise-chart.js expõe _frSetState',
+  'franchise-chart.js NÃO tem _frSetState — a apresentação quebra');
+
+/* ---- resultado ---- */
+console.log('\n=== Receita Única — verificação ===');
+oks.forEach((l) => console.log(l));
+if (fails.length) {
+  console.log('\nFALHAS:');
+  fails.forEach((l) => console.log(l));
+  console.log(`\n${fails.length} falha(s). Veja CLAUDE.md (raiz) p/ a regra. Gráficos vão no charts-registry.js.\n`);
+  process.exit(1);
+}
+console.log(`\nOK — ${oks.length} verificações passaram. Receita única íntegra.\n`);

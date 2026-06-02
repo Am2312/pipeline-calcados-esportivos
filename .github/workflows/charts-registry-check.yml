@@ -1,0 +1,38 @@
+name: Receita Única (charts-registry check)
+
+# Trava dura: garante que o padrão da "receita única" (dashboard ↔ apresentação)
+# não seja quebrado por nenhuma edição. Falha o check se alguém:
+#  - remover um gráfico do índice, ou
+#  - voltar a usar canvas.id fixo (bug de slide em branco), ou
+#  - re-hardcodar dados que deviam vir do índice, ou
+#  - quebrar os módulos de e-commerce/franquia.
+# Regra completa: CLAUDE.md (raiz do repo).
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docs/charts-registry.js'
+      - 'docs/sports-retail-dashboard.html'
+      - 'docs/ecom-chart.js'
+      - 'docs/franchise-chart.js'
+      - 'scripts/check_single_recipe.mjs'
+  pull_request:
+    paths:
+      - 'docs/charts-registry.js'
+      - 'docs/sports-retail-dashboard.html'
+      - 'docs/ecom-chart.js'
+      - 'docs/franchise-chart.js'
+      - 'scripts/check_single_recipe.mjs'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verificar integridade da receita única
+        run: node scripts/check_single_recipe.mjs
