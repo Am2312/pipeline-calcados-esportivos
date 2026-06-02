@@ -52,7 +52,63 @@
     canvas.id = id;
     return canvas;
   };
+
+  /* ===================================================================
+     LISTA ÚNICA DE CAIXAS (fonte de verdade dos seletores de OPÇÃO FIXA).
+     window.CONTROL_SPECS[chartId] = [ { key, label, width, onchange, idPrefix, attr, options:[{v,t}], disableWhenAnnual? } ]
+     Os DOIS lados leem daqui: o dashboard monta via regDashBoxes (estilo
+     selectBlock/df-input, com seus handlers onchange), e a apresentação via
+     regPresBoxes (estilo <label> + data-<attr>). Adicionar uma caixa AQUI
+     faz ela aparecer no dashboard E no PPT. From/To e caixas dinâmicas
+     (ex.: Index do Cost) ficam fora, montadas à parte por cada lado.
+     - key      = nome da propriedade no objeto de estado (igual nos 2 lados)
+     - idPrefix = prefixo do id do <select> no dashboard (ex.: 'caged-jobs' → 'caged-jobs-grain-select')
+     - attr     = sufixo do data-attr no PPT (ex.: 'cg' → data-cg="grain")
+     =================================================================== */
+  window.CONTROL_SPECS = window.CONTROL_SPECS || {};
+  window.regSpec = function (chartId) { return window.CONTROL_SPECS[chartId] || []; };
+  // monta as caixas no ESTILO DO DASHBOARD (selectBlock + df-input), lendo o valor atual de state[key]
+  window.regDashBoxes = function (chartId, state) {
+    return window.regSpec(chartId).map(function (c) {
+      var stateKey = c.stateKey || c.key;          // propriedade no objeto de estado
+      var idKey = c.idKey || c.key;                // token usado no id do <select>
+      var cur = state ? state[stateKey] : undefined;
+      var dis = (c.disableWhenAnnual && state && state.grain === 'annual') ? ' disabled' : '';
+      var w = c.width ? ' style="width:' + c.width + 'px;"' : '';
+      var opts = c.options.map(function (o) {
+        return '<option value="' + o.v + '"' + (String(cur) === String(o.v) ? ' selected' : '') + '>' + o.t + '</option>';
+      }).join('');
+      return '<div class="control-block"><div class="control-label">' + c.label + '</div>' +
+             '<select id="' + (c.idPrefix || chartId) + '-' + idKey + '-select" class="df-input" onchange="' + (c.onchange || '') + '"' + w + dis + '>' + opts + '</select></div>';
+    }).join('');
+  };
+  // monta as caixas no ESTILO DA APRESENTAÇÃO (<label> + data-<attr>); o ligarControles de cada gráfico já consulta data-<attr>="key"
+  window.regPresBoxes = function (chartId) {
+    return window.regSpec(chartId).map(function (c) {
+      var opts = c.options.map(function (o) { return '<option value="' + o.v + '">' + o.t + '</option>'; }).join('');
+      return '<label>' + c.label + ' <select data-' + (c.attr || 'reg') + '="' + c.key + '">' + opts + '</select></label>';
+    }).join('');
+  };
 })();
+
+/* =====================================================================
+   LISTAS DE CAIXAS por gráfico (preenche window.CONTROL_SPECS).
+   Editar aqui = muda a caixa no dashboard E no PPT ao mesmo tempo.
+   ===================================================================== */
+window.CONTROL_SPECS['caged-jobs'] = [
+  { key: 'grain', label: 'Grain', idPrefix: 'caged-jobs', attr: 'cg', onchange: 'setCagedJobsGrain()',
+    options: [{ v: 'monthly', t: 'Monthly' }, { v: 'quarterly', t: 'Quarterly' }, { v: 'annual', t: 'Annual' }] }
+];
+window.CONTROL_SPECS['headcount-volume'] = [
+  { key: 'mode', label: 'Basis', width: 126, idPrefix: 'caged-volume-yoy', attr: 'vy', onchange: 'setCagedVolumeYoyMode()',
+    options: [{ v: 'quarterly', t: 'Quarterly' }, { v: 'ltm', t: 'LTM' }] },
+  { key: 'shift', stateKey: 'shiftQuarters', label: 'Jobs Shift', width: 126, idPrefix: 'caged-volume-yoy', attr: 'vy', onchange: 'setCagedVolumeYoyShift()',
+    options: [{ v: '0', t: 'No shift' }, { v: '1', t: '+3M' }, { v: '2', t: '+6M' }] }
+];
+window.CONTROL_SPECS['vulcabras-share'] = [
+  { key: 'frequency', label: 'Frequency', width: 140, idPrefix: 'vulcabras-share', attr: 'vs', onchange: 'setVulcabrasShareFrequency()',
+    options: [{ v: 'annual', t: 'Annual' }] }
+];
 
 /* =====================================================================
    DADOS/LÓGICA COMPARTILHADA — "receita única" por gráfico.
@@ -280,7 +336,7 @@ registerChart({
   montarControles: function () {
     var yrs = DASH.msData().years || [];
     var ops = yrs.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
-    return '<label>Frequency <select data-vs="frequency"><option value="annual">Annual</option></select></label>' +
+    return regPresBoxes('vulcabras-share') +
            '<label>From <select data-vs="from">' + ops + '</select></label><label>To <select data-vs="to">' + ops + '</select></label>';
   },
   ligarControles: function (box, redesenhar) {
@@ -627,11 +683,8 @@ registerChart({
   legenda: [{ cor: '#021C45', texto: 'Estimated jobs' }, { cor: '#6FDDCB', texto: 'YoY %' }],
   desenhar(canvas) { regClaimId(canvas, 'presentation-caged-jobs-chart'); renderPresentationCagedJobsChart(); return Chart.getChart(canvas); },
   montarControles() {
-    return `<label>View <select data-cg="grain">
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="annual">Annual</option></select></label>
-            <label>From <select data-cg="from"></select></label>
+    return regPresBoxes('caged-jobs') +
+           `<label>From <select data-cg="from"></select></label>
             <label>To <select data-cg="to"></select></label>`;
   },
   ligarControles(box, redesenhar) {
@@ -662,11 +715,8 @@ registerChart({
   legenda: [{ cor: '#021C45', texto: 'Employees YoY' }, { cor: '#6FDDCB', texto: 'Volume YoY' }],
   desenhar(canvas) { regClaimId(canvas, 'presentation-volume-yoy-chart'); renderPresentationVolumeYoyChart(); return Chart.getChart(canvas); },
   montarControles() {
-    return `<label>View <select data-vy="mode">
-              <option value="quarterly">Quarterly YoY</option><option value="ltm">LTM YoY</option></select></label>
-            <label>Jobs Shift <select data-vy="shift">
-              <option value="0">No shift</option><option value="1">+3M</option><option value="2">+6M</option></select></label>
-            <label>From <select data-vy="from"></select></label>
+    return regPresBoxes('headcount-volume') +
+           `<label>From <select data-vy="from"></select></label>
             <label>To <select data-vy="to"></select></label>`;
   },
   ligarControles(box, redesenhar) {

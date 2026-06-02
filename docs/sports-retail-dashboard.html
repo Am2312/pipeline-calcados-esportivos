@@ -1427,8 +1427,10 @@ function selectedVulcabrasMarketShareRows() {
 function vulcabrasShareControlsHtml() {
     const years = msData().years || [];
     const yearOpts = selected => years.map(year => `<option value="${year}" ${Number(year) === Number(selected) ? 'selected' : ''}>${year}</option>`).join('');
+    // Caixa Frequency vem da LISTA ÚNICA (window.CONTROL_SPECS['vulcabras-share']) — mesma lista do PPT.
+    const fixas = (window.regDashBoxes ? window.regDashBoxes('vulcabras-share', VULCABRAS_SHARE_STATE) : '');
     return `<div class="imports-controls" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-left:auto;">
-        ${selectBlock('Frequency', `<select id="vulcabras-share-frequency-select" class="df-input" onchange="setVulcabrasShareFrequency()" style="width:140px;"><option value="annual" selected>Annual</option></select>`)}
+        ${fixas}
         ${selectBlock('From', `<select id="vulcabras-share-from-select" class="df-input" onchange="setVulcabrasShareRange()" style="width:116px;">${yearOpts(VULCABRAS_SHARE_STATE.from)}</select>`)}
         ${selectBlock('To', `<select id="vulcabras-share-to-select" class="df-input" onchange="setVulcabrasShareRange()" style="width:116px;">${yearOpts(VULCABRAS_SHARE_STATE.to)}</select>`)}
     </div>`;
@@ -3527,8 +3529,10 @@ function cagedJobsPeriodSelect(id, current, onchangeFn) {
 
 function cagedJobsControlsHtml() {
     ensureCagedJobsRange();
+    // Caixa Grain vem da LISTA ÚNICA (window.CONTROL_SPECS['caged-jobs']) — mesma lista do PPT.
+    const fixas = (window.regDashBoxes ? window.regDashBoxes('caged-jobs', cagedJobsState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${selectBlock('Grain', `<select id="caged-jobs-grain-select" class="df-input" onchange="setCagedJobsGrain()"><option value="monthly" ${cagedJobsState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedJobsState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedJobsState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
+        ${fixas}
         ${selectBlock('From', cagedJobsPeriodSelect('caged-jobs-from-select', cagedJobsState.from, 'setCagedJobsRange()'))}
         ${selectBlock('To', cagedJobsPeriodSelect('caged-jobs-to-select', cagedJobsState.to, 'setCagedJobsRange()'))}
     </div>`;
@@ -3880,9 +3884,10 @@ function cagedVolumeYoyPeriodSelect(id, current, onchangeFn) {
 
 function cagedVolumeYoyControlsHtml() {
     ensureCagedVolumeYoyRange();
+    // Basis + Jobs Shift vêm da LISTA ÚNICA (window.CONTROL_SPECS['headcount-volume']) — mesma lista do PPT.
+    const fixas = (window.regDashBoxes ? window.regDashBoxes('headcount-volume', cagedVolumeYoyState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${selectBlock('Basis', `<select id="caged-volume-yoy-mode-select" class="df-input" onchange="setCagedVolumeYoyMode()" style="width:126px;"><option value="quarterly" ${cagedVolumeYoyState.mode === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="ltm" ${cagedVolumeYoyState.mode === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
-        ${selectBlock('Jobs Shift', `<select id="caged-volume-yoy-shift-select" class="df-input" onchange="setCagedVolumeYoyShift()" style="width:126px;"><option value="0" ${cagedVolumeYoyState.shiftQuarters === 0 ? 'selected' : ''}>No shift</option><option value="1" ${cagedVolumeYoyState.shiftQuarters === 1 ? 'selected' : ''}>+3M</option><option value="2" ${cagedVolumeYoyState.shiftQuarters === 2 ? 'selected' : ''}>+6M</option></select>`)}
+        ${fixas}
         ${selectBlock('From', cagedVolumeYoyPeriodSelect('caged-volume-yoy-from-select', cagedVolumeYoyState.from, 'setCagedVolumeYoyRange()'))}
         ${selectBlock('To', cagedVolumeYoyPeriodSelect('caged-volume-yoy-to-select', cagedVolumeYoyState.to, 'setCagedVolumeYoyRange()'))}
     </div>`;

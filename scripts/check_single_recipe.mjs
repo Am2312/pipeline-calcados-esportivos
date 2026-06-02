@@ -91,10 +91,12 @@ check(franchise.includes('_frSetState'),
 // ex.: imports-data via window.IMPORTS_CONTROL_SPEC) saem deste manifesto — neles a
 // divergência é impossível por construção (uma só definição) e a contagem estática
 // de <select> não se aplica (as caixas são montadas em runtime a partir do array).
+// Migrados p/ lista única (window.CONTROL_SPECS) e portanto FORA deste manifesto:
+// imports-data, caged-jobs, headcount-volume, vulcabras-share. Nesses, divergência é
+// impossível por construção. Os de baixo ainda têm controles hardcoded em cada lado.
 const EXPECTED_CONTROLS = {
   'footwear-decomp': 2, 'brand-gmv': 3, 'sector-data': 3,
-  'vulcabras-share': 3, 'tam-mercado': 2, 'tam-destaque': 0, 'market-share': 5,
-  'caged-jobs': 3, 'headcount-volume': 4, 'cost-index': 5,
+  'tam-mercado': 2, 'tam-destaque': 0, 'market-share': 5, 'cost-index': 5,
   'ecom-price': 8, 'ecom-disc': 7, 'ecom-avgdisc': 8, 'ecom-franchise': 11
 };
 function chartBlocks(src) {
