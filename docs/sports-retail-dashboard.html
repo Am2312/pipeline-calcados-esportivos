@@ -4351,117 +4351,13 @@ function renderCagedJobsChart() {
     if (!el) return;
     const rows = cagedJobsSelectedRows();
     if (!rows.length) return;
-    const values = rows.map(row => Math.round(row.value));
-    const yoy = rows.map(row => Number.isFinite(row.yoy) ? row.yoy : null);
-    const valueAxis = cagedAxisBounds(values, { includeZero:true, padRatio:0.04, targetTicks:7, minSpan:1000 });
-    const yoyAxis = cagedJobsYoyAxis(yoy);
-    const highlighted = cagedJobsHighlightedIndices(rows);
-    const highlightedSet = new Set(highlighted);
-    const barColors = rows.map((row, i) => highlightedSet.has(i) ? C.cereja : C.azulEscuro);
-    const labelPlugin = {
-        id: 'cagedJobsLabels',
-        afterDatasetsDraw(chart) {
-            const ctx = chart.ctx;
-            const barMeta = chart.getDatasetMeta(0);
-            const lineMeta = chart.getDatasetMeta(1);
-            const font = '800 11px Verdana';
-            const boxH = 20;
-            const padX = 12;
-            ctx.save();
-            if (barMeta.visible) highlighted.forEach(i => {
-                const bar = barMeta.data[i];
-                if (!bar || !Number.isFinite(values[i])) return;
-                ctx.font = font;
-                ctx.fillStyle = C.azulEscuro;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                const text = cagedNumber(values[i]);
-                const x = Math.max(chart.chartArea.left + 12, Math.min(bar.x, chart.chartArea.right - 12));
-                const y = Math.max(chart.chartArea.top + 14, bar.y - 6);
-                ctx.fillText(text, x, y);
-            });
-            if (lineMeta.visible) highlighted.forEach(i => {
-                const point = lineMeta.data[i];
-                if (!point || !Number.isFinite(yoy[i])) return;
-                const text = cagedPctNumber(yoy[i], 0);
-                ctx.font = font;
-                const bw = ctx.measureText(text).width + padX;
-                const x = Math.max(chart.chartArea.left + 2, Math.min(point.x - bw / 2, chart.chartArea.right - bw - 2));
-                const y = Math.max(chart.chartArea.top + 2, Math.min(point.y - boxH / 2, chart.chartArea.bottom - boxH - 2));
-                ctx.fillStyle = C.turquesa;
-                roundedRect(ctx, x, y, bw, boxH, 3);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(text, x + bw / 2, y + boxH / 2 + 0.5);
-            });
-            ctx.restore();
-        }
-    };
-    cagedJobsChartInstance = new Chart(el.getContext('2d'), {
-        data: {
-            labels: rows.map(row => row.label),
-            datasets: [
-                { type:'bar', label:'Estimated Jobs', data:values, backgroundColor:barColors, borderWidth:0, yAxisID:'y', barPercentage:0.72, categoryPercentage:0.84, order:2 },
-                { type:'line', label:'YoY', data:yoy, borderColor:C.turquesa, backgroundColor:C.turquesa, borderWidth:2.5, pointRadius:0, pointHoverRadius:5, pointHitRadius:16, tension:0.25, yAxisID:'y1', order:1 },
-            ]
-        },
-        options: {
-            responsive:true,
-            maintainAspectRatio:false,
-            animation:false,
-            interaction:{ mode:'index', intersect:false },
-            layout:{ padding:{ left:8, right:16, top:18, bottom:0 } },
-            plugins:{ legend:{ display:false }, tooltip:{
-                backgroundColor:'rgba(2,28,69,0.94)',
-                titleColor:'#9AA8BB',
-                bodyColor:'#FFFFFF',
-                borderColor:'#344F75',
-                borderWidth:1,
-                cornerRadius:8,
-                padding:12,
-                titleFont:{ family:'Verdana', size:12, weight:'700' },
-                bodyFont:{ family:'Verdana', size:12 },
-                callbacks:{ label(ctx) {
-                    return ctx.dataset.yAxisID === 'y1'
-                        ? `  YoY: ${cagedPctNumber(ctx.parsed.y, 1)}`
-                        : `  Estimated Jobs: ${cagedNumber(ctx.parsed.y)}`;
-                }}
-            }},
-            scales:{
-                x:{ grid:{ display:false }, border:{ color:'#CFD8E3', width:1 }, ticks:{ color:C.azulEscuro40, font:{ family:'Verdana', size:11 }, maxRotation:90, minRotation:90 } },
-                y:{
-                    min:valueAxis.min,
-                    max:valueAxis.max,
-                    display:true,
-                    grid:{ display:false },
-                    border:{ color:'#CFD8E3', width:1 },
-                    title:{ display:false },
-                    ticks:{
-                        color:C.azulEscuro40,
-                        font:{ family:'Verdana', size:11 },
-                        stepSize:valueAxis.step,
-                        callback(value) { return cagedNumber(Number(value)); }
-                    }
-                },
-                y1:{
-                    min:yoyAxis.min,
-                    max:yoyAxis.max,
-                    position:'right',
-                    display:false,
-                    grid:{ display:false, drawOnChartArea:false },
-                    border:{ display:false },
-                    title:{ display:true, text:'YoY', color:C.azulEscuro60, padding:{ top:0, bottom:12 }, font:{ family:'Verdana', size:13, weight:'400' } },
-                    ticks:{
-                        color:C.azulEscuro40,
-                        font:{ family:'Verdana', size:11 },
-                        stepSize:yoyAxis.step,
-                        callback(value) { return cagedPctNumber(Number(value), 0); }
-                    }
-                }
-            }
-        },
-        plugins:[labelPlugin]
+    // RECEITA ÚNICA — model + desenho do caged-jobs pelo charts-registry.js (mesma fn que o PPT usa); chrome do card via opts
+    const model = window.getCagedJobsChartModel(rows, cagedJobsState.grain);
+    cagedJobsChartInstance = window.buildCagedJobsChartCanvas(el, model, {
+        barColor: C.azulEscuro, highlightColor: C.cereja, lineColor: C.turquesa,
+        labelFontPx: 11, boxH: 20, badgeRadius: 3,
+        tickColor: C.azulEscuro40, tickFontSize: 11, tickWeight: 'normal',
+        borderColor: '#CFD8E3', y1TitleColor: C.azulEscuro60, y1TitleFontSize: 13
     });
     bindCagedJobsLegendToggles();
 }

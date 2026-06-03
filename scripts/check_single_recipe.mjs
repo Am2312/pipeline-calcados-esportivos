@@ -180,6 +180,17 @@ check(dash.includes('window.getCostIndexStats') && dash.includes('window.buildCo
   'dashboard delega cost-index ao índice (stats + desenho)',
   'dashboard NÃO chama window.getCostIndexStats/buildCostIndexChartCanvas — reintroduziu desenho inline do cost-index');
 
+/* 11) CAGED JOBS — receita única de MODEL DERIVADO + DESENHO. */
+check(/window\.getCagedJobsChartModel\s*=\s*function/.test(registry),
+  'índice define window.getCagedJobsChartModel',
+  'charts-registry.js NÃO define window.getCagedJobsChartModel — model do caged-jobs voltaria a ser duplicado');
+check(/window\.buildCagedJobsChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildCagedJobsChartCanvas',
+  'charts-registry.js NÃO define window.buildCagedJobsChartCanvas — desenho do caged-jobs voltaria a ser duplicado');
+check(dash.includes('window.getCagedJobsChartModel') && dash.includes('window.buildCagedJobsChartCanvas'),
+  'dashboard delega caged-jobs ao índice (model + desenho)',
+  'dashboard NÃO chama window.getCagedJobsChartModel/buildCagedJobsChartCanvas — reintroduziu desenho inline do caged-jobs');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));

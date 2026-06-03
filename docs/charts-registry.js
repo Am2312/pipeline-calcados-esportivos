@@ -729,6 +729,140 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   CAGED JOBS (Estimated Formal Jobs — Vulcabras' Factories) — RECEITA ÚNICA
+   (model derivado + desenho). rows vêm de cada lado (mesma base
+   window.CAGED_RAIS_2019_BASE + VULCABRAS_CAGED_DATA, lógica idêntica);
+   helpers (axis/fmt/highlight) eram byte-idênticos. Aqui ficam o model
+   derivado (values/yoy/axes/highlighted) e o desenho; chrome por-lado
+   (fonte escalada, eixo #A6A6A6 bold do PPT, raio do badge) via opts.
+   ===================================================================== */
+(function () {
+  function cagedNum(value) { var r = Math.round(Number(value) || 0); var abs = Math.abs(r).toLocaleString('en-US'); return r < 0 ? '(' + abs + ')' : abs; }
+  function cagedPct(value, digits) { digits = digits || 0; if (!Number.isFinite(value)) return 'n.m.'; var abs = Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }); return value < 0 ? '(' + abs + '%)' : abs + '%'; }
+  function niceCagedStep(range, targetTicks) { targetTicks = targetTicks || 6; var raw = Math.max(Number(range || 0) / targetTicks, 25); var mag = Math.pow(10, Math.floor(Math.log10(raw))); var n = raw / mag; if (n <= 1) return mag; if (n <= 2) return 2 * mag; if (n <= 2.5) return 2.5 * mag; if (n <= 5) return 5 * mag; return 10 * mag; }
+  function cagedAxisBounds(values, options) {
+    options = options || {};
+    var valid = values.map(Number).filter(Number.isFinite);
+    var includeZero = options.includeZero !== false;
+    var padRatio = options.padRatio != null ? options.padRatio : 0.07;
+    var targetTicks = options.targetTicks != null ? options.targetTicks : 6;
+    var minSpan = options.minSpan != null ? options.minSpan : 50;
+    if (!valid.length) return { min: 0, max: 100, step: 25 };
+    var min = Math.min.apply(null, valid), max = Math.max.apply(null, valid);
+    if (includeZero) { min = Math.min(min, 0); max = Math.max(max, 0); }
+    if (min === max) { min -= minSpan / 2; max += minSpan / 2; if (includeZero) min = Math.min(min, 0); }
+    var span = Math.max(max - min, minSpan);
+    var pad = Math.max(span * padRatio, minSpan * 0.15);
+    var paddedMin = min - pad, paddedMax = max + pad;
+    if (includeZero && min >= 0) paddedMin = 0;
+    if (includeZero && max <= 0) paddedMax = 0;
+    var step = options.stepSize || niceCagedStep(paddedMax - paddedMin, targetTicks);
+    return { min: Math.floor(paddedMin / step) * step, max: Math.ceil(paddedMax / step) * step, step: step };
+  }
+  function cagedYoyAxis(values) {
+    var valid = values.filter(Number.isFinite); var step = 5;
+    if (!valid.length) return { min: 0, max: step, step: step };
+    var min = Math.min.apply(null, valid), max = Math.max.apply(null, valid);
+    if (min === max) { min -= 1; max += 1; }
+    var span = max - min; var pad = Math.max(span * 0.18, 1.5);
+    return { min: Math.min(0, Math.floor((min - pad) / step) * step), max: Math.max(0, Math.ceil((max + pad) / step) * step), step: step };
+  }
+  function cagedRrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function highlightedIndices(rows, grain) {
+    var anchor = rows[rows.length - 1];
+    if (!anchor) return [];
+    if (grain === 'monthly') return rows.map(function (row, i) { return row.month === anchor.month ? i : -1; }).filter(function (i) { return i >= 0; });
+    if (grain === 'quarterly') return rows.map(function (row, i) { return row.quarter === anchor.quarter ? i : -1; }).filter(function (i) { return i >= 0; });
+    return [rows.length - 1];
+  }
+
+  /* rows = [{key,label,value,yoy,month,quarter,...}] já filtradas; grain = monthly|quarterly|annual */
+  window.getCagedJobsChartModel = function (rows, grain) {
+    var values = rows.map(function (row) { return Math.round(row.value); });
+    var yoy = rows.map(function (row) { return Number.isFinite(row.yoy) ? row.yoy : null; });
+    return {
+      labels: rows.map(function (row) { return row.label; }),
+      values: values, yoy: yoy,
+      valueAxis: cagedAxisBounds(values, { includeZero: true, padRatio: 0.04, targetTicks: 7, minSpan: 1000 }),
+      yoyAxis: cagedYoyAxis(yoy),
+      highlighted: highlightedIndices(rows, grain)
+    };
+  };
+
+  /* opts: barColor(#021C45), highlightColor(#FF4F6C), lineColor(#6FDDCB),
+     labelFontPx(11), boxH(20), badgeRadius(3), tickColor(#9AA8BB),
+     tickFontSize(11), tickWeight('normal'), borderColor(#CFD8E3),
+     y1TitleColor(#667D99), y1TitleFontSize(13), gridDrawTicks(true). */
+  window.buildCagedJobsChartCanvas = function (canvas, model, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var barColor = opts.barColor || '#021C45', highlightColor = opts.highlightColor || '#FF4F6C', lineColor = opts.lineColor || '#6FDDCB';
+    var labelFontPx = opts.labelFontPx || 11, boxH = opts.boxH || 20, badgeRadius = (opts.badgeRadius != null) ? opts.badgeRadius : 3;
+    var tickColor = opts.tickColor || '#9AA8BB', tickFontSize = opts.tickFontSize || 11, tickWeight = opts.tickWeight || 'normal';
+    var borderColor = opts.borderColor || '#CFD8E3';
+    var y1TitleColor = opts.y1TitleColor || '#667D99', y1TitleFontSize = opts.y1TitleFontSize || 13;
+    var gridObj = function () { return opts.gridDrawTicks === false ? { display: false, drawTicks: false } : { display: false }; };
+    var labels = model.labels, values = model.values, yoy = model.yoy, valueAxis = model.valueAxis, yoyAxis = model.yoyAxis, highlighted = model.highlighted;
+    var highlightedSet = new Set(highlighted);
+    var barColors = values.map(function (_, i) { return highlightedSet.has(i) ? highlightColor : barColor; });
+    var labelPlugin = {
+      id: 'cagedJobsLabels',
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx;
+        var barMeta = chart.getDatasetMeta(0), lineMeta = chart.getDatasetMeta(1);
+        var font = '800 ' + labelFontPx + 'px Verdana', padX = 12;
+        ctx.save();
+        if (barMeta.visible) highlighted.forEach(function (i) {
+          var bar = barMeta.data[i];
+          if (!bar || !Number.isFinite(values[i])) return;
+          ctx.font = font; ctx.fillStyle = barColor; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          var x = Math.max(chart.chartArea.left + 12, Math.min(bar.x, chart.chartArea.right - 12));
+          var y = Math.max(chart.chartArea.top + 14, bar.y - 6);
+          ctx.fillText(cagedNum(values[i]), x, y);
+        });
+        if (lineMeta.visible) highlighted.forEach(function (i) {
+          var point = lineMeta.data[i];
+          if (!point || !Number.isFinite(yoy[i])) return;
+          var text = cagedPct(yoy[i], 0);
+          ctx.font = font;
+          var bw = ctx.measureText(text).width + padX;
+          var x = Math.max(chart.chartArea.left + 2, Math.min(point.x - bw / 2, chart.chartArea.right - bw - 2));
+          var y = Math.max(chart.chartArea.top + 2, Math.min(point.y - boxH / 2, chart.chartArea.bottom - boxH - 2));
+          ctx.fillStyle = lineColor; cagedRrect(ctx, x, y, bw, boxH, badgeRadius); ctx.fill();
+          ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(text, x + bw / 2, y + boxH / 2 + 0.5);
+        });
+        ctx.restore();
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      data: {
+        labels: labels,
+        datasets: [
+          { type: 'bar', label: 'Estimated Jobs', data: values, backgroundColor: barColors, borderWidth: 0, yAxisID: 'y', barPercentage: 0.72, categoryPercentage: 0.84, order: 2 },
+          { type: 'line', label: 'YoY', data: yoy, borderColor: lineColor, backgroundColor: lineColor, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 16, tension: 0.25, yAxisID: 'y1', order: 1 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { left: 8, right: 16, top: 18, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, titleFont: { family: 'Verdana', size: 12, weight: '700' }, bodyFont: { family: 'Verdana', size: 12 }, callbacks: { label: function (ctx) { return ctx.dataset.yAxisID === 'y1' ? '  YoY: ' + cagedPct(ctx.parsed.y, 1) : '  Estimated Jobs: ' + cagedNum(ctx.parsed.y); } } }
+        },
+        scales: {
+          x: { grid: gridObj(), border: { color: borderColor, width: 1 }, ticks: { color: tickColor, font: { family: 'Verdana', size: tickFontSize, weight: tickWeight }, maxRotation: 90, minRotation: 90 } },
+          y: { min: valueAxis.min, max: valueAxis.max, display: true, grid: gridObj(), border: { color: borderColor, width: 1 }, title: { display: false }, ticks: { color: tickColor, font: { family: 'Verdana', size: tickFontSize, weight: tickWeight }, stepSize: valueAxis.step, callback: function (value) { return cagedNum(Number(value)); } } },
+          y1: { min: yoyAxis.min, max: yoyAxis.max, position: 'right', display: false, grid: { display: false, drawOnChartArea: false }, border: { display: false }, title: { display: true, text: 'YoY', color: y1TitleColor, padding: { top: 0, bottom: 12 }, font: { family: 'Verdana', size: y1TitleFontSize, weight: '400' } }, ticks: { color: tickColor, font: { family: 'Verdana', size: tickFontSize, weight: tickWeight }, stepSize: yoyAxis.step, callback: function (value) { return cagedPct(Number(value), 0); } } }
+        }
+      },
+      plugins: [labelPlugin]
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico
