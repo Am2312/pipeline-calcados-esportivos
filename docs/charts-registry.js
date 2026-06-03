@@ -601,6 +601,134 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   COST INDEX (Historical Distribution) — RECEITA ÚNICA (stats + desenho)
+   Antes duplicado: dashboard renderCostIndexChart inline × PPT
+   renderPresentationCostIndexChart (charts_dashboard.js). As rows já vinham
+   da mesma fonte (window.COST_INDEX.seriesMap == costIndexRows do dash,
+   verificado idêntico); avg/std/axisRange/fmt eram idênticos. Aqui ficam
+   o cálculo de stats e o desenho (linha + bandas SD + badges); cada lado
+   passa só o seu chrome (fonte escalada, eixo #A6A6A6 bold do PPT, padding,
+   animação, raio do badge) via opts.
+   ===================================================================== */
+(function () {
+  function ciFmt(value, compact) { if (!Number.isFinite(value)) return 'n.m.'; return Number(value).toLocaleString('en-US', { minimumFractionDigits: compact ? 1 : 2, maximumFractionDigits: compact ? 1 : 2 }); }
+  function ciAvg(values) { var v = values.filter(Number.isFinite); if (!v.length) return null; return v.reduce(function (s, x) { return s + x; }, 0) / v.length; }
+  function ciStd(values) { var v = values.filter(Number.isFinite); if (!v.length) return null; var a = ciAvg(v); return Math.sqrt(v.reduce(function (s, x) { return s + Math.pow(x - a, 2); }, 0) / v.length); }
+  function ciNiceStep(rawStep) { var steps = [0.01, 0.02, 0.05, 0.10, 0.20, 0.25, 0.50, 1.00, 2.00, 5.00]; return steps.find(function (st) { return st >= rawStep; }) || steps[steps.length - 1]; }
+  function ciAxisRange(values) {
+    var v = values.filter(Number.isFinite);
+    if (!v.length) return { min: 0, max: 1, step: 0.25 };
+    var minValue = Math.min.apply(null, v), maxValue = Math.max.apply(null, v);
+    var range = Math.max(maxValue - minValue, 0.10);
+    var step = ciNiceStep(range / 8);
+    var min = Math.floor((minValue - step * 0.35) / step) * step;
+    var max = Math.ceil((maxValue + step * 0.35) / step) * step;
+    if (min === max) max += step;
+    return { min: Number(Math.max(0, min).toFixed(4)), max: Number(max.toFixed(4)), step: Number(step.toFixed(4)) };
+  }
+  function ciRrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  /* rows = [{key, axisLabel, value}] já filtradas; retorna stats prontos pro desenho */
+  window.getCostIndexStats = function (rows, stdDev) {
+    var labels = rows.map(function (r) { return r.axisLabel; });
+    var values = rows.map(function (r) { return r.value; });
+    var avg = ciAvg(values), std = ciStd(values);
+    var plus = avg + stdDev * std, minus = avg - stdDev * std;
+    var yAxis = ciAxisRange(values.concat([avg, plus, minus]).filter(Number.isFinite));
+    var monthInterval = rows.length > 260 ? 6 : rows.length > 130 ? 3 : 1;
+    var visibleX = new Set();
+    var lastMonthKey = null, visibleMonthCount = -1;
+    rows.forEach(function (r, index) { var mk = r.key.slice(0, 7); if (mk !== lastMonthKey) { visibleMonthCount += 1; if (visibleMonthCount % monthInterval === 0) visibleX.add(index); lastMonthKey = mk; } });
+    return { labels: labels, values: values, avg: avg, std: std, plus: plus, minus: minus, yAxis: yAxis, visibleX: visibleX };
+  };
+
+  /* opts: seriesLabel, stdDev, navy(#021C45), avgColor(#5D2A2C), cherry(#FF4F6C),
+     turquoise(#6FDDCB), badgeFontPx(11), badgeRadius(3), padRight(86),
+     animation(true), legendFontSize(11), legendColor(#021C45), xTickColor(#9AA8BB),
+     yTickColor(#9AA8BB), xTickFontSize(9), yTickFontSize(10), tickWeight('normal'),
+     xBorderColor(#CCD4DD), yBorderColor(#CCD4DD), borderWidth(undefined),
+     gridDrawTicks(undefined). */
+  window.buildCostIndexChartCanvas = function (canvas, stats, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var navy = opts.navy || '#021C45', avgColor = opts.avgColor || '#5D2A2C', cherry = opts.cherry || '#FF4F6C', turquoise = opts.turquoise || '#6FDDCB';
+    var badgeFontPx = opts.badgeFontPx || 11, badgeRadius = (opts.badgeRadius != null) ? opts.badgeRadius : 3;
+    var padRight = (opts.padRight != null) ? opts.padRight : 86;
+    var legendFontSize = opts.legendFontSize || 11, legendColor = opts.legendColor || '#021C45';
+    var xTickColor = opts.xTickColor || '#9AA8BB', yTickColor = opts.yTickColor || '#9AA8BB';
+    var xTickFontSize = opts.xTickFontSize || 9, yTickFontSize = opts.yTickFontSize || 10, tickWeight = opts.tickWeight || 'normal';
+    var xBorderColor = opts.xBorderColor || '#CCD4DD', yBorderColor = opts.yBorderColor || '#CCD4DD';
+    var seriesLabel = opts.seriesLabel || '', stdDev = opts.stdDev || 1;
+    var labels = stats.labels, values = stats.values, avg = stats.avg, plus = stats.plus, minus = stats.minus, yAxis = stats.yAxis, visibleX = stats.visibleX;
+    var gridObj = function () { return opts.gridDrawTicks === false ? { display: false, drawTicks: false } : { display: false }; };
+    var borderObj = function (color) { return opts.borderWidth != null ? { color: color, width: opts.borderWidth } : { color: color }; };
+    var horizDs = function (label, value, color) { return { label: label, data: Array(labels.length).fill(value), borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, tension: 0, _badge: true, _badgeVal: value }; };
+    var badgePlugin = {
+      id: 'costIndexBadges',
+      afterDraw: function (chart) {
+        var ctx = chart.ctx, chartArea = chart.chartArea;
+        var badges = [];
+        chart.data.datasets.forEach(function (ds, di) {
+          if (!ds._badge || !chart.isDatasetVisible(di) || !Number.isFinite(ds._badgeVal)) return;
+          var meta = chart.getDatasetMeta(di);
+          var points = meta.data || [];
+          if (!points.length) return;
+          var point = points[points.length - 1];
+          if (!point) return;
+          var text = ciFmt(ds._badgeVal, true);
+          ctx.save();
+          ctx.font = '700 ' + badgeFontPx + 'px Verdana';
+          var width = ctx.measureText(text).width + 12;
+          ctx.restore();
+          badges.push({ text: text, color: ds.borderColor, desiredY: point.y - 10, x: Math.min(chart.width - width - 2, Math.max(chartArea.right - width + 18, point.x - width / 2)), width: width, height: 20 });
+        });
+        if (!badges.length) return;
+        badges.sort(function (a, b) { return a.desiredY - b.desiredY; });
+        var gap = 3;
+        badges.forEach(function (badge, index) { var minY = index ? badges[index - 1].y + badges[index - 1].height + gap : chartArea.top + 2; badge.y = Math.max(chartArea.top + 2, Math.min(badge.desiredY, chartArea.bottom - badge.height - 2)); badge.y = Math.max(badge.y, minY); });
+        for (var i = badges.length - 1; i >= 0; i--) { var maxY = i === badges.length - 1 ? chartArea.bottom - badges[i].height - 2 : badges[i + 1].y - badges[i].height - gap; badges[i].y = Math.min(badges[i].y, maxY); badges[i].y = Math.max(chartArea.top + 2, badges[i].y); }
+        badges.forEach(function (badge) {
+          ctx.save();
+          ctx.font = '700 ' + badgeFontPx + 'px Verdana';
+          ctx.fillStyle = badge.color;
+          ciRrect(ctx, badge.x, badge.y, badge.width, badge.height, badgeRadius);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(badge.text, badge.x + badge.width / 2, badge.y + badge.height / 2 + 0.5);
+          ctx.restore();
+        });
+      }
+    };
+    var chartOpts = {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { left: 8, right: padRight, top: 8, bottom: 0 } },
+      plugins: {
+        legend: { position: 'top', align: 'start', labels: { padding: 14, font: { size: legendFontSize, weight: '700', family: 'Verdana' }, boxWidth: 22, boxHeight: 3, usePointStyle: false, color: legendColor } },
+        tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 10, callbacks: { label: function (ctx2) { return '  ' + ctx2.dataset.label + ': ' + ciFmt(ctx2.parsed.y); } } }
+      },
+      scales: {
+        x: { ticks: { autoSkip: false, minRotation: 90, maxRotation: 90, color: xTickColor, font: { size: xTickFontSize, family: 'Verdana', weight: tickWeight }, callback: function (value, index) { return visibleX.has(index) ? this.getLabelForValue(value) : ''; } }, grid: gridObj(), border: borderObj(xBorderColor) },
+        y: { min: yAxis.min, max: yAxis.max, ticks: { stepSize: yAxis.step, maxTicksLimit: 9, color: yTickColor, font: { size: yTickFontSize, family: 'Verdana', weight: tickWeight }, callback: function (value) { return ciFmt(Number(value), true); } }, grid: gridObj(), border: borderObj(yBorderColor) }
+      }
+    };
+    if (opts.animation === false) chartOpts.animation = false;
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'line', plugins: [badgePlugin],
+      data: { labels: labels, datasets: [
+        { label: seriesLabel, data: values, borderColor: navy, backgroundColor: navy, borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 16, tension: 0.2, _badge: true, _badgeVal: values[values.length - 1] },
+        horizDs('Average', avg, avgColor),
+        horizDs('+' + stdDev + ' SD', plus, cherry),
+        horizDs('-' + stdDev + ' SD', minus, turquoise)
+      ] },
+      options: chartOpts
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico

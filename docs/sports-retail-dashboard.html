@@ -5875,119 +5875,16 @@ function renderCostIndexChart() {
     }
     const rows = filteredCostIndexRows();
     if (!rows.length) return;
-    const labels = rows.map(row => row.axisLabel);
-    const values = rows.map(row => row.value);
-    const avg = calcAverage(values);
-    const std = calcStdDev(values);
-    const plus = avg + costIndexState.stdDev * std;
-    const minus = avg - costIndexState.stdDev * std;
     const cfg = COST_INDEX_CONFIG[costIndexState.variable] || COST_INDEX_CONFIG.eva;
-    const allVals = [...values, avg, plus, minus].filter(Number.isFinite);
-    const yAxis = costIndexAxisRange(allVals);
-    const monthInterval = rows.length > 260 ? 6 : rows.length > 130 ? 3 : 1;
-    const visibleXLabelIndices = new Set();
-    let lastMonthKey = null;
-    let visibleMonthCount = -1;
-    rows.forEach((row, index) => {
-        const monthKey = row.key.slice(0, 7);
-        if (monthKey !== lastMonthKey) {
-            visibleMonthCount += 1;
-            if (visibleMonthCount % monthInterval === 0) visibleXLabelIndices.add(index);
-            lastMonthKey = monthKey;
-        }
-    });
-    const horizDs = (label, value, color) => ({
-        label,
-        data: Array(labels.length).fill(value),
-        borderColor: color,
-        backgroundColor: color,
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        pointHitRadius: 0,
-        tension: 0,
-        _badge: true,
-        _badgeVal: value,
-    });
-    const badgePlugin = {
-        id: 'costIndexBadges',
-        afterDraw(chart) {
-            const { ctx, chartArea } = chart;
-            const badges = [];
-            chart.data.datasets.forEach((ds, di) => {
-                if (!ds._badge || !chart.isDatasetVisible(di) || !Number.isFinite(ds._badgeVal)) return;
-                const meta = chart.getDatasetMeta(di);
-                const points = meta.data || [];
-                if (!points.length) return;
-                const point = points[points.length - 1];
-                if (!point) return;
-                const text = fmtCostValue(ds._badgeVal, true);
-                ctx.save();
-                ctx.font = '700 11px Verdana';
-                const width = ctx.measureText(text).width + 12;
-                ctx.restore();
-                badges.push({
-                    text,
-                    color: ds.borderColor,
-                    desiredY: point.y - 10,
-                    x: Math.min(chart.width - width - 2, Math.max(chartArea.right - width + 18, point.x - width / 2)),
-                    width,
-                    height: 20,
-                });
-            });
-            if (!badges.length) return;
-            badges.sort((a, b) => a.desiredY - b.desiredY);
-            const gap = 3;
-            badges.forEach((badge, index) => {
-                const minY = index ? badges[index - 1].y + badges[index - 1].height + gap : chartArea.top + 2;
-                badge.y = Math.max(chartArea.top + 2, Math.min(badge.desiredY, chartArea.bottom - badge.height - 2));
-                badge.y = Math.max(badge.y, minY);
-            });
-            for (let i = badges.length - 1; i >= 0; i--) {
-                const maxY = i === badges.length - 1 ? chartArea.bottom - badges[i].height - 2 : badges[i + 1].y - badges[i].height - gap;
-                badges[i].y = Math.min(badges[i].y, maxY);
-                badges[i].y = Math.max(chartArea.top + 2, badges[i].y);
-            }
-            badges.forEach(badge => {
-                ctx.save();
-                ctx.font = '700 11px Verdana';
-                ctx.fillStyle = badge.color;
-                roundedRect(ctx, badge.x, badge.y, badge.width, badge.height, 3);
-                ctx.fill();
-                ctx.fillStyle = '#FFFFFF';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(badge.text, badge.x + badge.width / 2, badge.y + badge.height / 2 + 0.5);
-                ctx.restore();
-            });
-        }
-    };
-    costIndexChartInstance = new Chart(canvas.getContext('2d'), {
-        type: 'line',
-        plugins: [badgePlugin],
-        data: {
-            labels,
-            datasets: [
-                { label: cfg.label, data: values, borderColor: C.azulEscuro, backgroundColor: C.azulEscuro, borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 16, tension: 0.2, _badge: true, _badgeVal: values[values.length - 1] },
-                horizDs('Average', avg, '#5D2A2C'),
-                horizDs(`+${costIndexState.stdDev} SD`, plus, C.cereja),
-                horizDs(`-${costIndexState.stdDev} SD`, minus, C.turquesa),
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 8, right: 86, top: 8, bottom: 0 } },
-            plugins: {
-                legend: { position: 'top', align: 'start', labels: { padding: 14, font: { size: 11, weight: '700', family: 'Verdana' }, boxWidth: 22, boxHeight: 3, usePointStyle: false, color: C.azulEscuro } },
-                tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 10, callbacks: { label: ctx => `  ${ctx.dataset.label}: ${fmtCostValue(ctx.parsed.y)}` } }
-            },
-            scales: {
-                x: { ticks: { autoSkip: false, minRotation: 90, maxRotation: 90, color: C.azulEscuro40, font: { size: 9, family: 'Verdana' }, callback: function(value, index) { return visibleXLabelIndices.has(index) ? this.getLabelForValue(value) : ''; } }, grid: { display: false }, border: { color: C.azulEscuro20 } },
-                y: { min: yAxis.min, max: yAxis.max, ticks: { stepSize: yAxis.step, maxTicksLimit: 9, color: C.azulEscuro40, font: { size: 10, family: 'Verdana' }, callback: value => fmtCostValue(Number(value), true) }, grid: { display: false }, border: { color: C.azulEscuro20 } }
-            }
-        }
+    // RECEITA ÚNICA — stats + desenho do cost-index pelo charts-registry.js (mesma fn que o PPT usa); chrome do card via opts
+    costIndexChartInstance = window.buildCostIndexChartCanvas(canvas, window.getCostIndexStats(rows, costIndexState.stdDev), {
+        seriesLabel: cfg.label, stdDev: costIndexState.stdDev,
+        navy: C.azulEscuro, cherry: C.cereja, turquoise: C.turquesa,
+        badgeFontPx: 11, badgeRadius: 3, padRight: 86,
+        legendFontSize: 11, legendColor: C.azulEscuro,
+        xTickColor: C.azulEscuro40, yTickColor: C.azulEscuro40,
+        xTickFontSize: 9, yTickFontSize: 10, tickWeight: 'normal',
+        xBorderColor: C.azulEscuro20, yBorderColor: C.azulEscuro20
     });
 }
 

@@ -169,6 +169,17 @@ check(dash.includes('window.getSportswearTamModel') && dash.includes('window.bui
   'dashboard delega TAM ao índice (modelo + desenho)',
   'dashboard NÃO chama window.getSportswearTamModel/buildTamComboChartCanvas — reintroduziu cálculo/desenho inline do TAM (vai divergir do PPT)');
 
+/* 10) COST INDEX — receita única de STATS + DESENHO. */
+check(/window\.getCostIndexStats\s*=\s*function/.test(registry),
+  'índice define window.getCostIndexStats',
+  'charts-registry.js NÃO define window.getCostIndexStats — stats do cost-index voltariam a ser duplicados');
+check(/window\.buildCostIndexChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildCostIndexChartCanvas',
+  'charts-registry.js NÃO define window.buildCostIndexChartCanvas — desenho do cost-index voltaria a ser duplicado');
+check(dash.includes('window.getCostIndexStats') && dash.includes('window.buildCostIndexChartCanvas'),
+  'dashboard delega cost-index ao índice (stats + desenho)',
+  'dashboard NÃO chama window.getCostIndexStats/buildCostIndexChartCanvas — reintroduziu desenho inline do cost-index');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));
