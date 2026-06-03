@@ -156,6 +156,19 @@ check(!/\brankedCompetitors\b/.test(dash),
   'dashboard sem cópia inline do modelo de market-share',
   'dashboard contém "rankedCompetitors" — a lógica inline do market-share foi reintroduzida (deve viver só no charts-registry.js)');
 
+/* 9) TAM (Sportswear Total Market) — receita única de MODELO + DESENHO.
+   Mesma ideia do market-share: as 2 funções moram no índice e o dashboard
+   delega. (tam-destaque é presentation-only, não entra.) */
+check(/window\.getSportswearTamModel\s*=\s*function/.test(registry),
+  'índice define window.getSportswearTamModel',
+  'charts-registry.js NÃO define window.getSportswearTamModel — o modelo do TAM voltaria a ser duplicado');
+check(/window\.buildTamComboChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildTamComboChartCanvas',
+  'charts-registry.js NÃO define window.buildTamComboChartCanvas — o desenho do TAM voltaria a ser duplicado');
+check(dash.includes('window.getSportswearTamModel') && dash.includes('window.buildTamComboChartCanvas'),
+  'dashboard delega TAM ao índice (modelo + desenho)',
+  'dashboard NÃO chama window.getSportswearTamModel/buildTamComboChartCanvas — reintroduziu cálculo/desenho inline do TAM (vai divergir do PPT)');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));

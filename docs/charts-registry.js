@@ -403,6 +403,204 @@ window.buildMarketShareChartCanvas = function (canvas, model, opts) {
 };
 
 /* =====================================================================
+   TAM (Sportswear Total Market) — RECEITA ÚNICA (modelo + combo chart)
+   Antes duplicado: dashboard getTamSeries/buildTamComboChart inline ×
+   PPT buildPresentationTamChart (charts_dashboard.js). Cores e cores de
+   eixo são idênticas nos 2 lados; só diferem fonte (escalada no slide),
+   padding, tooltip (off no slide), animação e altura da caixa YoY — tudo
+   via opts. (tam-destaque é presentation-only, não entra aqui.)
+   ===================================================================== */
+window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021C45', apparel: '#6FDDCB', line: '#FF4F6C', white: '#FFFFFF', label: '#021C45' };
+(function () {
+  function yoySeries(values) { return values.map(function (v, i) { return (i === 0 || !values[i - 1]) ? null : ((v / values[i - 1]) - 1) * 100; }); }
+  function cagr(s, e, p) { if (!Number.isFinite(s) || !Number.isFinite(e) || s <= 0 || e <= 0 || p <= 0) return null; return (Math.pow(e / s, 1 / p) - 1) * 100; }
+  function fmtNum(v, d) { d = d || 0; return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function fmtPct(v, d) { d = d || 0; return Number.isFinite(v) ? fmtNum(v, d) + '%' : 'n.a.'; }
+  function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  window.getSportswearTamModel = function (state, data) {
+    data = data || window.SPORTSWEAR_TAM || { years: [], apparel: [], footwear: [] };
+    var years = data.years;
+    var fromIndex = years.indexOf(state.from); if (fromIndex < 0) fromIndex = 0;
+    var rawTo = years.indexOf(state.to); var toIndex = rawTo < 0 ? years.length - 1 : rawTo;
+    var apMn = data.apparel, ftMn = data.footwear;
+    var totalMn = years.map(function (_, i) { return apMn[i] + ftMn[i]; });
+    var bn = function (a) { return a.map(function (v) { return v / 1000; }); };
+    var COL = window.SPORTSWEAR_TAM_COLORS;
+    return {
+      years: years.slice(fromIndex, toIndex + 1),
+      values: bn(totalMn).slice(fromIndex, toIndex + 1),
+      stackedSeries: [
+        { key: 'footwear', label: 'Footwear', color: COL.footwear, values: bn(ftMn).slice(fromIndex, toIndex + 1) },
+        { key: 'apparel', label: 'Apparel', color: COL.apparel, values: bn(apMn).slice(fromIndex, toIndex + 1) }
+      ],
+      yoy: yoySeries(totalMn).slice(fromIndex, toIndex + 1),
+      cagr: cagr(totalMn[fromIndex], totalMn[toIndex], toIndex - fromIndex),
+      apparelCagr: cagr(apMn[fromIndex], apMn[toIndex], toIndex - fromIndex),
+      footwearCagr: cagr(ftMn[fromIndex], ftMn[toIndex], toIndex - fromIndex),
+      lineColor: COL.line
+    };
+  };
+
+  /* opts (chrome por-container): labelFontPx (caixa YoY + sizing; default 11),
+     segLabelFontPx (segmento % + total da pilha; default 12), yoyBoxHeight (22),
+     padTop (52), padRight (26), padLeft (0), xTickColor (#9AA8BB),
+     xBorderColor (#CCD4DD), tooltipEnabled (true), animation (true). */
+  window.buildTamComboChartCanvas = function (canvas, selected, opts) {
+    if (!canvas || !selected || !window.Chart) return null;
+    opts = opts || {};
+    var COL = window.SPORTSWEAR_TAM_COLORS;
+    var labelFontPx = opts.labelFontPx || 11;
+    var segLabelFontPx = opts.segLabelFontPx || 12;
+    var yoyBoxHeight = opts.yoyBoxHeight || 22;
+    var padTop = (opts.padTop != null) ? opts.padTop : 52;
+    var padRight = (opts.padRight != null) ? opts.padRight : 26;
+    var padLeft = (opts.padLeft != null) ? opts.padLeft : 0;
+    var xTickColor = opts.xTickColor || '#9AA8BB';
+    var xBorderColor = opts.xBorderColor || '#CCD4DD';
+    var tooltipEnabled = opts.tooltipEnabled !== false;
+    var WHITE = COL.white, NAVY = COL.label;
+    var labels = selected.years;
+    var yoyData = selected.yoy;
+    var lineColor = selected.lineColor || COL.line;
+    var barData = selected.values;
+    var barMax = Math.max.apply(null, barData) * 1.12;
+    var yoyValues = yoyData.filter(Number.isFinite);
+    var yoyObservedMax = Math.max.apply(null, yoyValues.concat([0]));
+    var yoyObservedMin = Math.min.apply(null, yoyValues.concat([0]));
+    var yoyRange = Math.max(10, yoyObservedMax - yoyObservedMin);
+    var yoyScaleMax = Math.ceil(yoyObservedMax + Math.max(4, yoyRange * 0.08));
+    var yoyScaleMin = Math.floor(yoyObservedMin - Math.max(4, yoyRange * 0.10));
+    var datasets = [];
+    selected.stackedSeries.forEach(function (s) { datasets.push({ type: 'bar', label: s.label, data: s.values, stack: 'tam', yAxisID: 'y', order: 2, backgroundColor: s.color, borderColor: s.color, borderWidth: 0, borderSkipped: false, barPercentage: 0.74, categoryPercentage: 0.88 }); });
+    datasets.push({ type: 'line', label: 'YoY', data: yoyData, yAxisID: 'y1', order: 1, borderColor: lineColor, backgroundColor: lineColor, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: lineColor, pointBorderColor: lineColor, pointHoverRadius: 5, pointHitRadius: 18, tension: 0.25 });
+    var labelPlugin = {
+      id: 'tamLabels',
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx, chartArea = chart.chartArea;
+        var lineIndex = chart.data.datasets.findIndex(function (ds) { return ds.type === 'line'; });
+        var lineMeta = lineIndex >= 0 ? chart.getDatasetMeta(lineIndex) : null;
+        var lineVisible = lineIndex >= 0 && chart.isDatasetVisible(lineIndex);
+        var yoyBoxes = [];
+        var barInfos = [];
+        chart.data.datasets.forEach(function (ds, idx) { if (ds.type === 'bar' && chart.isDatasetVisible(idx)) barInfos.push({ meta: chart.getDatasetMeta(idx), data: ds.data }); });
+        var stackTops = labels.map(function (_, index) {
+          var topY = null, barRef = null, sum = 0;
+          barInfos.forEach(function (info) {
+            var bar = info.meta.data[index];
+            if (!bar) return;
+            if (topY === null || bar.y < topY) { topY = bar.y; barRef = bar; }
+            var v = info.data[index];
+            if (Number.isFinite(v)) sum += v;
+          });
+          return { topY: topY, barRef: barRef, sum: sum };
+        });
+        ctx.save();
+        ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        if (lineMeta && lineVisible) lineMeta.data.forEach(function (point, index) {
+          var value = yoyData[index];
+          if (!point || !Number.isFinite(value)) return;
+          var text = Math.round(value) + '%';
+          var width = ctx.measureText(text).width + 14;
+          var height = yoyBoxHeight;
+          var x = point.x - width / 2;
+          var y = point.y - height / 2;
+          x = Math.max(chartArea.left + 2, Math.min(x, chartArea.right - width - 2));
+          y = Math.max(chartArea.top + 4, y);
+          yoyBoxes[index] = { x: x, y: y, width: width, height: height };
+        });
+        ctx.restore();
+        ctx.save();
+        ctx.font = '700 ' + segLabelFontPx + 'px Verdana';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = WHITE;
+        chart.data.datasets.forEach(function (ds, idx) {
+          if (ds.type !== 'bar' || !chart.isDatasetVisible(idx)) return;
+          var meta = chart.getDatasetMeta(idx);
+          meta.data.forEach(function (bar, i) {
+            var value = ds.data[i];
+            if (!bar || !Number.isFinite(value)) return;
+            var segHeight = Math.abs(bar.base - bar.y);
+            if (segHeight < 18) return;
+            var labelX = bar.x;
+            var labelY = bar.y + (bar.base - bar.y) / 2;
+            var segTotal = stackTops[i] ? stackTops[i].sum : 0;
+            var text = segTotal > 0 ? Math.round((value / segTotal) * 100) + '%' : '';
+            var box = yoyBoxes[i];
+            if (box) {
+              var tw = ctx.measureText(text).width;
+              var overlapsX = Math.abs(labelX - (box.x + box.width / 2)) < ((tw + box.width) / 2);
+              var overlapsY = Math.abs(labelY - (box.y + box.height / 2)) < ((16 + box.height) / 2);
+              if (overlapsX && overlapsY) {
+                var segTop = Math.min(bar.y, bar.base), segBottom = Math.max(bar.y, bar.base);
+                var candDown = box.y + box.height + 9, candUp = box.y - 9;
+                if ((box.y + box.height / 2) <= labelY && candDown + 8 <= segBottom - 2) labelY = candDown;
+                else if (candUp - 8 >= segTop + 2) labelY = candUp;
+                else if (candDown + 8 <= segBottom - 2) labelY = candDown;
+                labelY = Math.max(segTop + 10, Math.min(segBottom - 10, labelY));
+              }
+            }
+            ctx.fillText(text, labelX, labelY);
+          });
+        });
+        ctx.fillStyle = NAVY;
+        stackTops.forEach(function (stack, index) {
+          if (!stack || stack.topY == null || !stack.barRef) return;
+          var text = fmtNum(stack.sum, 0);
+          var labelX = stack.barRef.x;
+          var labelY = Math.max(chartArea.top + 9, stack.topY - 12);
+          var box = yoyBoxes[index];
+          if (box) {
+            var tw = ctx.measureText(text).width;
+            var overlapsX = Math.abs(labelX - (box.x + box.width / 2)) < ((tw + box.width) / 2);
+            var overlapsY = Math.abs(labelY - (box.y + box.height / 2)) < ((14 + box.height) / 2);
+            if (overlapsX && overlapsY) labelY = Math.max(chartArea.top + 9, box.y - 11);
+          }
+          ctx.fillText(text, labelX, labelY);
+        });
+        ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        ctx.textBaseline = 'middle';
+        if (lineMeta && lineVisible) lineMeta.data.forEach(function (point, index) {
+          var value = yoyData[index];
+          if (!point || !Number.isFinite(value)) return;
+          var text = Math.round(value) + '%';
+          var width = ctx.measureText(text).width + 14;
+          var height = yoyBoxHeight;
+          var box = yoyBoxes[index] || { x: Math.max(chartArea.left + 2, Math.min(point.x - width / 2, chartArea.right - width - 2)), y: Math.max(chartArea.top + 4, point.y - 11) };
+          ctx.fillStyle = lineColor;
+          rrect(ctx, box.x, box.y, width, height, 4);
+          ctx.fill();
+          ctx.fillStyle = WHITE;
+          ctx.fillText(text, box.x + width / 2, box.y + height / 2 + 0.5);
+        });
+        ctx.restore();
+      }
+    };
+    var tooltipCfg = tooltipEnabled ? {
+      backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12,
+      callbacks: {
+        label: function (ctx2) { var v = ctx2.parsed.y; if (ctx2.dataset.yAxisID === 'y1') return v == null ? '' : '  YoY: ' + fmtPct(v, 1); return '  ' + ctx2.dataset.label + ': R$ ' + fmtNum(v, 1) + ' bn'; },
+        footer: function (items) { var total = items.filter(function (c) { return c.dataset.yAxisID !== 'y1'; }).reduce(function (sum, c) { return sum + (Number.isFinite(c.parsed.y) ? c.parsed.y : 0); }, 0); return total ? '  Total: R$ ' + fmtNum(total, 1) + ' bn' : ''; }
+      }
+    } : { enabled: false };
+    var chartOpts = {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { top: padTop, right: padRight, left: padLeft, bottom: 0 } },
+      plugins: { legend: { display: false }, tooltip: tooltipCfg },
+      scales: {
+        x: { stacked: true, ticks: { color: xTickColor, font: { family: 'Verdana', size: 10.5 }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: xBorderColor } },
+        y: { stacked: true, min: 0, max: barMax, ticks: { display: false }, grid: { display: false }, border: { display: false } },
+        y1: { position: 'right', min: yoyScaleMin, max: yoyScaleMax, ticks: { display: false }, grid: { display: false, drawOnChartArea: false }, border: { display: false } }
+      }
+    };
+    if (opts.animation === false) chartOpts.animation = false;
+    return new window.Chart(canvas.getContext('2d'), { type: 'bar', plugins: [labelPlugin], data: { labels: labels, datasets: datasets }, options: chartOpts });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico
