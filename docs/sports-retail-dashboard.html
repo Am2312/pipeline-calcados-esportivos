@@ -2528,16 +2528,21 @@ function getMarketShareModel() {
         return tot ? members.reduce((sum, member) => sum + val(member, rankIdx), 0) / tot * 100 : 0;
     };
     const withRank = entry => ({ ...entry, rankShare: rankShare(entry.members) });
+    const vulcMembersWithData = MS_VULCABRAS.filter(n => brands[n]);
+    // Vulcabras always occupies a SINGLE group slot when reserving competitor slots,
+    // so the competitor set stays identical between Separate and Combined; Separate
+    // merely expands that one slot into its member brands.
+    const vulcGroupSlots = rankShare(vulcMembersWithData) > 0 ? 1 : 0;
     const vulcEntries = MS_STATE.vulcabras === 'combined'
-        ? [withRank({ key: 'Vulcabras', label: 'Vulcabras', members: MS_VULCABRAS.filter(n => brands[n]) })]
-        : MS_VULCABRAS.filter(n => brands[n]).map(n => withRank({ key: n, label: n, members: [n] }));
+        ? [withRank({ key: 'Vulcabras', label: 'Vulcabras', members: vulcMembersWithData })]
+        : vulcMembersWithData.map(n => withRank({ key: n, label: n, members: [n] }));
     const fixedEntries = vulcEntries.filter(entry => entry.members.length && entry.rankShare > 0);
     const rankedCompetitors = Object.keys(brands)
         .filter(n => !MS_VULCABRAS.includes(n))
         .map(n => withRank({ key: n, label: n, members: [n] }))
         .filter(entry => entry.rankShare > 0)
         .sort((a, b) => b.rankShare - a.rankShare || a.label.localeCompare(b.label));
-    const entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, MS_TOP_SERIES - fixedEntries.length)));
+    const entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, MS_TOP_SERIES - vulcGroupSlots)));
     const series = entries.map((e, ei) => ({
         key: e.key, label: e.label, color: MS_PALETTE[ei % MS_PALETTE.length],
         data: shownYears.map((_, si) => {
