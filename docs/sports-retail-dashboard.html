@@ -3263,28 +3263,24 @@ function renderCompaniesGrowthTable() {
     const i0 = P.indexOf(companiesGrowthState.from), i1 = P.indexOf(companiesGrowthState.to);
     const cols = P.slice(i0, i1 + 1);
     const n = cols.length;
-    const box = (rowIdx, ci) => {       // moldura da nuvem Vulcabras (linhas 0,1,2)
-        if (rowIdx > 2) return '';
-        let s = '';
-        if (rowIdx === 0) s += `border-top:1.5px solid ${navy};`;
-        if (rowIdx === 2) s += `border-bottom:1.5px solid ${navy};`;
-        if (ci === -1)    s += `border-left:1.5px solid ${navy};`;
-        if (ci === n - 1) s += `border-right:1.5px solid ${navy};`;
-        return s;
-    };
-    const head = `<th style="background:${navy};color:#fff;font-weight:700;padding:8px 10px;text-align:left;font-size:12px;"></th>` +
-        cols.map(p => `<th style="background:${navy};color:#fff;font-weight:700;padding:8px 10px;text-align:center;font-size:12px;min-width:50px;">${p}</th>`).join('');
+    const grayLine = '1px solid #C2C8D0';   // linha cinza visível p/ bracketar as sub-linhas
+    const pad = '11px 10px';                 // mais espaçamento entre as linhas
+    const head = `<th style="background:${navy};color:#fff;font-weight:700;padding:${pad};text-align:left;font-size:12px;"></th>` +
+        cols.map(p => `<th style="background:${navy};color:#fff;font-weight:700;padding:${pad};text-align:center;font-size:12px;min-width:50px;">${p}</th>`).join('');
     const body = COMPANIES_GROWTH_ROWS.map((row, idx) => {
         const sub = row.type === 'sub';
         const fw = sub ? '400' : '700';
-        const lbl = `<td style="text-align:left;padding:7px 10px;color:${navy};font-weight:${fw};${sub ? 'padding-left:26px;' : ''}${box(idx, -1)}">${row.label}</td>`;
+        const ruleTop = sub && (idx === 0 || COMPANIES_GROWTH_ROWS[idx - 1].type !== 'sub');                  // 1ª sub-linha do grupo
+        const ruleBot = sub && (idx === COMPANIES_GROWTH_ROWS.length - 1 || COMPANIES_GROWTH_ROWS[idx + 1].type !== 'sub'); // última sub-linha
+        const rb = (ruleTop ? `border-top:${grayLine};` : '') + (ruleBot ? `border-bottom:${grayLine};` : '');
+        const spacer = (!sub && idx > 0) ? `<tr><td colspan="${n + 1}" style="height:12px;border:0;padding:0;"></td></tr>` : '';  // gap antes de cada grupo
+        const lbl = `<td style="text-align:left;padding:${pad};color:${navy};font-weight:${fw};${sub ? 'padding-left:26px;' : ''}${rb}">${row.label}</td>`;
         const cells = cols.map((p, ci) => {
             const v = row.values[i0 + ci];
             const bg = sub ? '#FFFFFF' : heatColorCG(v);
-            return `<td style="text-align:center;padding:7px 10px;color:${navy};font-weight:${fw};background:${bg};${box(idx, ci)}">${formatMetricPercentCG(v)}</td>`;
+            return `<td style="text-align:center;padding:${pad};color:${navy};font-weight:${fw};background:${bg};${rb}">${formatMetricPercentCG(v)}</td>`;
         }).join('');
-        const spacer = idx === 2 ? `<tr><td colspan="${n + 1}" style="height:10px;"></td></tr>` : '';
-        return `<tr>${lbl}${cells}</tr>${spacer}`;
+        return spacer + `<tr>${lbl}${cells}</tr>`;
     }).join('');
     return `<div style="overflow-x:auto;"><table style="border-collapse:collapse;width:100%;font-size:12px;"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
