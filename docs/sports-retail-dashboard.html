@@ -3336,8 +3336,8 @@ function renderIndustryDataCard() {
     cgCard.innerHTML = `
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:8px 0 12px 0;">
             <div>
-                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Sector Companies — Growth</h3>
-                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(YoY %, quarterly)</p>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Sector Companies Growth YoY</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Percentage)</p>
             </div>
             <div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
                 ${selectBlock('From', companiesGrowthQuarterSelect('cg-from-select', companiesGrowthState.from, 'setCompaniesGrowthRange()'))}
