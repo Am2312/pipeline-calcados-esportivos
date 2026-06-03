@@ -265,6 +265,144 @@ window.CAGED_RAIS_2019_BASE = window.CAGED_RAIS_2019_BASE || 13105;
 window.MS_PALETTE = window.MS_PALETTE || ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2C70', '#9AA8BB', '#CCD4DD'];
 
 /* =====================================================================
+   MARKET SHARE — RECEITA ÚNICA (modelo + desenho)
+   Antes a lógica era DUPLICADA: getMarketShareModel/buildMarketShareChart
+   inline no dashboard × getPresentationMsModel/buildPresentationMsChart no
+   charts_dashboard.js do PPT. As duas chegaram a divergir (seletor
+   Separate/Combined trocava as concorrentes). Agora os DOIS lados chamam
+   estas funções → divergência impossível por construção. Cada lado só passa
+   o seu "chrome" (fonte escalada do slide, casas decimais do rótulo, cor de
+   eixo do padrão PPT) via opts; a visualização (séries, cores, quais marcas
+   aparecem, empilhamento, eixos) é compartilhada.
+   ===================================================================== */
+window.MS_VULCABRAS    = window.MS_VULCABRAS    || ['Olympikus', 'Mizuno', 'Under Armour'];
+window.MS_TOP_SERIES   = window.MS_TOP_SERIES   || 6;
+window.MS_OTHERS_COLOR = window.MS_OTHERS_COLOR || '#D02BB8';
+
+/* Modelo do gráfico. state = {category, vulcabras:'separate'|'combined',
+   basis:'named'|'reported', from, to}. data = {years, totals, brands} (mesma
+   estrutura nos dois lados, via sportswear_brand_shares_data.js). */
+window.computeMarketShareModel = function (state, data) {
+  var VULC = window.MS_VULCABRAS, TOP = window.MS_TOP_SERIES;
+  var PALETTE = window.MS_PALETTE, OTHERS = window.MS_OTHERS_COLOR;
+  data = data || { years: [], totals: {}, brands: {} };
+  var years = data.years || [];
+  if (!years.length) return null;
+  var cat = state.category;
+  var fromIdx = years.indexOf(state.from), toIdx = years.indexOf(state.to);
+  if (fromIdx < 0) fromIdx = 0;
+  if (toIdx < 0) toIdx = years.length - 1;
+  if (fromIdx > toIdx) { var tmp = fromIdx; fromIdx = toIdx; toIdx = tmp; }
+  var shownYears = years.slice(fromIdx, toIdx + 1);
+  var brands = (data.brands && data.brands[cat]) || {};
+  var totals;
+  if (state.basis === 'named') {
+    totals = years.map(function (_, i) {
+      return Object.keys(brands).reduce(function (s, n) {
+        var v = brands[n] && brands[n][i];
+        return s + (Number.isFinite(v) ? Number(v) : 0);
+      }, 0);
+    });
+  } else {
+    totals = ((data.totals && data.totals[cat]) || []).map(function (v) { return Number(v || 0); });
+  }
+  var val = function (name, i) { return (brands[name] && Number.isFinite(brands[name][i])) ? brands[name][i] : 0; };
+  var rankIdx = toIdx;
+  var rankShare = function (members) {
+    var tot = totals[rankIdx] || 0;
+    return tot ? members.reduce(function (s, m) { return s + val(m, rankIdx); }, 0) / tot * 100 : 0;
+  };
+  var withRank = function (entry) { entry.rankShare = rankShare(entry.members); return entry; };
+  var vulcMembersWithData = VULC.filter(function (n) { return brands[n]; });
+  // Vulcabras sempre conta como UMA vaga de grupo ao reservar concorrentes,
+  // então o conjunto de concorrentes (top TOP-1) é idêntico em Separate e
+  // Combined; Separate só expande essa vaga única nas marcas-membro.
+  var vulcGroupSlots = rankShare(vulcMembersWithData) > 0 ? 1 : 0;
+  var vulcEntries = state.vulcabras === 'combined'
+    ? [withRank({ key: 'Vulcabras', label: 'Vulcabras', members: vulcMembersWithData })]
+    : vulcMembersWithData.map(function (n) { return withRank({ key: n, label: n, members: [n] }); });
+  var fixedEntries = vulcEntries.filter(function (e) { return e.members.length && e.rankShare > 0; });
+  var rankedCompetitors = Object.keys(brands)
+    .filter(function (n) { return VULC.indexOf(n) < 0; })
+    .map(function (n) { return withRank({ key: n, label: n, members: [n] }); })
+    .filter(function (e) { return e.rankShare > 0; })
+    .sort(function (a, b) { return b.rankShare - a.rankShare || a.label.localeCompare(b.label); });
+  var entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, TOP - vulcGroupSlots)));
+  var series = entries.map(function (e, ei) {
+    return {
+      key: e.key, label: e.label, color: PALETTE[ei % PALETTE.length],
+      data: shownYears.map(function (_, si) {
+        var i = fromIdx + si, tot = totals[i] || 0;
+        return tot ? e.members.reduce(function (s, m) { return s + val(m, i); }, 0) / tot * 100 : 0;
+      })
+    };
+  });
+  series.push({
+    key: 'Others', label: 'Others', color: OTHERS,
+    data: shownYears.map(function (_, si) {
+      return Math.max(0, 100 - series.reduce(function (s, ser) { return s + ser.data[si]; }, 0));
+    })
+  });
+  return { years: shownYears, fromIdx: fromIdx, toIdx: toIdx, series: series };
+};
+
+/* Desenho do gráfico (Chart.js). opts = chrome por-container:
+   labelText(v)->str (rótulo na barra), fmtPct(v)->str (tooltip),
+   labelFontPx, xTickColor, xTickWeight, xBorderColor, padTop, padRight,
+   animation(false). Defaults = aparência do dashboard. */
+window.buildMarketShareChartCanvas = function (canvas, model, opts) {
+  if (!canvas || !model || !window.Chart) return null;
+  opts = opts || {};
+  var fmtPct = opts.fmtPct || function (v) { return (Math.round(v * 10) / 10).toFixed(1) + '%'; };
+  var labelText = opts.labelText || fmtPct;
+  var labelFontPx = opts.labelFontPx || 11;
+  var xTickColor = opts.xTickColor || 'rgba(2,28,69,0.4)';
+  var xTickWeight = opts.xTickWeight || 'normal';
+  var xBorderColor = opts.xBorderColor || 'rgba(2,28,69,0.2)';
+  var padTop = (opts.padTop != null) ? opts.padTop : 22;
+  var padRight = (opts.padRight != null) ? opts.padRight : 20;
+  var tooltipLabel = opts.tooltipLabel || function (c) { return '  ' + c.dataset.label + ': ' + fmtPct(c.parsed.y); };
+  var labels = model.years.map(String);
+  var datasets = model.series.map(function (s) {
+    return { label: s.label, data: s.data, backgroundColor: s.color, borderColor: s.color, borderWidth: 0, borderSkipped: false, stack: 'ms', barPercentage: 0.86, categoryPercentage: 0.9 };
+  });
+  var labelPlugin = {
+    id: 'msLabels',
+    afterDatasetsDraw: function (chart) {
+      var ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '700 ' + labelFontPx + 'px Verdana';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#FFFFFF';
+      chart.data.datasets.forEach(function (ds, di) {
+        if (!chart.isDatasetVisible(di)) return;
+        var meta = chart.getDatasetMeta(di);
+        meta.data.forEach(function (bar, i) {
+          var v = ds.data[i];
+          if (!Number.isFinite(v) || v < 0.5 || Math.abs(bar.base - bar.y) < 14) return;
+          ctx.fillText(labelText(v), bar.x, (bar.y + bar.base) / 2);
+        });
+      });
+      ctx.restore();
+    }
+  };
+  var chartOpts = {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: padTop, right: padRight, left: 0, bottom: 0 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: tooltipLabel } }
+    },
+    scales: {
+      x: { stacked: true, ticks: { color: xTickColor, font: { family: 'Verdana', size: 10.5, weight: xTickWeight }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: xBorderColor } },
+      y: { stacked: true, min: 0, max: 100, ticks: { display: false }, grid: { display: false }, border: { display: false } }
+    }
+  };
+  if (opts.animation === false) chartOpts.animation = false;
+  return new window.Chart(canvas.getContext('2d'), { type: 'bar', plugins: [labelPlugin], data: { labels: labels, datasets: datasets }, options: chartOpts });
+};
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico

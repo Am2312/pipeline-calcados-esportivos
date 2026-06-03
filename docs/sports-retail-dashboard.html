@@ -2486,10 +2486,11 @@ function renderSportswearTamCards() {
 }
 
 // ===== Market Share tab (Euromonitor Brand Shares) =====
-const MS_VULCABRAS = ['Olympikus', 'Mizuno', 'Under Armour'];
-const MS_PALETTE = window.MS_PALETTE || ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2C70', '#9AA8BB', '#CCD4DD'];  // RECEITA ÚNICA (charts-registry.js)
-const MS_OTHERS_COLOR = '#D02BB8';
-const MS_TOP_SERIES = 6;
+// RECEITA ÚNICA — constantes vêm do charts-registry.js (fonte única, carregado antes deste script)
+const MS_VULCABRAS = window.MS_VULCABRAS || ['Olympikus', 'Mizuno', 'Under Armour'];
+const MS_PALETTE = window.MS_PALETTE || ['#021C45', '#72D1C6', '#FF5473', '#2EA5F5', '#6D7E98', '#6A2C70', '#9AA8BB', '#CCD4DD'];
+const MS_OTHERS_COLOR = window.MS_OTHERS_COLOR || '#D02BB8';
+const MS_TOP_SERIES = window.MS_TOP_SERIES || 6;
 const MS_STATE = { category: 'footwear', from: 2016, to: 2025, vulcabras: 'separate', shareBasis: 'named' };
 const VULCABRAS_SHARE_STATE = { frequency: 'annual', from: 2016, to: 2025 };
 const MS_BRAND_GMV_CHART_STATE = { brand: 'Vulcabras', from: 2016, to: 2025 };
@@ -2510,53 +2511,14 @@ function msDenominatorSeries(category, basis) {
 }
 
 function getMarketShareModel() {
-    const d = msData();
-    const years = d.years || [];
-    if (!years.length) return null;
-    const cat = MS_STATE.category;
-    let fromIdx = years.indexOf(MS_STATE.from), toIdx = years.indexOf(MS_STATE.to);
-    if (fromIdx < 0) fromIdx = 0;
-    if (toIdx < 0) toIdx = years.length - 1;
-    if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
-    const shownYears = years.slice(fromIdx, toIdx + 1);
-    const brands = d.brands[cat] || {};
-    const totals = msDenominatorSeries(cat, MS_STATE.shareBasis);
-    const val = (name, i) => (brands[name] && Number.isFinite(brands[name][i])) ? brands[name][i] : 0;
-    const rankIdx = toIdx;
-    const rankShare = members => {
-        const tot = totals[rankIdx] || 0;
-        return tot ? members.reduce((sum, member) => sum + val(member, rankIdx), 0) / tot * 100 : 0;
-    };
-    const withRank = entry => ({ ...entry, rankShare: rankShare(entry.members) });
-    const vulcMembersWithData = MS_VULCABRAS.filter(n => brands[n]);
-    // Vulcabras always occupies a SINGLE group slot when reserving competitor slots,
-    // so the competitor set stays identical between Separate and Combined; Separate
-    // merely expands that one slot into its member brands.
-    const vulcGroupSlots = rankShare(vulcMembersWithData) > 0 ? 1 : 0;
-    const vulcEntries = MS_STATE.vulcabras === 'combined'
-        ? [withRank({ key: 'Vulcabras', label: 'Vulcabras', members: vulcMembersWithData })]
-        : vulcMembersWithData.map(n => withRank({ key: n, label: n, members: [n] }));
-    const fixedEntries = vulcEntries.filter(entry => entry.members.length && entry.rankShare > 0);
-    const rankedCompetitors = Object.keys(brands)
-        .filter(n => !MS_VULCABRAS.includes(n))
-        .map(n => withRank({ key: n, label: n, members: [n] }))
-        .filter(entry => entry.rankShare > 0)
-        .sort((a, b) => b.rankShare - a.rankShare || a.label.localeCompare(b.label));
-    const entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, MS_TOP_SERIES - vulcGroupSlots)));
-    const series = entries.map((e, ei) => ({
-        key: e.key, label: e.label, color: MS_PALETTE[ei % MS_PALETTE.length],
-        data: shownYears.map((_, si) => {
-            const i = fromIdx + si, tot = totals[i] || 0;
-            return tot ? e.members.reduce((s, m) => s + val(m, i), 0) / tot * 100 : 0;
-        })
-    }));
-    series.push({
-        key: 'Others',
-        label: 'Others',
-        color: MS_OTHERS_COLOR,
-        data: shownYears.map((_, si) => Math.max(0, 100 - series.reduce((s, ser) => s + ser.data[si], 0)))
-    });
-    return { years: shownYears, fromIdx, toIdx, series };
+    // RECEITA ÚNICA — modelo calculado pelo charts-registry.js (mesma fn que o PPT usa)
+    return window.computeMarketShareModel({
+        category: MS_STATE.category,
+        vulcabras: MS_STATE.vulcabras,
+        basis: MS_STATE.shareBasis,
+        from: MS_STATE.from,
+        to: MS_STATE.to
+    }, msData());
 }
 
 function msFmtPct(value, digits = 1) {
@@ -2946,45 +2908,16 @@ function buildMarketShareBrandGmvTableHtml() {
 }
 
 function buildMarketShareChart(canvas, model) {
-    if (!canvas || !model) return null;
-    const labels = model.years.map(String);
-    const datasets = model.series.map(s => ({ label: s.label, data: s.data, backgroundColor: s.color, borderColor: s.color, borderWidth: 0, borderSkipped: false, stack: 'ms', barPercentage: 0.86, categoryPercentage: 0.9 }));
-    const labelPlugin = {
-        id: 'msLabels',
-        afterDatasetsDraw(chart) {
-            const { ctx } = chart;
-            ctx.save();
-            ctx.font = '700 11px Verdana';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#FFFFFF';
-            chart.data.datasets.forEach((ds, di) => {
-                if (!chart.isDatasetVisible(di)) return;
-                const meta = chart.getDatasetMeta(di);
-                meta.data.forEach((bar, i) => {
-                    const v = ds.data[i];
-                    if (!Number.isFinite(v) || v < 0.5 || Math.abs(bar.base - bar.y) < 14) return;
-                    ctx.fillText(tamFmtPct(v, 1), bar.x, (bar.y + bar.base) / 2);
-                });
-            });
-            ctx.restore();
-        }
-    };
-    return new Chart(canvas.getContext('2d'), {
-        type: 'bar', plugins: [labelPlugin], data: { labels, datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            layout: { padding: { top: 22, right: 20, left: 0, bottom: 0 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: c => `  ${c.dataset.label}: ${tamFmtPct(c.parsed.y, 1)}` } }
-            },
-            scales: {
-                x: { stacked: true, ticks: { color: C.azulEscuro40, font: { family: 'Verdana', size: 10.5 }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: C.azulEscuro20 } },
-                y: { stacked: true, min: 0, max: 100, ticks: { display: false }, grid: { display: false }, border: { display: false } }
-            }
-        }
+    // RECEITA ÚNICA — desenho pelo charts-registry.js (mesma fn que o PPT usa);
+    // só o "chrome" do card do dashboard vai via opts.
+    return window.buildMarketShareChartCanvas(canvas, model, {
+        labelText: v => tamFmtPct(v, 1),
+        fmtPct: v => tamFmtPct(v, 1),
+        labelFontPx: 11,
+        xTickColor: C.azulEscuro40,
+        xTickWeight: 'normal',
+        xBorderColor: C.azulEscuro20,
+        padTop: 22, padRight: 20
     });
 }
 
