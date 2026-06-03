@@ -136,6 +136,26 @@ for (const key of ['price', 'disc', 'avgdisc', 'franchise']) {
     `ECOM_SPECS NÃO tem "${key}" — card de e-commerce perdeu a lista única`);
 }
 
+/* 8) MARKET SHARE — receita única de MODELO + DESENHO (não só dados/controles).
+   A lógica chegou a divergir entre dashboard e PPT (o seletor Vulcabras
+   Separate/Combined trocava as empresas concorrentes) porque cada lado tinha
+   sua própria cópia do cálculo e do desenho. Agora os dois chamam as MESMAS
+   funções do índice. Esta trava falha se alguém reintroduzir lógica inline.
+   LIMITAÇÃO: o lado do PPT mora em charts_dashboard.js (Drive, fora deste
+   repo) → o CI não o vê; aqui travamos o índice + o lado do dashboard. */
+check(/window\.computeMarketShareModel\s*=\s*function/.test(registry),
+  'índice define window.computeMarketShareModel (modelo do market-share)',
+  'charts-registry.js NÃO define window.computeMarketShareModel — o modelo do market-share voltaria a ser duplicado (dashboard ↔ PPT divergem)');
+check(/window\.buildMarketShareChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildMarketShareChartCanvas (desenho do market-share)',
+  'charts-registry.js NÃO define window.buildMarketShareChartCanvas — o desenho do market-share voltaria a ser duplicado');
+check(dash.includes('window.computeMarketShareModel') && dash.includes('window.buildMarketShareChartCanvas'),
+  'dashboard delega market-share ao índice (modelo + desenho)',
+  'dashboard NÃO chama window.computeMarketShareModel/buildMarketShareChartCanvas — reintroduziu cálculo/desenho inline (vai divergir do PPT)');
+check(!/\brankedCompetitors\b/.test(dash),
+  'dashboard sem cópia inline do modelo de market-share',
+  'dashboard contém "rankedCompetitors" — a lógica inline do market-share foi reintroduzida (deve viver só no charts-registry.js)');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));
