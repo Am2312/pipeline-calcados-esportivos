@@ -7,7 +7,7 @@
 
 ## TL;DR do estado
 
-**7 de 10 gráficos JÁ migrados, testados byte-a-byte e publicados ao vivo.** Faltam **3**.
+**8 de 10 gráficos JÁ migrados, testados byte-a-byte e publicados ao vivo.** Faltam **2**.
 
 | # | Gráfico | Status | Commit |
 |---|---|---|---|
@@ -18,12 +18,15 @@
 | 5 | headcount-volume | ✅ feito | `c815dbe` |
 | 6 | sector-data | ✅ feito | `8990b77` |
 | 7 | imports-data | ✅ feito (2 views: linha + empilhada) | `d85bf51` |
+| 8 | vulcabras-share | ✅ feito (modelo+desenho+helpers) | `d9b08a8` |
 | — | tam-destaque | ✅ N/A | presentation-only (1 cópia só, nada a unificar) |
-| 8 | **vulcabras-share** | ⏳ FALTA | — |
 | 9 | **footwear-decomp** | ⏳ FALTA | — |
 | 10 | **brand-gmv** | ⏳ FALTA | — |
 
-Nenhuma edição pendente/inacabada. Tudo que foi tocado está commitado e no ar. **Nenhuma edição foi feita ainda para os 3 restantes.**
+Nenhuma edição pendente/inacabada. Tudo que foi tocado está commitado e no ar. **Nenhuma edição foi feita ainda para os 2 restantes.**
+
+### vulcabras-share — feito 2026-06-04 (commit `d9b08a8`)
+Canonical no registry: `window.computeVulcabrasShareModel(state, data)` (state={from,to}; data={years, brandsFootwear, namedDenominator, totalRows}; usa `window.MS_VULCABRAS`) + `window.buildVulcabrasShareChartCanvas(canvas, rows, opts)` (opts={C, labelFontPx, fmtPct, fmtNumber}). Helpers `window.vulcabrasShareAxis` / `placeVulcabrasShareLabels` / `updateVulcabrasShareAxis` também moveram pro registry (o bind de legenda por-lado chama `window.updateVulcabrasShareAxis`). Único chrome por-lado: `labelFontPx` (dash 11px fixo; PPT `window.__fonteRotuloPx`). Escrita/bind da legenda (`#vulcabras-share-card`) segue por-lado. CI: seção 15. Verificado nos 2 lados: 2 linhas (Volume azul / Total turquesa), 10 anos, mesmos valores (14.99/15.84/16.67), eixo 13–27, toggle de legenda recalcula eixo, console limpo. **GOTCHA:** o 1º deploy do Pages (commit d9b08a8) FALHOU no step "Deploy to GitHub Pages" (infra transitória — build OK, artifact OK); re-disparei com commit vazio (`1f49221`) e publicou. Se o registry da nuvem não atualizar em ~2min, cheque `api.github.com/repos/Am2312/pipeline-calcados-esportivos/actions/runs` e re-dispare.
 
 ### imports-data — feito 2026-06-03 (commit `d85bf51`)
 Canonical no registry: `window.buildImportsLineCanvas(canvas, {rows}, opts)` e `window.buildImportsStackedCanvas(canvas, {periods, topCountries, keys}, opts)`. `opts = {C, palette, grain, fmtMetric, fmtTooltip}` (formatters do lado, pois dependem de `importsState.metric`). As duas implementações (dash inline × PPT `charts_sports.js`) eram **byte-idênticas** salvo a escrita guardada da legenda no PPT → renderLineChart/renderStackedChart dos 2 lados agora só computam o top-3 países + escrevem `#imports-country-legend` (chrome por-lado) e delegam o desenho. CI: seção 14 em `check_single_recipe.mjs` (registry define as 2 fns + dash delega + dash sem os plugin-ids `importsLineLabels`/`importsStackLabels` inline). Verificado nos 2 lados: line (Total Imports, 352 pts) e stacked (Vietnam/Indonesia/China/Others, paleta, legenda) idênticos, console limpo.
@@ -93,16 +96,13 @@ Para cada gráfico:
 
 ---
 
-## Os 3 RESTANTES (com mapa do código)
+## Os 2 RESTANTES (com mapa do código)
 
 ### ✅ 7) imports-data — FEITO (commit `d85bf51`, ver detalhe no TL;DR acima)
 
-### 8) vulcabras-share  ← FAÇA PRIMEIRO (próximo)
-- Registry: `id:'vulcabras-share'`, `desenhar` chama `DASH.renderVulcabrasShareChart()`. (É o gráfico "Vulcabras — Market Share (Footwear)", DIFERENTE do market-share principal.)
-- **Dashboard:** `renderVulcabrasShareChart` (~L1523) + `VULCABRAS_SHARE_STATE` + `selectedVulcabrasMarketShareRows` (~L1399) + `placeVulcabrasShareLabels`/`updateVulcabrasShareAxis`/`bindVulcabrasShareLegend`.
-- **PPT:** `charts_sports.js` `window.DASH.renderVulcabrasShareChart` (export L5985). Diffar; unificar modelo+desenho.
+### ✅ 8) vulcabras-share — FEITO (commit `d9b08a8`, ver detalhe no TL;DR acima)
 
-### 9) footwear-decomp
+### 9) footwear-decomp  ← FAÇA PRIMEIRO (próximo)
 - Registry: `id:'footwear-decomp'`, `desenhar` chama `R('buildFootwearDecompChart')(canvas, R('getFootwearDecompSeries')())` (R = `regResolve`, resolve por nome). Controles `FOOTWEAR_DECOMP_STATE`.
 - **Dashboard:** `getFootwearDecompSeries`/`buildFootwearDecompChart`/`renderFootwearDecompChart`/`footwearDecompCardInner` (perto de `renderSportswearTamCards`, ~L2479).
 - **PPT:** versões em `charts_dashboard.js` (ou `charts_sports.js`). Achar onde `regResolve` resolve esses nomes no PPT.
