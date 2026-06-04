@@ -242,6 +242,29 @@ check(!/function\s+selectedVulcabrasMarketShareRows/.test(dash) && !/id:\s*'vulc
   'dashboard sem modelo/plugin inline do vulcabras-share',
   'dashboard contém selectedVulcabrasMarketShareRows()/id:vulcabrasShareLabels — lógica inline do vulcabras-share reintroduzida (deve viver só no charts-registry.js)');
 
+/* 16) FOOTWEAR DECOMP (Footwear Growth Breakdown) — receita única de MODELO +
+   DESENHO. Canonicals no índice; o dashboard delega via wrappers finos. */
+check(/window\.getFootwearDecompSeriesModel\s*=\s*function/.test(registry) && /window\.buildFootwearDecompChartCanvas\s*=\s*function/.test(registry),
+  'índice define getFootwearDecompSeriesModel + buildFootwearDecompChartCanvas',
+  'charts-registry.js NÃO define os canonicals do footwear-decomp (modelo/desenho voltariam a ser duplicados)');
+check(dash.includes('window.getFootwearDecompSeriesModel') && dash.includes('window.buildFootwearDecompChartCanvas'),
+  'dashboard delega footwear-decomp ao índice (modelo + desenho)',
+  'dashboard NÃO chama os canonicals do footwear-decomp — reintroduziu modelo/desenho inline');
+check(!/id:\s*'decompLabels'/.test(dash),
+  'dashboard sem plugin inline do footwear-decomp',
+  'dashboard contém id:decompLabels — desenho inline do footwear-decomp reintroduzido (deve viver só no charts-registry.js)');
+
+/* 17) BRAND GMV (Brand GMV by Category) — receita única de MODELO + DESENHO. */
+check(/window\.computeBrandGmvModel\s*=\s*function/.test(registry) && /window\.buildBrandGmvChartCanvas\s*=\s*function/.test(registry),
+  'índice define computeBrandGmvModel + buildBrandGmvChartCanvas',
+  'charts-registry.js NÃO define os canonicals do brand-gmv (modelo/desenho voltariam a ser duplicados)');
+check(dash.includes('window.computeBrandGmvModel') && dash.includes('window.buildBrandGmvChartCanvas'),
+  'dashboard delega brand-gmv ao índice (modelo + desenho)',
+  'dashboard NÃO chama os canonicals do brand-gmv — reintroduziu modelo/desenho inline');
+check(!/id:\s*'msBrandGmvLabels'/.test(dash),
+  'dashboard sem plugin inline do brand-gmv',
+  'dashboard contém id:msBrandGmvLabels — desenho inline do brand-gmv reintroduzido (deve viver só no charts-registry.js)');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));

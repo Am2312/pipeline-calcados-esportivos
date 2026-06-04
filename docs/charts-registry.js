@@ -1527,6 +1527,371 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   FOOTWEAR DECOMP (Footwear Growth Breakdown) + BRAND GMV — receita única
+   de MODELO + DESENHO. Os dois lados mantêm wrappers locais finos que
+   delegam pra estas fns. Único chrome por-lado: tamanho da fonte do rótulo
+   (opts.labelFontPx — dash 11px; PPT window.__fonteRotuloPx). Cores/format
+   vão por opts (C, fmtPct, fmtNumber). Modelos leem dados globais da nuvem
+   (window.SPORTS_INDUSTRY_DATA / SPORTSWEAR_TAM / SPORTSWEAR_BRAND_SHARES).
+   ===================================================================== */
+(function () {
+  function fdRrect(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); return; }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function decompLbl(v) { return v < 0 ? '(' + Math.abs(Math.round(v)) + '%)' : Math.round(v) + '%'; }
+
+  /* ---- FOOTWEAR DECOMP ---- */
+  window.getFootwearDecompAllYears = function () {
+    const ac = new Map(((window.SPORTS_INDUSTRY_DATA && window.SPORTS_INDUSTRY_DATA.bestAvailable) || []).map(r => [Number(r.data_year), Number(r.apparent_consumption_mn)]));
+    const tam = window.SPORTSWEAR_TAM || {};
+    const years = tam.years || [], ft = tam.footwear || [];
+    const out = [];
+    years.forEach((y, i) => {
+      if (i === 0) return;
+      const totalYoy = (ft[i] && ft[i - 1]) ? ft[i] / ft[i - 1] - 1 : null;
+      const vNow = ac.get(y), vPrev = ac.get(y - 1);
+      const volYoy = (Number.isFinite(vNow) && Number.isFinite(vPrev) && vPrev) ? vNow / vPrev - 1 : null;
+      if (totalYoy == null || volYoy == null) return;
+      const priceYoy = (1 + totalYoy) / (1 + volYoy) - 1;
+      out.push({ year: y, total: totalYoy * 100, volume: volYoy * 100, price: priceYoy * 100 });
+    });
+    return out;
+  };
+
+  window.getFootwearDecompSeriesModel = function (state) {
+    state = state || {};
+    const all = window.getFootwearDecompAllYears();
+    if (!all.length) return [];
+    const yrs = all.map(d => d.year);
+    let from = state.from, to = state.to;
+    if (!yrs.includes(from)) from = yrs[0];
+    if (!yrs.includes(to)) to = yrs[yrs.length - 1];
+    if (from > to) [from, to] = [to, from];
+    return all.filter(d => d.year >= from && d.year <= to);
+  };
+
+  /* series = saída de getFootwearDecompSeriesModel. opts:{C, labelFontPx, fmtPct(v,d)}. */
+  window.buildFootwearDecompChartCanvas = function (canvas, series, opts) {
+    if (!canvas || !series.length || !window.Chart) return null;
+    opts = opts || {};
+    const C = opts.C || {};
+    const labelFontPx = opts.labelFontPx || 11;
+    const fmtPct = opts.fmtPct;
+    const labels = series.map(d => String(d.year));
+    const priceData = series.map(d => d.price);
+    const volData = series.map(d => d.volume);
+    const extents = series.flatMap(d => [Math.max(0, d.price) + Math.max(0, d.volume), Math.min(0, d.price) + Math.min(0, d.volume), d.total]);
+    const yHi = Math.max(...extents, 0), yLo = Math.min(...extents, 0);
+    const range = Math.max(8, yHi - yLo);
+    const yMax = yHi + Math.max(8, range * 0.24);
+    const yMin = yLo - Math.max(2, range * 0.08);
+    const datasets = [
+      { type: 'bar', label: 'Price', data: priceData, stack: 'g', backgroundColor: C.azulEscuro, borderColor: C.azulEscuro, borderWidth: 0, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.86 },
+      { type: 'bar', label: 'Volume', data: volData, stack: 'g', backgroundColor: C.turquesa, borderColor: C.turquesa, borderWidth: 0, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.86 }
+    ];
+    const labelPlugin = {
+      id: 'decompLabels',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea, scales: { y: yScale } } = chart;
+        const y0 = yScale.getPixelForValue(0);
+        ctx.save();
+        ctx.strokeStyle = '#C2CCD6';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, y0);
+        ctx.lineTo(chartArea.right, y0);
+        ctx.stroke();
+        ctx.restore();
+      },
+      afterDatasetsDraw(chart) {
+        const { ctx, scales: { y: yScale } } = chart;
+        const meta0 = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chart.data.datasets.forEach((ds, di) => {
+          if (!chart.isDatasetVisible(di)) return;
+          const meta = chart.getDatasetMeta(di);
+          meta.data.forEach((bar, i) => {
+            const v = ds.data[i];
+            if (!Number.isFinite(v) || Math.abs(bar.base - bar.y) < 15) return;
+            ctx.fillStyle = C.branco;
+            ctx.fillText(decompLbl(v), bar.x, (bar.y + bar.base) / 2);
+          });
+        });
+        ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        series.forEach((d, i) => {
+          const bar = meta0.data[i];
+          if (!bar) return;
+          const posSum = Math.max(0, chart.isDatasetVisible(0) ? d.price : 0) + Math.max(0, chart.isDatasetVisible(1) ? d.volume : 0);
+          const topY = yScale.getPixelForValue(posSum);
+          const text = decompLbl(d.total);
+          const w = ctx.measureText(text).width + 14, hgt = 22;
+          const x = bar.x - w / 2, yy = topY - hgt - 4;
+          ctx.fillStyle = C.cereja;
+          fdRrect(ctx, x, yy, w, hgt, 4);
+          ctx.fill();
+          ctx.fillStyle = C.branco;
+          ctx.fillText(text, bar.x, yy + hgt / 2 + 0.5);
+        });
+        ctx.restore();
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'bar', plugins: [labelPlugin], data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { top: 40, right: 26, left: 0, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF',
+            borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12,
+            callbacks: {
+              label(ctx2) { return `  ${ctx2.dataset.label}: ${fmtPct(ctx2.parsed.y, 1)}`; },
+              footer(items) { const i = items[0] && items[0].dataIndex; return (i != null && series[i]) ? `  Total: ${fmtPct(series[i].total, 1)}` : ''; }
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: C.azulEscuro40, font: { family: 'Verdana', size: 10.5 }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: C.azulEscuro20 } },
+          y: { stacked: true, min: yMin, max: yMax, ticks: { display: false }, grid: { display: false }, border: { display: false } }
+        }
+      }
+    });
+  };
+
+  /* ---- BRAND GMV ---- */
+  function bgBrandCategorySeries(d, category, brand, VULC) {
+    const categoryBrands = (d.brands && d.brands[category]) || {};
+    const members = brand === 'Vulcabras' ? VULC : [brand];
+    return (d.years || []).map((_, index) => members.reduce((sum, member) => {
+      const value = categoryBrands[member] && categoryBrands[member][index];
+      return sum + (Number.isFinite(value) ? Number(value) : 0);
+    }, 0));
+  }
+  function bgYoySeries(values) {
+    return values.map((value, index) => index === 0 || !Number.isFinite(values[index - 1]) || values[index - 1] === 0 ? null : ((value / values[index - 1]) - 1) * 100);
+  }
+  function bgCagr(startValue, endValue, periods) {
+    if (!Number.isFinite(startValue) || !Number.isFinite(endValue) || startValue <= 0 || endValue <= 0 || periods <= 0) return null;
+    return (Math.pow(endValue / startValue, 1 / periods) - 1) * 100;
+  }
+
+  /* state:{brand,from,to}. data = msData() (window.SPORTSWEAR_BRAND_SHARES). opts:{C}. */
+  window.computeBrandGmvModel = function (state, data, opts) {
+    opts = opts || {};
+    const C = opts.C || {};
+    const VULC = window.MS_VULCABRAS || ['Olympikus', 'Mizuno', 'Under Armour'];
+    const d = data || { years: [], brands: {} };
+    const years = d.years || [];
+    if (!years.length) return null;
+    let fromIdx = years.indexOf(state.from), toIdx = years.indexOf(state.to);
+    if (fromIdx < 0) fromIdx = 0;
+    if (toIdx < 0) toIdx = years.length - 1;
+    if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
+    const apparelMn = bgBrandCategorySeries(d, 'apparel', state.brand, VULC);
+    const footwearMn = bgBrandCategorySeries(d, 'footwear', state.brand, VULC);
+    const totalMn = years.map((_, index) => apparelMn[index] + footwearMn[index]);
+    const shownYears = years.slice(fromIdx, toIdx + 1);
+    const sliceBn = values => values.slice(fromIdx, toIdx + 1).map(value => value / 1000);
+    return {
+      brand: state.brand,
+      years: shownYears,
+      values: sliceBn(totalMn),
+      stackedSeries: [
+        { key: 'footwear', label: 'Footwear', color: C.azulEscuro, values: sliceBn(footwearMn) },
+        { key: 'apparel', label: 'Apparel', color: C.turquesa, values: sliceBn(apparelMn) }
+      ],
+      yoy: bgYoySeries(totalMn).slice(fromIdx, toIdx + 1),
+      cagr: bgCagr(totalMn[fromIdx], totalMn[toIdx], toIdx - fromIdx),
+      apparelCagr: bgCagr(apparelMn[fromIdx], apparelMn[toIdx], toIdx - fromIdx),
+      footwearCagr: bgCagr(footwearMn[fromIdx], footwearMn[toIdx], toIdx - fromIdx),
+      lineColor: C.cereja
+    };
+  };
+
+  /* selected = saída de computeBrandGmvModel. opts:{C, labelFontPx, fmtNumber(v,d), fmtPct(v,d)}. */
+  window.buildBrandGmvChartCanvas = function (canvas, selected, opts) {
+    if (!canvas || !selected || !window.Chart) return null;
+    opts = opts || {};
+    const C = opts.C || {};
+    const labelFontPx = opts.labelFontPx || 11;
+    const fmtNumber = opts.fmtNumber, fmtPct = opts.fmtPct;
+    const cereja = C.cereja || '#FF4F6C';
+    const labels = selected.years;
+    const yoyData = selected.yoy;
+    const lineColor = selected.lineColor || cereja;
+    const barData = selected.values;
+    const barMax = Math.max(...barData, 0.1) * 1.18;
+    const yoyValues = yoyData.filter(Number.isFinite);
+    const yoyObservedMax = Math.max(...yoyValues, 0);
+    const yoyObservedMin = Math.min(...yoyValues, 0);
+    const yoyRange = Math.max(10, yoyObservedMax - yoyObservedMin);
+    const yoyScaleMax = Math.ceil(yoyObservedMax + Math.max(4, yoyRange * 0.08));
+    const yoyScaleMin = Math.floor(yoyObservedMin - Math.max(4, yoyRange * 0.10));
+    const datasets = [];
+    selected.stackedSeries.forEach(s => datasets.push({
+      type: 'bar', label: s.label, data: s.values, stack: 'brand-gmv', yAxisID: 'y', order: 2,
+      backgroundColor: s.color, borderColor: s.color, borderWidth: 0, borderSkipped: false,
+      barPercentage: 0.74, categoryPercentage: 0.88
+    }));
+    datasets.push({
+      type: 'line', label: 'YoY', data: yoyData, yAxisID: 'y1', order: 1,
+      borderColor: lineColor, backgroundColor: lineColor, borderWidth: 2.5,
+      pointRadius: 3, pointBackgroundColor: lineColor, pointBorderColor: lineColor,
+      pointHoverRadius: 5, pointHitRadius: 18, tension: 0.25
+    });
+    const labelPlugin = {
+      id: 'msBrandGmvLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea } = chart;
+        const lineIndex = chart.data.datasets.findIndex(ds => ds.type === 'line');
+        const lineMeta = lineIndex >= 0 ? chart.getDatasetMeta(lineIndex) : null;
+        const lineVisible = lineIndex >= 0 && chart.isDatasetVisible(lineIndex);
+        const yoyBoxes = [];
+        const barInfos = [];
+        chart.data.datasets.forEach((ds, idx) => {
+          if (ds.type === 'bar' && chart.isDatasetVisible(idx)) barInfos.push({ meta: chart.getDatasetMeta(idx), data: ds.data });
+        });
+        const stackTops = labels.map((_, index) => {
+          let topY = null, barRef = null, sum = 0;
+          barInfos.forEach(info => {
+            const bar = info.meta.data[index];
+            if (!bar) return;
+            if (topY === null || bar.y < topY) { topY = bar.y; barRef = bar; }
+            const val = info.data[index];
+            if (Number.isFinite(val)) sum += val;
+          });
+          return { topY, barRef, sum };
+        });
+        ctx.save();
+        ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        if (lineMeta && lineVisible) lineMeta.data.forEach((point, index) => {
+          const value = yoyData[index];
+          if (!point || !Number.isFinite(value)) return;
+          const text = `${Math.round(value)}%`;
+          const width = ctx.measureText(text).width + 14;
+          const height = 22;
+          let x = point.x - width / 2;
+          let y = point.y - height / 2;
+          x = Math.max(chartArea.left + 2, Math.min(x, chartArea.right - width - 2));
+          y = Math.max(chartArea.top + 4, y);
+          yoyBoxes[index] = { x, y, width, height };
+        });
+        ctx.restore();
+        ctx.save();
+        ctx.font = '700 12px Verdana';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = C.branco;
+        chart.data.datasets.forEach((ds, idx) => {
+          if (ds.type !== 'bar' || !chart.isDatasetVisible(idx)) return;
+          const meta = chart.getDatasetMeta(idx);
+          meta.data.forEach((bar, i) => {
+            const value = ds.data[i];
+            if (!bar || !Number.isFinite(value) || value <= 0) return;
+            const segHeight = Math.abs(bar.base - bar.y);
+            if (segHeight < 18) return;
+            const labelX = bar.x;
+            let labelY = bar.y + (bar.base - bar.y) / 2;
+            const segTotal = stackTops[i] ? stackTops[i].sum : 0;
+            const text = segTotal > 0 ? `${Math.round((value / segTotal) * 100)}%` : '';
+            const box = yoyBoxes[i];
+            if (box) {
+              const tw = ctx.measureText(text).width;
+              const overlapsX = Math.abs(labelX - (box.x + box.width / 2)) < ((tw + box.width) / 2);
+              const overlapsY = Math.abs(labelY - (box.y + box.height / 2)) < ((16 + box.height) / 2);
+              if (overlapsX && overlapsY) {
+                const segTop = Math.min(bar.y, bar.base), segBottom = Math.max(bar.y, bar.base);
+                const candDown = box.y + box.height + 9, candUp = box.y - 9;
+                if ((box.y + box.height / 2) <= labelY && candDown + 8 <= segBottom - 2) labelY = candDown;
+                else if (candUp - 8 >= segTop + 2) labelY = candUp;
+                else if (candDown + 8 <= segBottom - 2) labelY = candDown;
+                labelY = Math.max(segTop + 10, Math.min(segBottom - 10, labelY));
+              }
+            }
+            ctx.fillText(text, labelX, labelY);
+          });
+        });
+        ctx.fillStyle = C.azulEscuro;
+        stackTops.forEach((stack, index) => {
+          if (!stack || stack.topY == null || !stack.barRef || stack.sum <= 0) return;
+          const text = fmtNumber(stack.sum, 1);
+          let labelX = stack.barRef.x;
+          let labelY = Math.max(chartArea.top + 9, stack.topY - 12);
+          const box = yoyBoxes[index];
+          if (box) {
+            const tw = ctx.measureText(text).width;
+            const overlapsX = Math.abs(labelX - (box.x + box.width / 2)) < ((tw + box.width) / 2);
+            const overlapsY = Math.abs(labelY - (box.y + box.height / 2)) < ((14 + box.height) / 2);
+            if (overlapsX && overlapsY) labelY = Math.max(chartArea.top + 9, box.y - 11);
+          }
+          ctx.fillText(text, labelX, labelY);
+        });
+        ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        ctx.textBaseline = 'middle';
+        if (lineMeta && lineVisible) lineMeta.data.forEach((point, index) => {
+          const value = yoyData[index];
+          if (!point || !Number.isFinite(value)) return;
+          const text = `${Math.round(value)}%`;
+          const width = ctx.measureText(text).width + 14;
+          const height = 22;
+          const box = yoyBoxes[index] || { x: Math.max(chartArea.left + 2, Math.min(point.x - width / 2, chartArea.right - width - 2)), y: Math.max(chartArea.top + 4, point.y - 11) };
+          ctx.fillStyle = lineColor;
+          fdRrect(ctx, box.x, box.y, width, height, 4);
+          ctx.fill();
+          ctx.fillStyle = C.branco;
+          ctx.fillText(text, box.x + width / 2, box.y + height / 2 + 0.5);
+        });
+        ctx.restore();
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'bar', plugins: [labelPlugin], data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { top: 52, right: 26, left: 0, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF',
+            borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12,
+            callbacks: {
+              label(ctx2) {
+                const v = ctx2.parsed.y;
+                if (ctx2.dataset.yAxisID === 'y1') return v == null ? '' : `  YoY: ${fmtPct(v, 1)}`;
+                return `  ${ctx2.dataset.label}: R$ ${fmtNumber(v, 1)} bn`;
+              },
+              footer(items) {
+                const total = items.filter(c => c.dataset.yAxisID !== 'y1').reduce((sum, c) => sum + (Number.isFinite(c.parsed.y) ? c.parsed.y : 0), 0);
+                return total ? `  Total: R$ ${fmtNumber(total, 1)} bn` : '';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: C.azulEscuro40, font: { family: 'Verdana', size: 10.5 }, minRotation: 0, maxRotation: 0 }, grid: { display: false }, border: { color: C.azulEscuro20 } },
+          y: { stacked: true, min: 0, max: barMax, ticks: { display: false }, grid: { display: false }, border: { display: false } },
+          y1: { position: 'right', min: yoyScaleMin, max: yoyScaleMax, ticks: { display: false }, grid: { display: false, drawOnChartArea: false }, border: { display: false } }
+        }
+      }
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico
