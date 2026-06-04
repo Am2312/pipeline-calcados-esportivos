@@ -277,13 +277,16 @@ window.MS_PALETTE = window.MS_PALETTE || ['#021C45', '#72D1C6', '#FF5473', '#2EA
    ===================================================================== */
 window.MS_VULCABRAS    = window.MS_VULCABRAS    || ['Olympikus', 'Mizuno', 'Under Armour'];
 window.MS_TOP_SERIES   = window.MS_TOP_SERIES   || 6;
+// Nº FIXO de concorrentes (não-Vulcabras) exibidos no gráfico — os 3 maiores,
+// independente de Separate/Combined. (Vulcabras + estes 3 + Others.)
+window.MS_TOP_COMPETITORS = window.MS_TOP_COMPETITORS || 3;
 window.MS_OTHERS_COLOR = window.MS_OTHERS_COLOR || '#D02BB8';
 
 /* Modelo do gráfico. state = {category, vulcabras:'separate'|'combined',
    basis:'named'|'reported', from, to}. data = {years, totals, brands} (mesma
    estrutura nos dois lados, via sportswear_brand_shares_data.js). */
 window.computeMarketShareModel = function (state, data) {
-  var VULC = window.MS_VULCABRAS, TOP = window.MS_TOP_SERIES;
+  var VULC = window.MS_VULCABRAS, TOP = window.MS_TOP_SERIES, COMP = window.MS_TOP_COMPETITORS;
   var PALETTE = window.MS_PALETTE, OTHERS = window.MS_OTHERS_COLOR;
   data = data || { years: [], totals: {}, brands: {} };
   var years = data.years || [];
@@ -314,10 +317,8 @@ window.computeMarketShareModel = function (state, data) {
   };
   var withRank = function (entry) { entry.rankShare = rankShare(entry.members); return entry; };
   var vulcMembersWithData = VULC.filter(function (n) { return brands[n]; });
-  // Vulcabras sempre conta como UMA vaga de grupo ao reservar concorrentes,
-  // então o conjunto de concorrentes (top TOP-1) é idêntico em Separate e
-  // Combined; Separate só expande essa vaga única nas marcas-membro.
-  var vulcGroupSlots = rankShare(vulcMembersWithData) > 0 ? 1 : 0;
+  // Nº FIXO de concorrentes (COMP, os maiores não-Vulcabras), idêntico em
+  // Separate e Combined; Separate só expande a Vulcabras nas marcas-membro.
   var vulcEntries = state.vulcabras === 'combined'
     ? [withRank({ key: 'Vulcabras', label: 'Vulcabras', members: vulcMembersWithData })]
     : vulcMembersWithData.map(function (n) { return withRank({ key: n, label: n, members: [n] }); });
@@ -327,7 +328,7 @@ window.computeMarketShareModel = function (state, data) {
     .map(function (n) { return withRank({ key: n, label: n, members: [n] }); })
     .filter(function (e) { return e.rankShare > 0; })
     .sort(function (a, b) { return b.rankShare - a.rankShare || a.label.localeCompare(b.label); });
-  var entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, TOP - vulcGroupSlots)));
+  var entries = fixedEntries.concat(rankedCompetitors.slice(0, Math.max(0, COMP)));
   var series = entries.map(function (e, ei) {
     return {
       key: e.key, label: e.label, color: PALETTE[ei % PALETTE.length],
