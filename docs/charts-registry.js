@@ -2352,8 +2352,8 @@ registerChart({
    que segue nativa — aqui vai só o gráfico). Só invocados na apresentação.
    --------------------------------------------------------------------- */
 registerChart({
-  id: 'caged-jobs', titulo: "Estimated Formal Jobs — Vulcabras' Factories", unidade: '(Formal Jobs, YoY)', dashboardNative: true,
-  legenda: [{ cor: '#021C45', texto: 'Estimated jobs' }, { cor: '#6FDDCB', texto: 'YoY %' }],
+  id: 'caged-jobs', titulo: "Vulcabras' Estimated Factory Headcount", unidade: '(#, Percentage)', dashboardNative: true,
+  legenda: [{ cor: '#021C45', texto: 'Estimated Headcount' }, { cor: '#6FDDCB', texto: 'YoY' }],
   desenhar(canvas) { regClaimId(canvas, 'presentation-caged-jobs-chart'); renderPresentationCagedJobsChart(); return Chart.getChart(canvas); },
   montarControles() {
     return regPresBoxes('caged-jobs') +
