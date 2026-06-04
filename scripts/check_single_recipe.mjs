@@ -226,6 +226,22 @@ check(!/id:\s*'importsLineLabels'/.test(dash) && !/id:\s*'importsStackLabels'/.t
   'dashboard sem plugin de rótulos inline do imports',
   'dashboard contém "importsLineLabels"/"importsStackLabels" — o desenho inline do imports-data foi reintroduzido (deve viver só no charts-registry.js)');
 
+/* 15) VULCABRAS SHARE (Vulcabras Market Share, Footwear) — receita única de
+   MODELO + DESENHO. As fns moram no índice e o dashboard delega; helpers de
+   eixo/labels também (vulcabrasShareAxis/placeVulcabrasShareLabels/updateVulcabrasShareAxis). */
+check(/window\.computeVulcabrasShareModel\s*=\s*function/.test(registry),
+  'índice define window.computeVulcabrasShareModel',
+  'charts-registry.js NÃO define window.computeVulcabrasShareModel — o modelo do vulcabras-share voltaria a ser duplicado');
+check(/window\.buildVulcabrasShareChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildVulcabrasShareChartCanvas',
+  'charts-registry.js NÃO define window.buildVulcabrasShareChartCanvas — o desenho do vulcabras-share voltaria a ser duplicado');
+check(dash.includes('window.computeVulcabrasShareModel') && dash.includes('window.buildVulcabrasShareChartCanvas'),
+  'dashboard delega vulcabras-share ao índice (modelo + desenho)',
+  'dashboard NÃO chama window.computeVulcabrasShareModel/buildVulcabrasShareChartCanvas — reintroduziu cálculo/desenho inline do vulcabras-share');
+check(!/function\s+selectedVulcabrasMarketShareRows/.test(dash) && !/id:\s*'vulcabrasShareLabels'/.test(dash),
+  'dashboard sem modelo/plugin inline do vulcabras-share',
+  'dashboard contém selectedVulcabrasMarketShareRows()/id:vulcabrasShareLabels — lógica inline do vulcabras-share reintroduzida (deve viver só no charts-registry.js)');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));

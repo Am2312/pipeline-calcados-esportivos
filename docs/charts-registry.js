@@ -1275,6 +1275,258 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   VULCABRAS SHARE (Vulcabras Market Share, Footwear) — receita única de
+   MODELO + DESENHO. Gráfico DIFERENTE do market-share principal: 2 linhas
+   (Volume Market Share azul / Total Market Share turquesa) + pills de %.
+   Único chrome que difere: o tamanho da fonte do pill (dash 11px fixo;
+   PPT window.__fonteRotuloPx escalado) → opts.labelFontPx. A escrita da
+   legenda (#vulcabras-share-card) + bind do clique são chrome por-lado.
+   ===================================================================== */
+(function () {
+  function vshRrect(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); return; }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  window.vulcabrasShareAxis = function (values) {
+    var valid = values.filter(Number.isFinite);
+    if (!valid.length) return { min: 0, max: 30 };
+    var min = Math.min.apply(null, valid);
+    var max = Math.max.apply(null, valid);
+    var range = Math.max(max - min, 1.5);
+    var pad = Math.max(range * 0.16, 0.6);
+    return {
+      min: Math.max(0, Math.floor((min - pad) * 2) / 2),
+      max: Math.ceil((max + pad) * 2) / 2
+    };
+  };
+
+  window.placeVulcabrasShareLabels = function (pills, chartArea, canvasWidth) {
+    var pad = 2;
+    var gap = 4;
+    var rightBound = canvasWidth != null ? canvasWidth : chartArea.right;
+    var clampY = function (pill, y) { return Math.max(chartArea.top + pad, Math.min(y, chartArea.bottom - pill.h - pad)); };
+    var clampX = function (pill) {
+      var center = pill.anchorX || pill.x + pill.w / 2;
+      return Math.max(0, Math.min(center - pill.w / 2, rightBound - pill.w - pad));
+    };
+    var groups = [];
+    pills.forEach(function (pill) {
+      var center = pill.anchorX || pill.x + pill.w / 2;
+      var group = groups.find(function (candidate) { return Math.abs(candidate.center - center) < 8; });
+      if (!group) { group = { center: center, items: [] }; groups.push(group); }
+      group.items.push(Object.assign({}, pill, { x: clampX(pill) }));
+    });
+    return groups.flatMap(function (group) {
+      var items = group.items
+        .slice()
+        .sort(function (a, b) {
+          var valueDiff = Number(b.value) - Number(a.value);
+          return Math.abs(valueDiff) > 0.0001 ? valueDiff : a.pointY - b.pointY;
+        })
+        .map(function (pill) { return Object.assign({}, pill, { y: clampY(pill, pill.y) }); });
+      items.forEach(function (pill, index) {
+        if (index === 0) return;
+        var previous = items[index - 1];
+        pill.y = Math.max(pill.y, previous.y + previous.h + gap);
+      });
+      var overflow = items.length ? items[items.length - 1].y + items[items.length - 1].h - (chartArea.bottom - pad) : 0;
+      if (overflow > 0) items.forEach(function (pill) { pill.y -= overflow; });
+      var underflow = items.length ? chartArea.top + pad - items[0].y : 0;
+      if (underflow > 0) items.forEach(function (pill) { pill.y += underflow; });
+      items.forEach(function (pill, index) {
+        if (index === 0) return;
+        var previous = items[index - 1];
+        pill.y = Math.max(pill.y, previous.y + previous.h + gap);
+      });
+      return items;
+    });
+  };
+
+  window.updateVulcabrasShareAxis = function (chart) {
+    if (!chart) return;
+    var visibleValues = chart.data.datasets
+      .flatMap(function (dataset, datasetIndex) { return chart.isDatasetVisible(datasetIndex) ? dataset.data : []; })
+      .filter(Number.isFinite);
+    var axis = window.vulcabrasShareAxis(visibleValues);
+    chart.options.scales.y.min = axis.min;
+    chart.options.scales.y.max = axis.max;
+  };
+
+  /* MODELO. state:{from,to}. data:{years, brandsFootwear, namedDenominator, totalRows}.
+     Usa window.MS_VULCABRAS (marcas Vulcabras). Retorna as rows do gráfico. */
+  window.computeVulcabrasShareModel = function (state, data) {
+    state = state || {}; data = data || {};
+    var years = data.years || [];
+    var brands = data.brandsFootwear || {};
+    var namedDenominator = data.namedDenominator || [];
+    var totalRows = data.totalRows || [];
+    var VULC = window.MS_VULCABRAS || ['Olympikus', 'Mizuno', 'Under Armour'];
+    var totalByYear = {};
+    totalRows.forEach(function (row) { totalByYear[Number(row.year)] = row; });
+    return years
+      .filter(function (year) { return year >= state.from && year <= state.to; })
+      .map(function (year) {
+        var index = years.indexOf(year);
+        var namedTotal = Number(namedDenominator[index] || 0);
+        var vulcabrasNamedGmv = VULC.reduce(function (sum, brand) {
+          var value = brands[brand] && brands[brand][index];
+          return sum + (Number.isFinite(value) ? Number(value) : 0);
+        }, 0);
+        var total = totalByYear[Number(year)];
+        return {
+          year: year,
+          label: String(year),
+          totalShare: total && Number.isFinite(total.share) ? total.share : null,
+          namedShare: namedTotal ? vulcabrasNamedGmv / namedTotal : null,
+          vulcabrasVolumeMn: total && total.vulcabrasVolumeMn != null ? total.vulcabrasVolumeMn : null,
+          abicalVolumeMn: total && total.abicalVolumeMn != null ? total.abicalVolumeMn : null
+        };
+      })
+      .filter(function (row) { return Number.isFinite(row.totalShare) || Number.isFinite(row.namedShare); });
+  };
+
+  /* DESENHO. rows = saída de computeVulcabrasShareModel.
+     opts:{C, labelFontPx, fmtPct(v,d), fmtNumber(v,d)}. */
+  window.buildVulcabrasShareChartCanvas = function (canvas, rows, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var C = opts.C || {};
+    var labelFontPx = opts.labelFontPx || 11;
+    var fmtPct = opts.fmtPct, fmtNumber = opts.fmtNumber;
+    var azulEscuro = C.azulEscuro || '#021C45';
+    var azulEscuro20 = C.azulEscuro20 || '#CCD4DD';
+    var azulEscuro40 = C.azulEscuro40 || '#9AA8BB';
+    var turquesa = C.turquesa || '#6FDDCB';
+    var labels = rows.map(function (row) { return row.label; });
+    var totalShares = rows.map(function (row) { return Number.isFinite(row.totalShare) ? row.totalShare * 100 : null; });
+    var namedShares = rows.map(function (row) { return Number.isFinite(row.namedShare) ? row.namedShare * 100 : null; });
+    var axis = window.vulcabrasShareAxis(totalShares.concat(namedShares));
+    var labelPlugin = {
+      id: 'vulcabrasShareLabels',
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx;
+        var chartArea = chart.chartArea;
+        var pills = [];
+        chart.data.datasets.forEach(function (dataset, datasetIndex) {
+          if (!chart.isDatasetVisible(datasetIndex)) return;
+          var meta = chart.getDatasetMeta(datasetIndex);
+          (meta.data || []).forEach(function (point, i) {
+            var value = dataset.data[i];
+            if (!point || !Number.isFinite(value)) return;
+            ctx.save();
+            ctx.font = '700 ' + labelFontPx + 'px Verdana';
+            var text = fmtPct(value / 100, 0);
+            var width = ctx.measureText(text).width + 14;
+            var height = 22;
+            ctx.restore();
+            pills.push({ text: text, color: dataset.borderColor, x: point.x - width / 2, y: point.y - height / 2, w: width, h: height, pointY: point.y, anchorX: point.x, value: value });
+          });
+        });
+        window.placeVulcabrasShareLabels(pills, chartArea, chart.width).forEach(function (pill) {
+          ctx.save();
+          ctx.fillStyle = pill.color;
+          vshRrect(ctx, pill.x, pill.y, pill.w, pill.h, 4);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '700 ' + labelFontPx + 'px Verdana';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(pill.text, pill.x + pill.w / 2, pill.y + pill.h / 2 + 0.5);
+          ctx.restore();
+        });
+      }
+    };
+    var axisLinePlugin = {
+      id: 'vulcabrasShareAxisLine',
+      afterDraw: function (chart) {
+        var ctx = chart.ctx, scales = chart.scales;
+        var xScale = scales.x;
+        if (!xScale) return;
+        ctx.save();
+        ctx.strokeStyle = azulEscuro20;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(8, xScale.top);
+        ctx.lineTo(chart.width - 8, xScale.top);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { labels: labels, datasets: [
+        {
+          label: 'Volume Market Share',
+          data: totalShares,
+          borderColor: azulEscuro,
+          backgroundColor: azulEscuro,
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointBackgroundColor: azulEscuro,
+          pointBorderColor: azulEscuro,
+          pointHoverRadius: 5,
+          pointHitRadius: 18,
+          tension: 0.25,
+          spanGaps: false
+        },
+        {
+          label: 'Total Market Share',
+          data: namedShares,
+          borderColor: turquesa,
+          backgroundColor: turquesa,
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointBackgroundColor: turquesa,
+          pointBorderColor: turquesa,
+          pointHoverRadius: 5,
+          pointHitRadius: 18,
+          tension: 0.25,
+          spanGaps: false
+        }
+      ] },
+      plugins: [labelPlugin, axisLinePlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { left: 52, right: 52, top: 18, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(2,28,69,0.94)',
+            titleColor: '#9AA8BB',
+            bodyColor: '#FFFFFF',
+            borderColor: '#344F75',
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 12,
+            callbacks: {
+              label: function (c) {
+                var row = rows[c.dataIndex];
+                if (c.datasetIndex === 1) return '  Total Market Share: ' + fmtPct(row.namedShare, 1);
+                return '  Volume Market Share: ' + fmtPct(row.totalShare, 1) + (Number.isFinite(row.vulcabrasVolumeMn) ? ' | Vulcabras: ' + fmtNumber(row.vulcabrasVolumeMn, 1) + 'mn / Abicalcados: ' + fmtNumber(row.abicalVolumeMn, 1) + 'mn' : '');
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { autoSkip: false, color: azulEscuro40, font: { size: 10.5, family: 'Verdana' }, callback: function (value) { return this.getLabelForValue(value); } }, grid: { display: false }, border: { display: false } },
+          y: { min: axis.min, max: axis.max, ticks: { display: false }, grid: { display: false }, border: { display: false } }
+        }
+      }
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico

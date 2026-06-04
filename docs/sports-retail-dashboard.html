@@ -1260,33 +1260,7 @@ function vulcabrasMarketShareRows() {
     }).filter(row => Number.isFinite(row.share));
 }
 
-function selectedVulcabrasMarketShareRows() {
-    const totalByYear = new Map(vulcabrasMarketShareRows().map(row => [Number(row.year), row]));
-    const d = msData();
-    const years = d.years || [];
-    const brands = d.brands?.footwear || {};
-    const namedDenominator = msDenominatorSeries('footwear', 'named');
-    return years
-        .filter(year => year >= VULCABRAS_SHARE_STATE.from && year <= VULCABRAS_SHARE_STATE.to)
-        .map(year => {
-            const index = years.indexOf(year);
-            const namedTotal = Number(namedDenominator[index] || 0);
-            const vulcabrasNamedGmv = MS_VULCABRAS.reduce((sum, brand) => {
-                const value = brands[brand]?.[index];
-                return sum + (Number.isFinite(value) ? Number(value) : 0);
-            }, 0);
-            const total = totalByYear.get(Number(year));
-            return {
-                year,
-                label: String(year),
-                totalShare: Number.isFinite(total?.share) ? total.share : null,
-                namedShare: namedTotal ? vulcabrasNamedGmv / namedTotal : null,
-                vulcabrasVolumeMn: total?.vulcabrasVolumeMn ?? null,
-                abicalVolumeMn: total?.abicalVolumeMn ?? null,
-            };
-        })
-        .filter(row => Number.isFinite(row.totalShare) || Number.isFinite(row.namedShare));
-}
+// RECEITA ÚNICA: o modelo do vulcabras-share mora em window.computeVulcabrasShareModel (charts-registry.js).
 
 function vulcabrasShareControlsHtml() {
     const years = msData().years || [];
@@ -1316,207 +1290,19 @@ function setVulcabrasShareRange() {
     renderVulcabrasShareCard();
 }
 
-function vulcabrasShareAxis(values) {
-    const valid = values.filter(Number.isFinite);
-    if (!valid.length) return { min: 0, max: 30 };
-    const min = Math.min(...valid);
-    const max = Math.max(...valid);
-    const range = Math.max(max - min, 1.5);
-    const pad = Math.max(range * 0.16, 0.6);
-    return {
-        min: Math.max(0, Math.floor((min - pad) * 2) / 2),
-        max: Math.ceil((max + pad) * 2) / 2,
-    };
-}
-
-function placeVulcabrasShareLabels(pills, chartArea, canvasWidth) {
-    const pad = 2;
-    const gap = 4;
-    const rightBound = canvasWidth != null ? canvasWidth : chartArea.right;
-    const clampY = (pill, y) => Math.max(chartArea.top + pad, Math.min(y, chartArea.bottom - pill.h - pad));
-    const clampX = pill => {
-        const center = pill.anchorX || pill.x + pill.w / 2;
-        return Math.max(0, Math.min(center - pill.w / 2, rightBound - pill.w - pad));
-    };
-    const groups = [];
-    pills.forEach(pill => {
-        const center = pill.anchorX || pill.x + pill.w / 2;
-        let group = groups.find(candidate => Math.abs(candidate.center - center) < 8);
-        if (!group) {
-            group = { center, items: [] };
-            groups.push(group);
-        }
-        group.items.push({ ...pill, x: clampX(pill) });
-    });
-    return groups.flatMap(group => {
-        const items = group.items
-            .slice()
-            .sort((a, b) => {
-                const valueDiff = Number(b.value) - Number(a.value);
-                return Math.abs(valueDiff) > 0.0001 ? valueDiff : a.pointY - b.pointY;
-            })
-            .map(pill => ({ ...pill, y: clampY(pill, pill.y) }));
-        items.forEach((pill, index) => {
-            if (index === 0) return;
-            const previous = items[index - 1];
-            pill.y = Math.max(pill.y, previous.y + previous.h + gap);
-        });
-        const overflow = items.length ? items[items.length - 1].y + items[items.length - 1].h - (chartArea.bottom - pad) : 0;
-        if (overflow > 0) items.forEach(pill => { pill.y -= overflow; });
-        const underflow = items.length ? chartArea.top + pad - items[0].y : 0;
-        if (underflow > 0) items.forEach(pill => { pill.y += underflow; });
-        items.forEach((pill, index) => {
-            if (index === 0) return;
-            const previous = items[index - 1];
-            pill.y = Math.max(pill.y, previous.y + previous.h + gap);
-        });
-        return items;
-    });
-}
-
-function updateVulcabrasShareAxis(chart) {
-    if (!chart) return;
-    const visibleValues = chart.data.datasets
-        .flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex) ? dataset.data : [])
-        .filter(Number.isFinite);
-    const axis = vulcabrasShareAxis(visibleValues);
-    chart.options.scales.y.min = axis.min;
-    chart.options.scales.y.max = axis.max;
-}
+// RECEITA ÚNICA: axis/labels/updateAxis do vulcabras-share moram no charts-registry.js
+// (window.vulcabrasShareAxis / placeVulcabrasShareLabels / updateVulcabrasShareAxis).
 
 function renderVulcabrasShareChart() {
     if (vulcabrasShareChartInstance) { vulcabrasShareChartInstance.destroy(); vulcabrasShareChartInstance = null; }
     const el = document.getElementById('vulcabras-share-chart');
     if (!el) return;
-    const rows = selectedVulcabrasMarketShareRows();
-    const labels = rows.map(row => row.label);
-    const totalShares = rows.map(row => Number.isFinite(row.totalShare) ? row.totalShare * 100 : null);
-    const namedShares = rows.map(row => Number.isFinite(row.namedShare) ? row.namedShare * 100 : null);
-    const axis = vulcabrasShareAxis([...totalShares, ...namedShares]);
-    const labelPlugin = {
-        id: 'vulcabrasShareLabels',
-        afterDatasetsDraw(chart) {
-            const ctx = chart.ctx;
-            const { chartArea } = chart;
-            const pills = [];
-            chart.data.datasets.forEach((dataset, datasetIndex) => {
-                if (!chart.isDatasetVisible(datasetIndex)) return;
-                const meta = chart.getDatasetMeta(datasetIndex);
-                (meta.data || []).forEach((point, i) => {
-                    const value = dataset.data[i];
-                    if (!point || !Number.isFinite(value)) return;
-                    ctx.save();
-                    ctx.font = '700 11px Verdana';
-                    const text = fmtPctEN(value / 100, 0);
-                    const width = ctx.measureText(text).width + 14;
-                    const height = 22;
-                    ctx.restore();
-                    pills.push({
-                        text,
-                        color: dataset.borderColor,
-                        x: point.x - width / 2,
-                        y: point.y - height / 2,
-                        w: width,
-                        h: height,
-                        pointY: point.y,
-                        anchorX: point.x,
-                        value,
-                    });
-                });
-            });
-            placeVulcabrasShareLabels(pills, chartArea, chart.width).forEach(pill => {
-                ctx.save();
-                ctx.fillStyle = pill.color;
-                roundedRect(ctx, pill.x, pill.y, pill.w, pill.h, 4);
-                ctx.fill();
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = '700 11px Verdana';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(pill.text, pill.x + pill.w / 2, pill.y + pill.h / 2 + 0.5);
-                ctx.restore();
-            });
-        }
-    };
-    const axisLinePlugin = {
-        id: 'vulcabrasShareAxisLine',
-        afterDraw(chart) {
-            const { ctx, scales } = chart;
-            const xScale = scales.x;
-            if (!xScale) return;
-            ctx.save();
-            ctx.strokeStyle = C.azulEscuro20;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(8, xScale.top);
-            ctx.lineTo(chart.width - 8, xScale.top);
-            ctx.stroke();
-            ctx.restore();
-        }
-    };
-    vulcabrasShareChartInstance = new Chart(el.getContext('2d'), {
-        type: 'line',
-        data: { labels, datasets: [
-            {
-                label: 'Volume Market Share',
-                data: totalShares,
-                borderColor: C.azulEscuro,
-                backgroundColor: C.azulEscuro,
-                borderWidth: 2.5,
-                pointRadius: 3,
-                pointBackgroundColor: C.azulEscuro,
-                pointBorderColor: C.azulEscuro,
-                pointHoverRadius: 5,
-                pointHitRadius: 18,
-                tension: 0.25,
-                spanGaps: false,
-            },
-            {
-                label: 'Total Market Share',
-                data: namedShares,
-                borderColor: C.turquesa,
-                backgroundColor: C.turquesa,
-                borderWidth: 2.5,
-                pointRadius: 3,
-                pointBackgroundColor: C.turquesa,
-                pointBorderColor: C.turquesa,
-                pointHoverRadius: 5,
-                pointHitRadius: 18,
-                tension: 0.25,
-                spanGaps: false,
-            }
-        ] },
-        plugins: [labelPlugin, axisLinePlugin],
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 52, right: 52, top: 18, bottom: 0 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: 'rgba(2,28,69,0.94)',
-                    titleColor: '#9AA8BB',
-                    bodyColor: '#FFFFFF',
-                    borderColor: '#344F75',
-                    borderWidth: 1,
-                    cornerRadius: 8,
-                    padding: 12,
-                    callbacks: {
-                        label: c => {
-                            const row = rows[c.dataIndex];
-                            if (c.datasetIndex === 1) return `  Total Market Share: ${fmtPctEN(row.namedShare, 1)}`;
-                            return `  Volume Market Share: ${fmtPctEN(row.totalShare, 1)}${Number.isFinite(row.vulcabrasVolumeMn) ? ` | Vulcabras: ${fmtNumberEN(row.vulcabrasVolumeMn, 1)}mn / Abicalcados: ${fmtNumberEN(row.abicalVolumeMn, 1)}mn` : ''}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: { ticks: { autoSkip: false, color: C.azulEscuro40, font: { size: 10.5, family: 'Verdana' }, callback: function(value) { return this.getLabelForValue(value); } }, grid: { display: false }, border: { display: false } },
-                y: { min: axis.min, max: axis.max, ticks: { display: false }, grid: { display: false }, border: { display: false } }
-            }
-        }
-    });
+    const d = msData();
+    const model = window.computeVulcabrasShareModel(
+        { from: VULCABRAS_SHARE_STATE.from, to: VULCABRAS_SHARE_STATE.to },
+        { years: d.years || [], brandsFootwear: (d.brands && d.brands.footwear) || {}, namedDenominator: msDenominatorSeries('footwear', 'named'), totalRows: vulcabrasMarketShareRows() }
+    );
+    vulcabrasShareChartInstance = window.buildVulcabrasShareChartCanvas(el, model, { C, labelFontPx: 11, fmtPct: fmtPctEN, fmtNumber: fmtNumberEN });
 }
 
 function bindVulcabrasShareLegend(chart) {
@@ -1528,7 +1314,7 @@ function bindVulcabrasShareLegend(chart) {
         const toggle = () => {
             const index = Number(item.dataset.datasetIndex);
             chart.setDatasetVisibility(index, !chart.isDatasetVisible(index));
-            updateVulcabrasShareAxis(chart);
+            window.updateVulcabrasShareAxis(chart);
             chart.update();
             sync();
         };
