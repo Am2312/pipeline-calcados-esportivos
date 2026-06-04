@@ -7,7 +7,7 @@
 
 ## TL;DR do estado
 
-**8 de 10 gráficos JÁ migrados, testados byte-a-byte e publicados ao vivo.** Faltam **2**.
+## 🎉 TODOS OS 10 GRÁFICOS UNIFICADOS — PUBLICADOS AO VIVO (2026-06-04).
 
 | # | Gráfico | Status | Commit |
 |---|---|---|---|
@@ -19,11 +19,17 @@
 | 6 | sector-data | ✅ feito | `8990b77` |
 | 7 | imports-data | ✅ feito (2 views: linha + empilhada) | `d85bf51` |
 | 8 | vulcabras-share | ✅ feito (modelo+desenho+helpers) | `d9b08a8` |
+| 9 | footwear-decomp | ✅ feito (modelo+desenho) | `03b31f3` |
+| 10 | brand-gmv | ✅ feito (modelo+desenho) | `03b31f3` |
 | — | tam-destaque | ✅ N/A | presentation-only (1 cópia só, nada a unificar) |
-| 9 | **footwear-decomp** | ⏳ FALTA | — |
-| 10 | **brand-gmv** | ⏳ FALTA | — |
 
-Nenhuma edição pendente/inacabada. Tudo que foi tocado está commitado e no ar. **Nenhuma edição foi feita ainda para os 2 restantes.**
+Nenhuma edição pendente. Tudo commitado e no ar. **Nada mais a fazer nesta missão.**
+
+### footwear-decomp + brand-gmv — feitos 2026-06-04 (commit `03b31f3`)
+Canonicals no registry: `window.getFootwearDecompAllYears` / `getFootwearDecompSeriesModel` / `buildFootwearDecompChartCanvas`; `window.computeBrandGmvModel(state, data, opts)` / `buildBrandGmvChartCanvas`. **Padrão diferente dos outros:** estes 2 são `dashboardNative` e o registry os chama por NOME via `regResolve` (R) — então mantive os wrappers locais (`getFootwearDecompSeries`/`buildFootwearDecompChart`/`getMarketShareBrandGmvModel`/`buildMarketShareBrandGmvChart`) com os MESMOS nomes/exports nos 2 lados, só que o CORPO virou delegação de 1 linha pro canonical (divergência impossível por construção; `regResolve`+exports+todas as referências seguem funcionando). Chrome por-lado: `labelFontPx` (dash 11; PPT `window.__fonteRotuloPx`). No brand-gmv o rótulo de % do segmento é 12px FIXO nos 2 lados (não escala). Modelos leem dados globais da nuvem (SPORTS_INDUSTRY_DATA/SPORTSWEAR_TAM/SPORTSWEAR_BRAND_SHARES) + window.MS_VULCABRAS. CI: seções 16 e 17. Verificado nos 2 lados via o caminho real `regResolve`: footwear (Price/Volume, 9 anos, sample 1.43/-3.94/10.14) e brand-gmv (Footwear/Apparel/YoY, 10 anos, sample 2.42/2.65/2.72) — valores idênticos dash↔PPT, console limpo. GH Pages publicou de primeira (150.093 bytes).
+
+### ⚠️ Lembrete pra próxima sessão
+A "receita única" está COMPLETA (10/10). NÃO há próximo gráfico. Se for editar um destes, mexa só no `charts-registry.js` (canonical) — os wrappers dos 2 lados são delegações. Rodar `python` validando as regex do `check_single_recipe.mjs` (Node não está instalado).
 
 ### vulcabras-share — feito 2026-06-04 (commit `d9b08a8`)
 Canonical no registry: `window.computeVulcabrasShareModel(state, data)` (state={from,to}; data={years, brandsFootwear, namedDenominator, totalRows}; usa `window.MS_VULCABRAS`) + `window.buildVulcabrasShareChartCanvas(canvas, rows, opts)` (opts={C, labelFontPx, fmtPct, fmtNumber}). Helpers `window.vulcabrasShareAxis` / `placeVulcabrasShareLabels` / `updateVulcabrasShareAxis` também moveram pro registry (o bind de legenda por-lado chama `window.updateVulcabrasShareAxis`). Único chrome por-lado: `labelFontPx` (dash 11px fixo; PPT `window.__fonteRotuloPx`). Escrita/bind da legenda (`#vulcabras-share-card`) segue por-lado. CI: seção 15. Verificado nos 2 lados: 2 linhas (Volume azul / Total turquesa), 10 anos, mesmos valores (14.99/15.84/16.67), eixo 13–27, toggle de legenda recalcula eixo, console limpo. **GOTCHA:** o 1º deploy do Pages (commit d9b08a8) FALHOU no step "Deploy to GitHub Pages" (infra transitória — build OK, artifact OK); re-disparei com commit vazio (`1f49221`) e publicou. Se o registry da nuvem não atualizar em ~2min, cheque `api.github.com/repos/Am2312/pipeline-calcados-esportivos/actions/runs` e re-dispare.
@@ -96,22 +102,12 @@ Para cada gráfico:
 
 ---
 
-## Os 2 RESTANTES (com mapa do código)
+## Os 10 gráficos — TODOS FEITOS
 
 ### ✅ 7) imports-data — FEITO (commit `d85bf51`, ver detalhe no TL;DR acima)
-
 ### ✅ 8) vulcabras-share — FEITO (commit `d9b08a8`, ver detalhe no TL;DR acima)
-
-### 9) footwear-decomp  ← FAÇA PRIMEIRO (próximo)
-- Registry: `id:'footwear-decomp'`, `desenhar` chama `R('buildFootwearDecompChart')(canvas, R('getFootwearDecompSeries')())` (R = `regResolve`, resolve por nome). Controles `FOOTWEAR_DECOMP_STATE`.
-- **Dashboard:** `getFootwearDecompSeries`/`buildFootwearDecompChart`/`renderFootwearDecompChart`/`footwearDecompCardInner` (perto de `renderSportswearTamCards`, ~L2479).
-- **PPT:** versões em `charts_dashboard.js` (ou `charts_sports.js`). Achar onde `regResolve` resolve esses nomes no PPT.
-- **A FAZER:** definir `window.getFootwearDecompSeries`/`window.buildFootwearDecompChart` canônicas no registry; os dois lados delegam. (Como o registry já usa `R('...')`, se o canonical definir `window.buildFootwearDecompChart`, o `R` resolve pra ele — mas confirme que o dashboard passa a delegar também, senão é só mover a cópia de lugar.)
-
-### 10) brand-gmv
-- Registry: `id:'brand-gmv'`, `desenhar` chama `R('buildMarketShareBrandGmvChart')(canvas, R('getMarketShareBrandGmvModel')())`.
-- **Dashboard:** `getMarketShareBrandGmvModel` (~L2623), `buildMarketShareBrandGmvChart` (~L2664), `MS_BRAND_GMV_CHART_STATE`.
-- **PPT:** equivalente em `charts_dashboard.js`. Unificar modelo+desenho.
+### ✅ 9) footwear-decomp — FEITO (commit `03b31f3`, ver detalhe no TL;DR acima)
+### ✅ 10) brand-gmv — FEITO (commit `03b31f3`, ver detalhe no TL;DR acima)
 
 ---
 
