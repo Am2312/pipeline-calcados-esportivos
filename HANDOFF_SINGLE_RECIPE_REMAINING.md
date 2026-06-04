@@ -7,7 +7,7 @@
 
 ## TL;DR do estado
 
-**6 de 10 gráficos JÁ migrados, testados byte-a-byte e publicados ao vivo.** Faltam **4**.
+**7 de 10 gráficos JÁ migrados, testados byte-a-byte e publicados ao vivo.** Faltam **3**.
 
 | # | Gráfico | Status | Commit |
 |---|---|---|---|
@@ -17,13 +17,16 @@
 | 4 | caged-jobs | ✅ feito | `89f4db0` |
 | 5 | headcount-volume | ✅ feito | `c815dbe` |
 | 6 | sector-data | ✅ feito | `8990b77` |
+| 7 | imports-data | ✅ feito (2 views: linha + empilhada) | `d85bf51` |
 | — | tam-destaque | ✅ N/A | presentation-only (1 cópia só, nada a unificar) |
-| 7 | **imports-data** | ⏳ FALTA (o maior — 2 views) | — |
 | 8 | **vulcabras-share** | ⏳ FALTA | — |
 | 9 | **footwear-decomp** | ⏳ FALTA | — |
 | 10 | **brand-gmv** | ⏳ FALTA | — |
 
-Nenhuma edição pendente/inacabada. Tudo que foi tocado está commitado e no ar. **Nenhuma edição foi feita ainda para os 4 restantes** (só leitura/scoping do imports-data).
+Nenhuma edição pendente/inacabada. Tudo que foi tocado está commitado e no ar. **Nenhuma edição foi feita ainda para os 3 restantes.**
+
+### imports-data — feito 2026-06-03 (commit `d85bf51`)
+Canonical no registry: `window.buildImportsLineCanvas(canvas, {rows}, opts)` e `window.buildImportsStackedCanvas(canvas, {periods, topCountries, keys}, opts)`. `opts = {C, palette, grain, fmtMetric, fmtTooltip}` (formatters do lado, pois dependem de `importsState.metric`). As duas implementações (dash inline × PPT `charts_sports.js`) eram **byte-idênticas** salvo a escrita guardada da legenda no PPT → renderLineChart/renderStackedChart dos 2 lados agora só computam o top-3 países + escrevem `#imports-country-legend` (chrome por-lado) e delegam o desenho. CI: seção 14 em `check_single_recipe.mjs` (registry define as 2 fns + dash delega + dash sem os plugin-ids `importsLineLabels`/`importsStackLabels` inline). Verificado nos 2 lados: line (Total Imports, 352 pts) e stacked (Vietnam/Indonesia/China/Others, paleta, legenda) idênticos, console limpo.
 
 ---
 
@@ -90,18 +93,11 @@ Para cada gráfico:
 
 ---
 
-## Os 4 RESTANTES (com mapa do código)
+## Os 3 RESTANTES (com mapa do código)
 
-### 7) imports-data  ← FAÇA PRIMEIRO (o maior)
-- Registry: `id:'imports-data'`, `desenhar` chama `DASH.renderImportsChart()`. `subtituloDinamico` (FOB→"(USD mn)" / Volume→"(mn pairs)") já tratado no registry.
-- **Dashboard** (`docs/sports-retail-dashboard.html`): `renderImportsChart()` (~L1133) DESPACHA:
-  - `importsState.view==='line'` → `renderLineChart(el, filteredTotalSeries())` (~L901–964): 1 linha + badges.
-  - senão → `renderStackedChart(el, filteredCountryPeriods())` (~L966–1057): top-3 países + "Others" empilhados, `COUNTRY_PALETTE`, escreve `#imports-country-legend`, rótulos por segmento + totais.
-  - Helpers: `tightAxis`, `labelIndices`, `fmtMetric`, `fmtTooltip`, `COUNTRY_PALETTE`, `roundedRect`, `bindLegendToggles`, `importsState.grain` (rotação/autoSkip do X).
-- **PPT** (`charts_sports.js`, `window.DASH`): `renderImportsChart` (~L929), `renderLineChart` (~L697), `renderStackedChart` (~L762). `COUNTRY_PALETTE` L120 = `['#021C45','#6FDDCB','#FF4F6C','#18A6F1']`. `fmtMetric` L213, `fmtTooltip` L217, `labelIndices` L663, `tightAxis` L688.
-- **A FAZER:** ler PPT L697–860 e **diffar com o dashboard** (provavelmente byte-idêntico, mas pode ter eixo `#A6A6A6`). Criar `window.buildImportsLineCanvas(canvas, model, opts)` e `window.buildImportsStackedCanvas(canvas, model, opts)`. `fmtMetric`/`fmtTooltip` dependem de `importsState.metric` → passar como `opts`. A escrita da legenda de países (`#imports-country-legend`) é chrome por-lado → manter em cada wrapper, não no canonical. Cada lado computa as rows (filteredTotalSeries / filteredCountryPeriods) e o top-3 países e passa pro canonical.
+### ✅ 7) imports-data — FEITO (commit `d85bf51`, ver detalhe no TL;DR acima)
 
-### 8) vulcabras-share
+### 8) vulcabras-share  ← FAÇA PRIMEIRO (próximo)
 - Registry: `id:'vulcabras-share'`, `desenhar` chama `DASH.renderVulcabrasShareChart()`. (É o gráfico "Vulcabras — Market Share (Footwear)", DIFERENTE do market-share principal.)
 - **Dashboard:** `renderVulcabrasShareChart` (~L1523) + `VULCABRAS_SHARE_STATE` + `selectedVulcabrasMarketShareRows` (~L1399) + `placeVulcabrasShareLabels`/`updateVulcabrasShareAxis`/`bindVulcabrasShareLegend`.
 - **PPT:** `charts_sports.js` `window.DASH.renderVulcabrasShareChart` (export L5985). Diffar; unificar modelo+desenho.
