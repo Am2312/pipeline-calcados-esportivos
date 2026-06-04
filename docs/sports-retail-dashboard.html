@@ -899,71 +899,14 @@ function tightAxis(values, forceZeroMin=false) {
 }
 
 function renderLineChart(el, rows) {
-    const labels = rows.map(row => row.label);
-    const values = rows.map(row => row.value);
-    const axis = tightAxis(values, true);
-    const indices = labelIndices(rows);
-    const labelPlugin = {
-        id: 'importsLineLabels',
-        afterDatasetsDraw(chart) {
-            const ctx = chart.ctx;
-            const meta = chart.getDatasetMeta(0);
-            if (!meta.visible) return;
-            indices.forEach(i => {
-                const point = meta.data[i];
-                if (!point || !Number.isFinite(values[i])) return;
-                const text = fmtMetric(values[i]);
-                ctx.save();
-                ctx.font = '800 10.5px Verdana';
-                const bw = ctx.measureText(text).width + 12;
-                const bh = 20;
-                const leftPad = chart.chartArea.left + 8;
-                const rightPad = chart.width - bw - 8;
-                const x = Math.max(leftPad, Math.min(point.x - bw / 2, rightPad));
-                const y = Math.max(chart.chartArea.top + 2, point.y - bh / 2);
-                ctx.fillStyle = C.azulEscuro;
-                roundedRect(ctx, x, y, bw, bh, 3);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
-                ctx.restore();
-            });
-        }
-    };
-    importsChartInstance = new Chart(el.getContext('2d'), {
-        type: 'line',
-        data: { labels, datasets: [{
-            label: 'Total Imports',
-            data: values,
-            borderColor: C.azulEscuro,
-            backgroundColor: C.azulEscuro,
-            borderWidth: 2.5,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHitRadius: 18,
-            tension: 0.28
-        }] },
-        plugins: [labelPlugin],
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 10, right: 54, top: 22, bottom: 0 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: c => `  Total Imports: ${fmtTooltip(c.parsed.y)}` } }
-            },
-            scales: {
-                x: { ticks: { minRotation: importsState.grain === 'annual' ? 0 : 90, maxRotation: importsState.grain === 'annual' ? 0 : 90, autoSkip: importsState.grain !== 'annual', autoSkipPadding: 8, color: C.azulEscuro40, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } },
-                y: { min: axis.min, max: axis.max, ticks: { display: true, maxTicksLimit: 5, color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' }, callback: value => fmtMetric(value) }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } }
-            }
-        }
-    });
+    // RECEITA ÚNICA: desenho mora em window.buildImportsLineCanvas (charts-registry.js)
+    importsChartInstance = window.buildImportsLineCanvas(el, { rows }, { C, grain: importsState.grain, fmtMetric, fmtTooltip });
     bindLegendToggles(importsChartInstance);
 }
 
 function renderStackedChart(el, periods) {
+    // RECEITA ÚNICA: desenho mora em window.buildImportsStackedCanvas (charts-registry.js).
+    // O top-3 países + a escrita da legenda (#imports-country-legend) é chrome por-lado.
     const countryTotals = {};
     periods.forEach(period => {
         Object.entries(period.countries).forEach(([country, value]) => {
@@ -972,87 +915,8 @@ function renderStackedChart(el, periods) {
     });
     const topCountries = Object.entries(countryTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([country]) => country);
     const keys = [...topCountries, 'Others'];
-    const labels = periods.map(row => row.label);
-    const datasets = keys.map((key, idx) => ({
-        label: key,
-        data: periods.map(period => {
-            if (key !== 'Others') return period.countries[key] || 0;
-            return Object.entries(period.countries).reduce((sum, [country, value]) => topCountries.includes(country) ? sum : sum + value, 0);
-        }),
-        backgroundColor: COUNTRY_PALETTE[idx],
-        borderColor: COUNTRY_PALETTE[idx],
-        borderWidth: 0,
-        borderRadius: idx === keys.length - 1 ? { topLeft: 3, topRight: 3, bottomLeft: 0, bottomRight: 0 } : 0,
-        borderSkipped: false,
-        stack: 'imports'
-    }));
-    const totals = periods.map((_, i) => datasets.reduce((sum, ds) => sum + (ds.data[i] || 0), 0));
-    const axis = tightAxis(totals, true);
     document.getElementById('imports-country-legend').innerHTML = legendHtml(keys.map((key, i) => ({ label: key, color: COUNTRY_PALETTE[i] })));
-
-    const labelPlugin = {
-        id: 'importsStackLabels',
-        afterDatasetsDraw(chart) {
-            const ctx = chart.ctx;
-            const chartArea = chart.chartArea;
-            ctx.save();
-            ctx.font = '800 10.5px Verdana';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            chart.data.datasets.forEach((ds, di) => {
-                const meta = chart.getDatasetMeta(di);
-                if (!meta.visible) return;
-                meta.data.forEach((bar, i) => {
-                    const value = ds.data[i];
-                    if (!Number.isFinite(value) || value <= 0) return;
-                    const props = bar.getProps(['x', 'y', 'base', 'width'], true);
-                    const h = Math.abs(props.base - props.y);
-                    if (h < 22 || props.width < 30) return;
-                    const text = fmtMetric(value);
-                    if (ctx.measureText(text).width > props.width - 6) return;
-                    ctx.fillStyle = di === 1 ? C.azulEscuro : '#FFFFFF';
-                    ctx.fillText(text, props.x, props.y + h / 2);
-                });
-            });
-            totals.forEach((_, i) => {
-                let value = 0;
-                let topBar = null;
-                for (let di = 0; di < chart.data.datasets.length; di++) {
-                    if (!chart.isDatasetVisible(di)) continue;
-                    const dsValue = chart.data.datasets[di].data[i] || 0;
-                    if (!Number.isFinite(dsValue) || dsValue <= 0) continue;
-                    value += dsValue;
-                    topBar = chart.getDatasetMeta(di).data[i];
-                }
-                if (!topBar || !Number.isFinite(value) || value <= 0) return;
-                const x = topBar.x;
-                const y = Math.max(chartArea.top + 10, topBar.y - 12);
-                const text = fmtMetric(value);
-                ctx.fillStyle = C.azulEscuro60;
-                ctx.fillText(text, x, y + 0.5);
-            });
-            ctx.restore();
-        }
-    };
-    importsChartInstance = new Chart(el.getContext('2d'), {
-        type: 'bar',
-        data: { labels, datasets },
-        plugins: [labelPlugin],
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 10, right: 18, top: 36, bottom: 0 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: c => `  ${c.dataset.label}: ${fmtTooltip(c.parsed.y)}` } }
-            },
-            scales: {
-                x: { stacked: true, ticks: { minRotation: importsState.grain === 'annual' ? 0 : 90, maxRotation: importsState.grain === 'annual' ? 0 : 90, autoSkip: importsState.grain !== 'annual', autoSkipPadding: 8, color: C.azulEscuro40, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } },
-                y: { stacked: true, min: 0, max: axis.max, ticks: { display: true, maxTicksLimit: 5, color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' }, callback: value => fmtMetric(value) }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } }
-            }
-        }
-    });
+    importsChartInstance = window.buildImportsStackedCanvas(el, { periods, topCountries, keys }, { C, palette: COUNTRY_PALETTE, grain: importsState.grain, fmtMetric, fmtTooltip });
     bindLegendToggles(importsChartInstance);
 }
 

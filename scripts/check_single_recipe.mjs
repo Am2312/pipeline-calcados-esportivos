@@ -210,6 +210,22 @@ check(dash.includes('window.buildIndustryChartCanvas'),
   'dashboard delega sector-data ao índice (desenho)',
   'dashboard NÃO chama window.buildIndustryChartCanvas — reintroduziu desenho inline do sector-data');
 
+/* 14) IMPORTS (Sports Footwear Imports) — receita única de DESENHO (2 views).
+   As 2 funções de desenho (linha + barra empilhada) moram no índice e os
+   dois lados delegam. O dashboard não pode mais ter o plugin de rótulos inline. */
+check(/window\.buildImportsLineCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildImportsLineCanvas',
+  'charts-registry.js NÃO define window.buildImportsLineCanvas — desenho da view linha do imports voltaria a ser duplicado');
+check(/window\.buildImportsStackedCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildImportsStackedCanvas',
+  'charts-registry.js NÃO define window.buildImportsStackedCanvas — desenho da view empilhada do imports voltaria a ser duplicado');
+check(dash.includes('window.buildImportsLineCanvas') && dash.includes('window.buildImportsStackedCanvas'),
+  'dashboard delega imports-data ao índice (linha + empilhada)',
+  'dashboard NÃO chama window.buildImportsLineCanvas/buildImportsStackedCanvas — reintroduziu desenho inline do imports-data');
+check(!/id:\s*'importsLineLabels'/.test(dash) && !/id:\s*'importsStackLabels'/.test(dash),
+  'dashboard sem plugin de rótulos inline do imports',
+  'dashboard contém "importsLineLabels"/"importsStackLabels" — o desenho inline do imports-data foi reintroduzido (deve viver só no charts-registry.js)');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));

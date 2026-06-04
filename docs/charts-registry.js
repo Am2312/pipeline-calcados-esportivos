@@ -1061,6 +1061,220 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   IMPORTS (Sports Footwear Imports) — receita única de DESENHO.
+   2 views: linha (Total Imports) e barra empilhada (top-3 países + Others).
+   Cada lado computa as rows (filteredTotalSeries / filteredCountryPeriods)
+   e o top-3 países, e passa pro canonical; a escrita da legenda de países
+   (#imports-country-legend) e o bindLegendToggles são chrome por-lado.
+   opts: {C, palette, grain, fmtMetric(v), fmtTooltip(v)} (formatters do lado,
+   pois dependem de importsState.metric).
+   ===================================================================== */
+(function () {
+  function impRrect(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); return; }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function impLabelIndices(rows, grain) {
+    if (rows.length <= 30) return rows.map(function (_, i) { return i; });
+    if (grain === 'monthly') {
+      var latestMonth = rows[rows.length - 1] && rows[rows.length - 1].month;
+      return rows.map(function (row, i) { return row.month === latestMonth ? i : -1; }).filter(function (i) { return i >= 0; });
+    }
+    if (grain === 'quarterly') {
+      var latestQuarter = rows[rows.length - 1] && rows[rows.length - 1].quarter;
+      return rows.map(function (row, i) { return row.quarter === latestQuarter ? i : -1; }).filter(function (i) { return i >= 0; });
+    }
+    return rows.map(function (_, i) { return i; });
+  }
+  function impTightAxis(values, forceZeroMin) {
+    var valid = values.filter(Number.isFinite);
+    if (!valid.length) return { min: 0, max: 1 };
+    var min = forceZeroMin ? 0 : Math.min.apply(null, valid);
+    var max = Math.max.apply(null, valid);
+    var pad = Math.max((max - min) * 0.12, max * 0.04, 1);
+    return { min: Math.max(0, min - pad), max: max + pad };
+  }
+
+  /* LINE view. model:{rows} (filteredTotalSeries). */
+  window.buildImportsLineCanvas = function (canvas, model, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var C = opts.C || {};
+    var grain = opts.grain;
+    var fmtMetric = opts.fmtMetric, fmtTooltip = opts.fmtTooltip;
+    var azulEscuro = C.azulEscuro || '#021C45';
+    var azulEscuro40 = C.azulEscuro40 || '#9AA8BB';
+    var rows = model.rows || [];
+    var labels = rows.map(function (row) { return row.label; });
+    var values = rows.map(function (row) { return row.value; });
+    var axis = impTightAxis(values, true);
+    var indices = impLabelIndices(rows, grain);
+    var labelPlugin = {
+      id: 'importsLineLabels',
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx;
+        var meta = chart.getDatasetMeta(0);
+        if (!meta.visible) return;
+        indices.forEach(function (i) {
+          var point = meta.data[i];
+          if (!point || !Number.isFinite(values[i])) return;
+          var text = fmtMetric(values[i]);
+          ctx.save();
+          ctx.font = '800 10.5px Verdana';
+          var bw = ctx.measureText(text).width + 12;
+          var bh = 20;
+          var leftPad = chart.chartArea.left + 8;
+          var rightPad = chart.width - bw - 8;
+          var x = Math.max(leftPad, Math.min(point.x - bw / 2, rightPad));
+          var y = Math.max(chart.chartArea.top + 2, point.y - bh / 2);
+          ctx.fillStyle = azulEscuro;
+          impRrect(ctx, x, y, bw, bh, 3);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
+          ctx.restore();
+        });
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { labels: labels, datasets: [{
+        label: 'Total Imports',
+        data: values,
+        borderColor: azulEscuro,
+        backgroundColor: azulEscuro,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHitRadius: 18,
+        tension: 0.28
+      }] },
+      plugins: [labelPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { left: 10, right: 54, top: 22, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: function (c) { return '  Total Imports: ' + fmtTooltip(c.parsed.y); } } }
+        },
+        scales: {
+          x: { ticks: { minRotation: grain === 'annual' ? 0 : 90, maxRotation: grain === 'annual' ? 0 : 90, autoSkip: grain !== 'annual', autoSkipPadding: 8, color: azulEscuro40, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } },
+          y: { min: axis.min, max: axis.max, ticks: { display: true, maxTicksLimit: 5, color: azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' }, callback: function (value) { return fmtMetric(value); } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } }
+        }
+      }
+    });
+  };
+
+  /* STACKED view. model:{periods (filteredCountryPeriods), topCountries, keys}. */
+  window.buildImportsStackedCanvas = function (canvas, model, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var C = opts.C || {};
+    var palette = opts.palette || ['#021C45', '#6FDDCB', '#FF4F6C', '#18A6F1'];
+    var grain = opts.grain;
+    var fmtMetric = opts.fmtMetric, fmtTooltip = opts.fmtTooltip;
+    var azulEscuro = C.azulEscuro || '#021C45';
+    var azulEscuro40 = C.azulEscuro40 || '#9AA8BB';
+    var azulEscuro60 = C.azulEscuro60 || '#667D99';
+    var periods = model.periods || [];
+    var topCountries = model.topCountries || [];
+    var keys = model.keys || topCountries.concat(['Others']);
+    var labels = periods.map(function (row) { return row.label; });
+    var datasets = keys.map(function (key, idx) {
+      return {
+        label: key,
+        data: periods.map(function (period) {
+          if (key !== 'Others') return period.countries[key] || 0;
+          return Object.entries(period.countries).reduce(function (sum, kv) { return topCountries.indexOf(kv[0]) >= 0 ? sum : sum + kv[1]; }, 0);
+        }),
+        backgroundColor: palette[idx],
+        borderColor: palette[idx],
+        borderWidth: 0,
+        borderRadius: idx === keys.length - 1 ? { topLeft: 3, topRight: 3, bottomLeft: 0, bottomRight: 0 } : 0,
+        borderSkipped: false,
+        stack: 'imports'
+      };
+    });
+    var totals = periods.map(function (_, i) { return datasets.reduce(function (sum, ds) { return sum + (ds.data[i] || 0); }, 0); });
+    var axis = impTightAxis(totals, true);
+
+    var labelPlugin = {
+      id: 'importsStackLabels',
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx;
+        var chartArea = chart.chartArea;
+        ctx.save();
+        ctx.font = '800 10.5px Verdana';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chart.data.datasets.forEach(function (ds, di) {
+          var meta = chart.getDatasetMeta(di);
+          if (!meta.visible) return;
+          meta.data.forEach(function (bar, i) {
+            var value = ds.data[i];
+            if (!Number.isFinite(value) || value <= 0) return;
+            var props = bar.getProps(['x', 'y', 'base', 'width'], true);
+            var h = Math.abs(props.base - props.y);
+            if (h < 22 || props.width < 30) return;
+            var text = fmtMetric(value);
+            if (ctx.measureText(text).width > props.width - 6) return;
+            ctx.fillStyle = di === 1 ? azulEscuro : '#FFFFFF';
+            ctx.fillText(text, props.x, props.y + h / 2);
+          });
+        });
+        totals.forEach(function (_, i) {
+          var value = 0;
+          var topBar = null;
+          for (var di = 0; di < chart.data.datasets.length; di++) {
+            if (!chart.isDatasetVisible(di)) continue;
+            var dsValue = chart.data.datasets[di].data[i] || 0;
+            if (!Number.isFinite(dsValue) || dsValue <= 0) continue;
+            value += dsValue;
+            topBar = chart.getDatasetMeta(di).data[i];
+          }
+          if (!topBar || !Number.isFinite(value) || value <= 0) return;
+          var x = topBar.x;
+          var y = Math.max(chartArea.top + 10, topBar.y - 12);
+          var text = fmtMetric(value);
+          ctx.fillStyle = azulEscuro60;
+          ctx.fillText(text, x, y + 0.5);
+        });
+        ctx.restore();
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: labels, datasets: datasets },
+      plugins: [labelPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { left: 10, right: 18, top: 36, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: function (c) { return '  ' + c.dataset.label + ': ' + fmtTooltip(c.parsed.y); } } }
+        },
+        scales: {
+          x: { stacked: true, ticks: { minRotation: grain === 'annual' ? 0 : 90, maxRotation: grain === 'annual' ? 0 : 90, autoSkip: grain !== 'annual', autoSkipPadding: 8, color: azulEscuro40, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } },
+          y: { stacked: true, min: 0, max: axis.max, ticks: { display: true, maxTicksLimit: 5, color: azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' }, callback: function (value) { return fmtMetric(value); } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } }
+        }
+      }
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico
