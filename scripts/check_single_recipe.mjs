@@ -191,6 +191,17 @@ check(dash.includes('window.getCagedJobsChartModel') && dash.includes('window.bu
   'dashboard delega caged-jobs ao índice (model + desenho)',
   'dashboard NÃO chama window.getCagedJobsChartModel/buildCagedJobsChartCanvas — reintroduziu desenho inline do caged-jobs');
 
+/* 12) HEADCOUNT vs VOLUME — receita única de MODEL + DESENHO. */
+check(/window\.getVolumeYoyModel\s*=\s*function/.test(registry),
+  'índice define window.getVolumeYoyModel',
+  'charts-registry.js NÃO define window.getVolumeYoyModel — model do headcount-volume voltaria a ser duplicado');
+check(/window\.buildVolumeYoyChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildVolumeYoyChartCanvas',
+  'charts-registry.js NÃO define window.buildVolumeYoyChartCanvas — desenho do headcount-volume voltaria a ser duplicado');
+check(dash.includes('window.getVolumeYoyModel') && dash.includes('window.buildVolumeYoyChartCanvas'),
+  'dashboard delega headcount-volume ao índice (model + desenho)',
+  'dashboard NÃO chama window.getVolumeYoyModel/buildVolumeYoyChartCanvas — reintroduziu desenho inline do headcount-volume');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));

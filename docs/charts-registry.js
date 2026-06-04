@@ -863,6 +863,113 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   HEADCOUNT vs VOLUME (Factory Headcount Growth vs Volume Growth) —
+   RECEITA ÚNICA (model + desenho). rows vêm de cada lado (mesma base/dados);
+   axis idêntico. Linha dupla (Employees/Volume YoY) com rótulos anti-overlap
+   e linha do zero. Chrome por-lado (fonte, eixo #A6A6A6 bold do PPT, raio do
+   badge, cor da borda/zero-grid) via opts.
+   ===================================================================== */
+(function () {
+  function volPct(value, digits) { digits = digits || 0; if (!Number.isFinite(value)) return 'n.m.'; var abs = Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }); return value < 0 ? '(' + abs + '%)' : abs + '%'; }
+  function volYoyAxis(values) {
+    var valid = values.filter(Number.isFinite);
+    if (!valid.length) return { min: -10, max: 10, step: 5 };
+    var min = Math.min.apply(null, valid.concat([0])), max = Math.max.apply(null, valid.concat([0]));
+    var span = Math.max(max - min, 10); var pad = Math.max(span * 0.12, 2); var step = 5;
+    return { min: Math.floor((min - pad) / step) * step, max: Math.ceil((max + pad) / step) * step, step: step };
+  }
+  function volRrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  window.getVolumeYoyModel = function (rows) {
+    var jobsYoy = rows.map(function (r) { return r.jobsYoy; });
+    var volumeYoy = rows.map(function (r) { return r.volumeYoy; });
+    return { labels: rows.map(function (r) { return r.label; }), jobsYoy: jobsYoy, volumeYoy: volumeYoy, axis: volYoyAxis(jobsYoy.concat(volumeYoy)) };
+  };
+
+  /* opts: jobsColor(#021C45), volumeColor(#6FDDCB), labelFontPx(10),
+     badgeRadius(3), tickColor(#9AA8BB), tickFontSize(11), tickWeight('normal'),
+     xBorderColor(null=>display:false), yZeroGridColor(#CFD8E3),
+     xGridDrawTicks(true). Linha do zero (plugin) é sempre #CFD8E3. */
+  window.buildVolumeYoyChartCanvas = function (canvas, model, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var jobsColor = opts.jobsColor || '#021C45', volumeColor = opts.volumeColor || '#6FDDCB';
+    var labelFontPx = opts.labelFontPx || 10, badgeRadius = (opts.badgeRadius != null) ? opts.badgeRadius : 3;
+    var tickColor = opts.tickColor || '#9AA8BB', tickFontSize = opts.tickFontSize || 11, tickWeight = opts.tickWeight || 'normal';
+    var yZeroGridColor = opts.yZeroGridColor || '#CFD8E3';
+    var labels = model.labels, jobsYoy = model.jobsYoy, volumeYoy = model.volumeYoy, axis = model.axis;
+    var labelPlugin = {
+      id: 'volumeYoyLabels',
+      beforeDatasetsDraw: function (chart) {
+        var yScale = chart.scales.y; if (!yScale) return;
+        var y = yScale.bottom, ctx = chart.ctx;
+        ctx.save(); ctx.strokeStyle = '#CFD8E3'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(chart.chartArea.left, y); ctx.lineTo(chart.chartArea.right, y); ctx.stroke();
+        ctx.restore();
+      },
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx, chartArea = chart.chartArea;
+        var boxHeight = 18, gap = 2, items = [];
+        ctx.save(); ctx.font = '700 ' + labelFontPx + 'px Verdana';
+        chart.data.datasets.forEach(function (dataset, datasetIndex) {
+          if (!chart.isDatasetVisible(datasetIndex)) return;
+          var meta = chart.getDatasetMeta(datasetIndex);
+          dataset.data.forEach(function (value, i) {
+            var point = meta.data[i];
+            if (!point || !Number.isFinite(value)) return;
+            var text = volPct(value, 0);
+            items.push({ text: text, color: dataset.borderColor, x: point.x, y: point.y, bw: ctx.measureText(text).width + 12, bh: boxHeight });
+          });
+        });
+        ctx.restore();
+        var placed = [];
+        var drawLabel = function (item) {
+          var x = Math.max(2, Math.min(item.x - item.bw / 2, chart.width - item.bw - 2));
+          var y = Math.max(chartArea.top + 2, Math.min(item.y - item.bh / 2, chartArea.bottom - item.bh - 2));
+          ctx.save(); ctx.fillStyle = item.color; volRrect(ctx, x, y, item.bw, item.bh, badgeRadius); ctx.fill();
+          ctx.fillStyle = '#FFFFFF'; ctx.font = '700 ' + labelFontPx + 'px Verdana'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(item.text, x + item.bw / 2, y + item.bh / 2 + 0.5); ctx.restore();
+        };
+        items.sort(function (a, b) { return a.y - b.y; }).forEach(function (item) {
+          var y = item.y;
+          for (var tries = 0; tries < 12; tries++) {
+            var box = { x: item.x - item.bw / 2, y: y - item.bh / 2, w: item.bw, h: item.bh };
+            var overlap = placed.some(function (other) { return !(box.x + box.w + gap < other.x || other.x + other.w + gap < box.x || box.y + box.h + gap < other.y || other.y + other.h + gap < box.y); });
+            if (!overlap) { placed.push(box); break; }
+            y += item.bh + gap;
+          }
+          drawLabel({ text: item.text, color: item.color, x: item.x, bw: item.bw, bh: item.bh, y: y });
+        });
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Employees YoY', data: jobsYoy, yAxisID: 'y', borderColor: jobsColor, backgroundColor: jobsColor, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16, tension: 0.25 },
+          { label: 'Volume YoY', data: volumeYoy, yAxisID: 'y', borderColor: volumeColor, backgroundColor: volumeColor, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16, tension: 0.25 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { left: 4, right: 44, top: 18, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, titleFont: { family: 'Verdana', size: 12, weight: '700' }, bodyFont: { family: 'Verdana', size: 12 }, callbacks: { label: function (ctx) { return '  ' + ctx.dataset.label + ': ' + volPct(ctx.parsed.y, 1); } } }
+        },
+        scales: {
+          x: { offset: true, grid: opts.xGridDrawTicks === false ? { display: false, drawTicks: false } : { display: false }, border: opts.xBorderColor ? { color: opts.xBorderColor, width: 1 } : { display: false }, ticks: { color: tickColor, font: { family: 'Verdana', size: tickFontSize, weight: tickWeight }, maxRotation: 90, minRotation: 90 } },
+          y: { min: axis.min, max: axis.max, display: false, position: 'left', grid: { color: function (ctx) { return Number(ctx.tick.value) === 0 ? yZeroGridColor : 'rgba(0,0,0,0)'; } }, border: { display: false }, ticks: { color: tickColor, font: { family: 'Verdana', size: tickFontSize, weight: tickWeight }, stepSize: axis.step, callback: function (value) { return volPct(Number(value), 0); } } }
+        }
+      },
+      plugins: [labelPlugin]
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico

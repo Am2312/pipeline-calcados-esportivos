@@ -3837,123 +3837,13 @@ function renderCagedVolumeYoyChart() {
     const el = document.getElementById('caged-volume-yoy-chart');
     if (!el) return;
     const rows = cagedVolumeYoyRows();
-    const jobsYoy = rows.map(row => row.jobsYoy);
-    const volumeYoy = rows.map(row => row.volumeYoy);
-    const axis = cagedVolumeYoyAxis([...jobsYoy, ...volumeYoy]);
-    const labelIndices = rows.map((row, i) => i);
-    const labelPlugin = {
-        id: 'cagedVolumeYoyLabels',
-        beforeDatasetsDraw(chart) {
-            const xScale = chart.scales.x;
-            const yScale = chart.scales.y;
-            if (!xScale || !yScale) return;
-            const y = yScale.bottom;
-            const ctx = chart.ctx;
-            ctx.save();
-            ctx.strokeStyle = '#CFD8E3';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(chart.chartArea.left, y);
-            ctx.lineTo(chart.chartArea.right, y);
-            ctx.stroke();
-            ctx.restore();
-        },
-        afterDatasetsDraw(chart) {
-            const { ctx, chartArea } = chart;
-            const BH = 18, GAP = 2;
-            const items = [];
-            ctx.save();
-            ctx.font = '700 10px Verdana';
-            chart.data.datasets.forEach((dataset, datasetIndex) => {
-                if (!chart.isDatasetVisible(datasetIndex)) return;
-                const meta = chart.getDatasetMeta(datasetIndex);
-                labelIndices.forEach(i => {
-                    const value = dataset.data[i];
-                    const point = meta.data[i];
-                    if (!point || !Number.isFinite(value)) return;
-                    const text = cagedPctNumber(value, 0);
-                    const bw = ctx.measureText(text).width + 12;
-                    items.push({
-                        text,
-                        color: dataset.borderColor,
-                        x: point.x,
-                        y: point.y,
-                        bw,
-                        bh: BH,
-                        datasetIndex,
-                        dataIndex: i
-                    });
-                });
-            });
-            ctx.restore();
-            const draw = item => {
-                const x = Math.max(2, Math.min(item.x - item.bw / 2, chart.width - item.bw - 2));
-                const y = Math.max(chartArea.top + 2, Math.min(item.y - item.bh / 2, chartArea.bottom - item.bh - 2));
-                ctx.save();
-                ctx.fillStyle = item.color;
-                roundedRect(ctx, x, y, item.bw, item.bh, 3);
-                ctx.fill();
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = '700 10px Verdana';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(item.text, x + item.bw / 2, y + item.bh / 2 + 0.5);
-                ctx.restore();
-            };
-            const placed = [];
-            items.sort((a, b) => a.y - b.y).forEach(item => {
-                let y = item.y;
-                for (let tries = 0; tries < 12; tries++) {
-                    const box = { x: item.x - item.bw / 2, y: y - item.bh / 2, w: item.bw, h: item.bh };
-                    const overlap = placed.some(other => !(box.x + box.w + GAP < other.x || other.x + other.w + GAP < box.x || box.y + box.h + GAP < other.y || other.y + other.h + GAP < box.y));
-                    if (!overlap) { placed.push(box); break; }
-                    y += item.bh + GAP;
-                }
-                draw({ ...item, y });
-            });
-        }
-    };
-    cagedVolumeYoyChartInstance = new Chart(el.getContext('2d'), {
-        type:'line',
-        data:{
-            labels: rows.map(row => row.label),
-            datasets:[
-                { label:'Employees YoY', data:jobsYoy, yAxisID:'y', borderColor:C.azulEscuro, backgroundColor:C.azulEscuro, borderWidth:2.5, pointRadius:0, pointHoverRadius:4, pointHitRadius:16, tension:0.25 },
-                { label:'Volume YoY', data:volumeYoy, yAxisID:'y', borderColor:C.turquesa, backgroundColor:C.turquesa, borderWidth:2.5, pointRadius:0, pointHoverRadius:4, pointHitRadius:16, tension:0.25 },
-            ]
-        },
-        options:{
-            responsive:true,
-            maintainAspectRatio:false,
-            animation:false,
-            interaction:{ mode:'index', intersect:false },
-            layout:{ padding:{ left:4, right:44, top:18, bottom:0 } },
-            plugins:{ legend:{ display:false }, tooltip:{
-                backgroundColor:'rgba(2,28,69,0.94)',
-                titleColor:'#9AA8BB',
-                bodyColor:'#FFFFFF',
-                borderColor:'#344F75',
-                borderWidth:1,
-                cornerRadius:8,
-                padding:12,
-                titleFont:{ family:'Verdana', size:12, weight:'700' },
-                bodyFont:{ family:'Verdana', size:12 },
-                callbacks:{ label(ctx) { return `  ${ctx.dataset.label}: ${cagedPctNumber(ctx.parsed.y, 1)}`; }}
-            }},
-            scales:{
-                x:{ offset:true, grid:{ display:false }, border:{ display:false }, ticks:{ color:C.azulEscuro40, font:{ family:'Verdana', size:11 }, maxRotation:90, minRotation:90 } },
-                y:{
-                    min:axis.min,
-                    max:axis.max,
-                    display:false,
-                    position:'left',
-                    grid:{ color:(ctx) => Number(ctx.tick.value) === 0 ? '#CFD8E3' : 'rgba(0,0,0,0)' },
-                    border:{ display:false },
-                    ticks:{ color:C.azulEscuro40, font:{ family:'Verdana', size:11 }, stepSize:axis.step, callback(value) { return cagedPctNumber(Number(value), 0); } }
-                }
-            }
-        },
-        plugins:[labelPlugin]
+    // RECEITA ÚNICA — model + desenho do headcount-volume pelo charts-registry.js (mesma fn que o PPT usa); chrome do card via opts
+    const model = window.getVolumeYoyModel(rows);
+    cagedVolumeYoyChartInstance = window.buildVolumeYoyChartCanvas(el, model, {
+        jobsColor: C.azulEscuro, volumeColor: C.turquesa,
+        labelFontPx: 10, badgeRadius: 3,
+        tickColor: C.azulEscuro40, tickFontSize: 11, tickWeight: 'normal',
+        xBorderColor: null, yZeroGridColor: '#CFD8E3'
     });
     bindCagedVolumeYoyLegendToggles();
 }
