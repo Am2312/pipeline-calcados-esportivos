@@ -1711,120 +1711,13 @@ function renderIndustryChart() {
     const rows = sectorSelectedRows();
     const values = rows.map(row => Number(row[sectorState.metric] || 0));
     const yoyValues = rows.map(row => sectorYoy(row));
-    const axisMax = niceSectorAxisMax(Math.max(...values, 0));
-    const yoyFinite = yoyValues.filter(Number.isFinite);
-    const yoyMin = yoyFinite.length ? Math.min(...yoyFinite) : -0.1;
-    const yoyMax = yoyFinite.length ? Math.max(...yoyFinite) : 0.1;
-    const yoyPad = Math.max((yoyMax - yoyMin) * 0.30, 0.08);
-    const metricLabel = SECTOR_METRICS[sectorState.metric]?.label || 'Metric';
-    const labelPlugin = {
-        id: 'sectorBarYoYLabels',
-        afterDatasetsDraw(chart) {
-            const ctx = chart.ctx;
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            if (chart.isDatasetVisible(0)) {
-                const meta = chart.getDatasetMeta(0);
-                ctx.font = '800 12px Verdana';
-                ctx.fillStyle = '#FFFFFF';
-                meta.data.forEach((bar, i) => {
-                    const value = values[i];
-                    if (!Number.isFinite(value) || value <= 0 || !bar) return;
-                    const props = bar.getProps(['x', 'y', 'base', 'width'], true);
-                    const height = Math.abs(props.base - props.y);
-                    if (height < 28 || props.width < 26) return;
-                    const text = fmtNumberEN(value, 1);
-                    if (ctx.measureText(text).width > props.width - 6) return;
-                    const centerY = (props.y + props.base) / 2;
-                    ctx.fillText(text, props.x, centerY);
-                });
-            }
-            if (chart.isDatasetVisible(1)) {
-                const meta = chart.getDatasetMeta(1);
-                ctx.font = '800 11px Verdana';
-                meta.data.forEach((point, i) => {
-                    const yoy = yoyValues[i];
-                    if (!point || !Number.isFinite(yoy)) return;
-                    const text = fmtPctEN(yoy, 0);
-                    const bw = ctx.measureText(text).width + 14;
-                    const bh = 22;
-                    const x = Math.max(chart.chartArea.left + 4, Math.min(point.x - bw / 2, chart.chartArea.right - bw - 4));
-                    const y = Math.max(chart.chartArea.top + 4, Math.min(point.y - bh / 2, chart.chartArea.bottom - bh - 4));
-                    ctx.fillStyle = C.turquesa;
-                    roundedRect(ctx, x, y, bw, bh, 4);
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
-                });
-            }
-            ctx.restore();
-        }
-    };
-    industryChartInstance = new Chart(el.getContext('2d'), {
-        type: 'bar',
-        data: { labels: rows.map(row => String(row.data_year)), datasets: [
-            {
-                type: 'bar',
-                label: metricLabel,
-                data: values,
-                backgroundColor: C.azulEscuro,
-                borderColor: C.azulEscuro,
-                borderWidth: 0,
-                borderRadius: 0,
-                borderSkipped: false,
-                yAxisID: 'y',
-                barPercentage: 0.70,
-                categoryPercentage: 0.78,
-                order: 2
-            },
-            {
-                type: 'line',
-                label: 'YoY',
-                data: yoyValues,
-                borderColor: C.turquesa,
-                backgroundColor: C.turquesa,
-                borderWidth: 2.5,
-                pointRadius: 0,
-                pointHoverRadius: 5,
-                pointHitRadius: 18,
-                tension: 0.20,
-                yAxisID: 'y1',
-                spanGaps: false,
-                order: 1
-            }
-        ] },
-        plugins: [labelPlugin],
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            layout: { padding: { left: 10, right: 48, top: 48, bottom: 0 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: 'rgba(2,28,69,0.94)',
-                    titleColor: '#9AA8BB',
-                    bodyColor: '#FFFFFF',
-                    borderColor: '#344F75',
-                    borderWidth: 1,
-                    cornerRadius: 8,
-                    padding: 12,
-                    callbacks: {
-                        label: c => {
-                            const row = rows[c.dataIndex];
-                            if (c.datasetIndex === 1) return `  YoY: ${fmtPctEN(c.parsed.y, 0)}`;
-                            return `  ${c.dataset.label}: ${fmtNumberEN(c.parsed.y, 1)}mn pairs | Source: ${sourceReportYear(row.source)}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: { ticks: { minRotation: 90, maxRotation: 90, color: C.azulEscuro40, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: true, color: '#C9D3DF', width: 1 } },
-                y: { min: 0, max: axisMax, ticks: { display: false }, grid: { display: false }, border: { display: false } },
-                y1: { position: 'right', min: yoyMin - yoyPad, max: yoyMax + yoyPad, ticks: { display: false }, grid: { display: false, drawOnChartArea: false }, border: { display: false } }
-            }
-        }
-    });
+    // RECEITA ÚNICA — desenho do sector-data pelo charts-registry.js (mesma fn que o PPT usa)
+    industryChartInstance = window.buildIndustryChartCanvas(el, {
+        labels: rows.map(row => String(row.data_year)),
+        values, yoyValues,
+        metricLabel: SECTOR_METRICS[sectorState.metric]?.label || 'Metric',
+        sources: rows.map(row => sourceReportYear(row.source))
+    }, { fmtNumber: fmtNumberEN, fmtPct: fmtPctEN });
     bindIndustryLegend(industryChartInstance);
 }
 

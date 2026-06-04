@@ -970,6 +970,97 @@ window.SPORTSWEAR_TAM_COLORS = window.SPORTSWEAR_TAM_COLORS || { footwear: '#021
 })();
 
 /* =====================================================================
+   SECTOR DATA (Sports Footwear — Sector Data) — RECEITA ÚNICA (desenho).
+   As duas implementações (dashboard inline × PPT window.DASH em
+   charts_sports.js) eram BYTE-IDÊNTICAS (sem escala de slide). Aqui fica o
+   desenho; cada lado passa só os formatadores (fmtNumber/fmtPct) e o model
+   pronto (labels/values/yoyValues/metricLabel/sources). Cores/eixos idênticos
+   nos 2 → fixos no canonical.
+   ===================================================================== */
+(function () {
+  function niceSectorAxisMax(maxValue) {
+    var raw = Math.max(Number(maxValue || 0) * 1.12, 1);
+    if (raw <= 10) return Math.ceil(raw);
+    if (raw <= 25) return Math.ceil(raw / 5) * 5;
+    if (raw <= 100) return Math.ceil(raw / 10) * 10;
+    return Math.ceil(raw / 20) * 20;
+  }
+  function secRrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  /* m: {labels, values, yoyValues, metricLabel, sources}.  opts: {fmtNumber(v,d), fmtPct(v,d)}. */
+  window.buildIndustryChartCanvas = function (canvas, m, opts) {
+    if (!canvas || !window.Chart) return null;
+    opts = opts || {};
+    var fmtNumber = opts.fmtNumber, fmtPct = opts.fmtPct;
+    var NAVY = '#021C45', TURQ = '#6FDDCB', TICK = '#9AA8BB', XBORDER = '#C9D3DF';
+    var labels = m.labels, values = m.values, yoyValues = m.yoyValues, metricLabel = m.metricLabel, sources = m.sources || [];
+    var axisMax = niceSectorAxisMax(Math.max.apply(null, values.concat([0])));
+    var yoyFinite = yoyValues.filter(Number.isFinite);
+    var yoyMin = yoyFinite.length ? Math.min.apply(null, yoyFinite) : -0.1;
+    var yoyMax = yoyFinite.length ? Math.max.apply(null, yoyFinite) : 0.1;
+    var yoyPad = Math.max((yoyMax - yoyMin) * 0.30, 0.08);
+    var labelPlugin = {
+      id: 'sectorBarYoYLabels',
+      afterDatasetsDraw: function (chart) {
+        var ctx = chart.ctx;
+        ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        if (chart.isDatasetVisible(0)) {
+          var meta = chart.getDatasetMeta(0);
+          ctx.font = '800 12px Verdana'; ctx.fillStyle = '#FFFFFF';
+          meta.data.forEach(function (bar, i) {
+            var value = values[i];
+            if (!Number.isFinite(value) || value <= 0 || !bar) return;
+            var props = bar.getProps(['x', 'y', 'base', 'width'], true);
+            var height = Math.abs(props.base - props.y);
+            if (height < 28 || props.width < 26) return;
+            var text = fmtNumber(value, 1);
+            if (ctx.measureText(text).width > props.width - 6) return;
+            ctx.fillText(text, props.x, (props.y + props.base) / 2);
+          });
+        }
+        if (chart.isDatasetVisible(1)) {
+          var meta2 = chart.getDatasetMeta(1);
+          ctx.font = '800 11px Verdana';
+          meta2.data.forEach(function (point, i) {
+            var yoy = yoyValues[i];
+            if (!point || !Number.isFinite(yoy)) return;
+            var text = fmtPct(yoy, 0);
+            var bw = ctx.measureText(text).width + 14, bh = 22;
+            var x = Math.max(chart.chartArea.left + 4, Math.min(point.x - bw / 2, chart.chartArea.right - bw - 4));
+            var y = Math.max(chart.chartArea.top + 4, Math.min(point.y - bh / 2, chart.chartArea.bottom - bh - 4));
+            ctx.fillStyle = TURQ; secRrect(ctx, x, y, bw, bh, 4); ctx.fill();
+            ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
+          });
+        }
+        ctx.restore();
+      }
+    };
+    return new window.Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [
+        { type: 'bar', label: metricLabel, data: values, backgroundColor: NAVY, borderColor: NAVY, borderWidth: 0, borderRadius: 0, borderSkipped: false, yAxisID: 'y', barPercentage: 0.70, categoryPercentage: 0.78, order: 2 },
+        { type: 'line', label: 'YoY', data: yoyValues, borderColor: TURQ, backgroundColor: TURQ, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 18, tension: 0.20, yAxisID: 'y1', spanGaps: false, order: 1 }
+      ] },
+      plugins: [labelPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { left: 10, right: 48, top: 48, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: function (c) { if (c.datasetIndex === 1) return '  YoY: ' + fmtPct(c.parsed.y, 0); return '  ' + c.dataset.label + ': ' + fmtNumber(c.parsed.y, 1) + 'mn pairs | Source: ' + (sources[c.dataIndex] || ''); } } }
+        },
+        scales: {
+          x: { ticks: { minRotation: 90, maxRotation: 90, color: TICK, padding: 7, font: { size: 10, family: 'Verdana' } }, grid: { display: false }, border: { display: true, color: XBORDER, width: 1 } },
+          y: { min: 0, max: axisMax, ticks: { display: false }, grid: { display: false }, border: { display: false } },
+          y1: { position: 'right', min: yoyMin - yoyPad, max: yoyMax + yoyPad, ticks: { display: false }, grid: { display: false, drawOnChartArea: false }, border: { display: false } }
+        }
+      }
+    });
+  };
+})();
+
+/* =====================================================================
    GRÁFICOS LEGADOS — declarados UMA vez aqui; a lógica de desenho mora
    onde já está (presentação: window.DASH via charts_sports.js; dashboard:
    inline). `dashboardNative:true` = o dashboard JÁ desenha esse gráfico

@@ -202,6 +202,14 @@ check(dash.includes('window.getVolumeYoyModel') && dash.includes('window.buildVo
   'dashboard delega headcount-volume ao índice (model + desenho)',
   'dashboard NÃO chama window.getVolumeYoyModel/buildVolumeYoyChartCanvas — reintroduziu desenho inline do headcount-volume');
 
+/* 13) SECTOR DATA — receita única de DESENHO. */
+check(/window\.buildIndustryChartCanvas\s*=\s*function/.test(registry),
+  'índice define window.buildIndustryChartCanvas',
+  'charts-registry.js NÃO define window.buildIndustryChartCanvas — desenho do sector-data voltaria a ser duplicado');
+check(dash.includes('window.buildIndustryChartCanvas'),
+  'dashboard delega sector-data ao índice (desenho)',
+  'dashboard NÃO chama window.buildIndustryChartCanvas — reintroduziu desenho inline do sector-data');
+
 /* ---- resultado ---- */
 console.log('\n=== Receita Única — verificação ===');
 oks.forEach((l) => console.log(l));
