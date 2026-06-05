@@ -4881,64 +4881,25 @@ function renderCostIndexTableCard(replaceOnly=false) {
    = média das semanas (blended/Petrochemical). Currency USD/BRL, range From/To
    mensal e Forecast (flat-forward 52 semanas, igual à tabela existente). */
 const ciLagState = { currency: 'usd', forecast: 'off', from: null, to: null };
-const CI_LAG_VULC_MONTHS = 5;    // lag Vulcabras (meses)
-const CI_LAG_PEERS_MONTHS = 10;  // lag concorrência (meses)
 
-function ciLagShiftQuarter(year, month, addMonths) {
-    const abs = year * 12 + (month - 1) + addMonths;
-    return quarterLabel(Math.floor(abs / 12), quarterOf((abs % 12) + 1));
+// RECEITA ÚNICA: o modelo da tabela mora em window.buildCostIndexLagModel (charts-registry.js) — mesma fn que o PPT usa.
+function ciLagModel() {
+    if (!window.buildCostIndexLagModel) return { currency: ciLagState.currency, forecast: ciLagState.forecast, from: null, to: null, months: [], rows: [] };
+    const m = window.buildCostIndexLagModel(ciLagState);
+    ciLagState.from = m.from;   // sincroniza o range resolvido de volta nos seletores
+    ciLagState.to = m.to;
+    return m;
 }
 
-function ciLagMonthlyRows() {
-    const usdMap = costIndexBlendedSeries('usd');
-    const brlMap = costIndexBlendedSeries('brl');
-    const dates = Array.from(new Set([...usdMap.keys(), ...brlMap.keys()])).sort((a, b) => a.localeCompare(b));
-    let weekly = dates.map(date => {
-        const d = new Date(`${date}T00:00:00`);
-        return { key: date, year: d.getFullYear(), month: d.getMonth() + 1, usd: usdMap.has(date) ? usdMap.get(date) : null, brl: brlMap.has(date) ? brlMap.get(date) : null, forecast: false };
-    }).filter(r => Number.isFinite(r.usd) || Number.isFinite(r.brl));
-    if (ciLagState.forecast === 'on' && weekly.length) {
-        const last = weekly[weekly.length - 1];
-        for (let i = 1; i <= 52; i++) {
-            const key = costIndexAddDays(last.key, i * 7);
-            const d = new Date(`${key}T00:00:00`);
-            weekly.push({ key, year: d.getFullYear(), month: d.getMonth() + 1, usd: last.usd, brl: last.brl, forecast: true });
-        }
-    }
-    const groups = new Map();
-    weekly.forEach(r => {
-        const k = periodKey(r.year, r.month);
-        if (!groups.has(k)) groups.set(k, { key: k, year: r.year, month: r.month, weeks: [] });
-        groups.get(k).weeks.push(r);
-    });
-    const avg = (ws, f) => { const v = ws.map(w => w[f]).filter(Number.isFinite); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
-    return Array.from(groups.values()).map(g => ({
-        key: g.key, year: g.year, month: g.month,
-        usd: avg(g.weeks, 'usd'), brl: avg(g.weeks, 'brl'),
-        forecast: g.weeks.some(w => w.forecast)
-    })).sort((a, b) => a.key.localeCompare(b.key));
+function ciLagSelect(id, current, onchangeFn, months) {
+    return `<select id="${id}" class="df-input" onchange="${onchangeFn}" style="width:116px;">${months.map(r => `<option value="${r.key}" ${current === r.key ? 'selected' : ''}>${r.label}</option>`).join('')}</select>`;
 }
 
-function ensureCiLagRange() {
-    const rows = ciLagMonthlyRows();
-    if (!rows.length) return rows;
-    const keys = rows.map(r => r.key);
-    const defFrom = `${new Date().getFullYear()}-01`;
-    if (!ciLagState.from || !keys.includes(ciLagState.from)) ciLagState.from = keys.includes(defFrom) ? defFrom : keys[0];
-    if (!ciLagState.to || !keys.includes(ciLagState.to)) ciLagState.to = keys[keys.length - 1];
-    if (keys.indexOf(ciLagState.from) > keys.indexOf(ciLagState.to)) [ciLagState.from, ciLagState.to] = [ciLagState.to, ciLagState.from];
-    return rows;
-}
-
-function ciLagSelect(id, current, onchangeFn, rows) {
-    return `<select id="${id}" class="df-input" onchange="${onchangeFn}" style="width:116px;">${rows.map(r => `<option value="${r.key}" ${current === r.key ? 'selected' : ''}>${monthLabel(r.year, r.month)}</option>`).join('')}</select>`;
-}
-
-function ciLagControlsHtml(rows) {
+function ciLagControlsHtml(months) {
     return `<div class="imports-controls" style="display:flex;align-items:center;justify-content:flex-end;gap:24px;flex-wrap:wrap;margin-left:auto;">
         ${selectBlock('Currency', `<select id="ci-lag-currency" class="df-input" onchange="setCiLagCurrency()" style="width:104px;"><option value="usd" ${ciLagState.currency === 'usd' ? 'selected' : ''}>USD</option><option value="brl" ${ciLagState.currency === 'brl' ? 'selected' : ''}>BRL</option></select>`)}
-        ${selectBlock('From', ciLagSelect('ci-lag-from', ciLagState.from, 'setCiLagRange()', rows))}
-        ${selectBlock('To', ciLagSelect('ci-lag-to', ciLagState.to, 'setCiLagRange()', rows))}
+        ${selectBlock('From', ciLagSelect('ci-lag-from', ciLagState.from, 'setCiLagRange()', months))}
+        ${selectBlock('To', ciLagSelect('ci-lag-to', ciLagState.to, 'setCiLagRange()', months))}
         ${selectBlock('Forecast', `<select id="ci-lag-forecast" class="df-input" onchange="setCiLagForecast()" style="width:90px;"><option value="off" ${ciLagState.forecast === 'off' ? 'selected' : ''}>Off</option><option value="on" ${ciLagState.forecast === 'on' ? 'selected' : ''}>On</option></select>`)}
     </div>`;
 }
@@ -4957,28 +4918,21 @@ function setCiLagRange() { const f = document.getElementById('ci-lag-from'), t =
 
 function renderCostIndexLagCard() {
     const content = document.getElementById('tab-content');
-    const allRows = ensureCiLagRange();
-    const cur = ciLagState.currency;
-    const byKey = new Map(allRows.map(r => [r.key, r]));
-    const rows = allRows.filter(r => r.key >= ciLagState.from && r.key <= ciLagState.to);
+    const model = ciLagModel();
+    const cur = model.currency;
     const existing = document.getElementById('cost-index-lag-card');
     const card = existing || document.createElement('section');
     card.id = 'cost-index-lag-card';
     card.style.cssText = cardStyle('margin-bottom:24px;');
     const th = (txt, bg) => `<th style="padding:7px 16px;background:${bg};color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;white-space:nowrap;">${txt}</th>`;
-    const body = rows.map(r => {
-        const val = r[cur];
-        const prev = byKey.get(periodKey(r.year - 1, r.month));
-        const prevVal = prev ? prev[cur] : null;
-        const yoy = (Number.isFinite(val) && Number.isFinite(prevVal) && prevVal !== 0) ? (val / prevVal - 1) : null;
-        const fc = r.forecast;
+    const body = model.rows.map(r => {
         const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};border-bottom:1px solid #E6EBF1;`;
         return `<tr>
-            <td style="${td}">${monthLabel(r.year, r.month)}${fc ? 'E' : ''}</td>
-            <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_VULC_MONTHS)}</td>
-            <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_PEERS_MONTHS)}</td>
-            <td style="${td};font-weight:700;${fc ? 'background:#FFFDE7;color:#4472C4;' : ''}">${ciLagFmtIndex(val)}</td>
-            <td style="${td}">${ciLagFmtYoY(yoy)}</td>
+            <td style="${td}">${r.spot}</td>
+            <td style="${td}">${r.vulcQ}</td>
+            <td style="${td}">${r.peersQ}</td>
+            <td style="${td};font-weight:700;${r.forecast ? 'background:#FFFDE7;color:#4472C4;' : ''}">${ciLagFmtIndex(r.index)}</td>
+            <td style="${td}">${ciLagFmtYoY(r.yoy)}</td>
         </tr>`;
     }).join('');
     card.innerHTML = `
@@ -4987,7 +4941,7 @@ function renderCostIndexLagCard() {
                 <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Petrochemical Cost Index Effects on Company's Results</h3>
                 <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(x, Percentage)</p>
             </div>
-            ${ciLagControlsHtml(allRows)}
+            ${ciLagControlsHtml(model.months)}
         </div>
         <div style="overflow-x:auto;">
             <table style="border-collapse:collapse;min-width:560px;">
@@ -4996,7 +4950,7 @@ function renderCostIndexLagCard() {
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
-        </div>${ciLagState.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">E = forecasted (último valor mantido constante)</div>` : ''}`;
+        </div>${model.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">E = forecasted (último valor mantido constante)</div>` : ''}`;
     if (!existing) content.appendChild(card);
 }
 

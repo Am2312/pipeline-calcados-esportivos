@@ -247,6 +247,83 @@ window.COST_INDEX = window.COST_INDEX || (function () {
   return { CONFIG: CONFIG, WEIGHTS: WEIGHTS, ORDER: ORDER, blendedSeries: blendedSeries, seriesMap: seriesMap };
 })();
 
+/* ---- COST INDEX LAG (Effects on Company's Results) — RECEITA ÚNICA --------
+   Modelo da tabela "Petrochemical Cost Index Effects on Company's Results".
+   O preço spot de um mês bate no resultado da Vulcabras +5 meses depois e no
+   dos concorrentes +10 meses depois (giro de estoque). Como o resultado é
+   trimestral, mapeia mês+5 / mês+10 pro trimestre que os contém. Índice mensal
+   = média das semanas da cesta blended (window.COST_INDEX). Forecast = flat-
+   forward (segura o último valor semanal por 52 semanas). YoY = mês ÷ mesmo
+   mês ano anterior − 1.
+   Função PURA: não muta o estado do chamador; resolve from/to e devolve a
+   lista de meses (p/ os seletores) + as linhas filtradas. Os dois lados
+   (dashboard inline + apresentação) consomem deste model. */
+window.buildCostIndexLagModel = window.buildCostIndexLagModel || function (opts) {
+  opts = opts || {};
+  var currency = (opts.currency === 'brl') ? 'brl' : 'usd';
+  var forecast = (opts.forecast === 'on' || opts.forecast === true) ? 'on' : 'off';
+  var VULC_MONTHS = 5, PEERS_MONTHS = 10;
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function periodKey(y, m) { return y + '-' + String(m).padStart(2, '0'); }
+  function monthLabel(y, m) { return MONTHS[m - 1] + '/' + String(y).slice(-2); }
+  function quarterOf(m) { return Math.floor((m - 1) / 3) + 1; }
+  function quarterLabel(y, q) { return q + 'Q' + String(y).slice(-2); }
+  function shiftQuarter(y, m, add) { var abs = y * 12 + (m - 1) + add; return quarterLabel(Math.floor(abs / 12), quarterOf((abs % 12) + 1)); }
+  function isoDate(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function addDays(key, days) { var d = new Date(key + 'T00:00:00'); d.setDate(d.getDate() + days); return isoDate(d); }
+
+  var CI = window.COST_INDEX;
+  var usdMap = (CI && CI.blendedSeries) ? CI.blendedSeries('usd') : new Map();
+  var brlMap = (CI && CI.blendedSeries) ? CI.blendedSeries('brl') : new Map();
+  var dates = Array.from(new Set([].concat(Array.from(usdMap.keys()), Array.from(brlMap.keys())))).sort(function (a, b) { return a.localeCompare(b); });
+  var weekly = dates.map(function (date) {
+    var d = new Date(date + 'T00:00:00');
+    return { key: date, year: d.getFullYear(), month: d.getMonth() + 1, usd: usdMap.has(date) ? usdMap.get(date) : null, brl: brlMap.has(date) ? brlMap.get(date) : null, forecast: false };
+  }).filter(function (r) { return Number.isFinite(r.usd) || Number.isFinite(r.brl); });
+  if (forecast === 'on' && weekly.length) {
+    var last = weekly[weekly.length - 1];
+    for (var i = 1; i <= 52; i++) {
+      var k = addDays(last.key, i * 7);
+      var d2 = new Date(k + 'T00:00:00');
+      weekly.push({ key: k, year: d2.getFullYear(), month: d2.getMonth() + 1, usd: last.usd, brl: last.brl, forecast: true });
+    }
+  }
+  var groups = new Map();
+  weekly.forEach(function (r) {
+    var kk = periodKey(r.year, r.month);
+    if (!groups.has(kk)) groups.set(kk, { key: kk, year: r.year, month: r.month, weeks: [] });
+    groups.get(kk).weeks.push(r);
+  });
+  function avg(ws, f) { var v = ws.map(function (w) { return w[f]; }).filter(Number.isFinite); return v.length ? v.reduce(function (s, x) { return s + x; }, 0) / v.length : null; }
+  var months = Array.from(groups.values()).map(function (g) {
+    return { key: g.key, year: g.year, month: g.month, label: monthLabel(g.year, g.month), usd: avg(g.weeks, 'usd'), brl: avg(g.weeks, 'brl'), forecast: g.weeks.some(function (w) { return w.forecast; }) };
+  }).sort(function (a, b) { return a.key.localeCompare(b.key); });
+
+  // resolve from/to (default From = Jan do ano corrente; To = última chave)
+  var keys = months.map(function (m) { return m.key; });
+  var from = opts.from, to = opts.to;
+  var defFrom = (new Date().getFullYear()) + '-01';
+  if (!from || keys.indexOf(from) < 0) from = keys.indexOf(defFrom) >= 0 ? defFrom : keys[0];
+  if (!to || keys.indexOf(to) < 0) to = keys[keys.length - 1];
+  if (keys.length && keys.indexOf(from) > keys.indexOf(to)) { var tmp = from; from = to; to = tmp; }
+
+  var byKey = new Map(months.map(function (m) { return [m.key, m]; }));
+  var rows = months.filter(function (m) { return from && to && m.key >= from && m.key <= to; }).map(function (m) {
+    var val = m[currency];
+    var prev = byKey.get(periodKey(m.year - 1, m.month));
+    var prevVal = prev ? prev[currency] : null;
+    var yoy = (Number.isFinite(val) && Number.isFinite(prevVal) && prevVal !== 0) ? (val / prevVal - 1) : null;
+    return {
+      key: m.key, year: m.year, month: m.month,
+      label: m.label, spot: m.label + (m.forecast ? 'E' : ''),
+      vulcQ: shiftQuarter(m.year, m.month, VULC_MONTHS),
+      peersQ: shiftQuarter(m.year, m.month, PEERS_MONTHS),
+      index: val, yoy: yoy, forecast: m.forecast
+    };
+  });
+  return { currency: currency, forecast: forecast, from: from, to: to, months: months, rows: rows, VULC_MONTHS: VULC_MONTHS, PEERS_MONTHS: PEERS_MONTHS };
+};
+
 /* ---- SPORTSWEAR TAM (Euromonitor) — dados de mercado p/ TAM + Highlight -
    Dado duplicado historicamente (dashboard SPORTSWEAR_TAM × apresentação
    sportswearTamData). Agora mora aqui; os 2 lados leem daqui. -------------- */
