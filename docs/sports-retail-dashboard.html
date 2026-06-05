@@ -5104,6 +5104,11 @@ function renderGlobalCompaniesPage() {
       .gcv-summary b{color:#6FDDCB;}
       .gcv-lead{background:#fff;border:1px solid #E6EBF1;border-radius:10px;padding:16px 18px;font-size:13.5px;line-height:1.55;color:#33465F;margin-bottom:24px;}
       .gcv-lead b{color:#082654;}
+      .gcv-themes{background:#fff;border:1px solid #E6EBF1;border-radius:10px;padding:18px 22px;margin-bottom:20px;}
+      .gcv-themes h3{color:#082654;margin:0 0 12px;font-size:15px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+      .gcv-themes p{font-size:13px;line-height:1.62;color:#33465F;margin:0 0 13px;}
+      .gcv-themes p:last-child{margin-bottom:0;}
+      .gcv-themes b{color:#082654;}
       .gcv-tl{position:relative;margin-left:14px;padding-left:28px;border-left:2px solid #E6EBF1;}
       .gcv-ev{position:relative;margin:0 0 22px;}
       .gcv-ev::before{content:"";position:absolute;left:-35px;top:4px;width:12px;height:12px;border-radius:50%;background:#FF4F6C;border:2px solid #fff;box-shadow:0 0 0 2px #FF4F6C;}
@@ -5176,7 +5181,14 @@ function renderGlobalCompaniesPage() {
 
     const legend = `<div class="gcv-legend"><span class="gcv-flag">~</span> = quote translated from Mandarin/Japanese or reproduced via trade press (wording confirmed across sources, not a spoken English transcript). All other quotes are verbatim from the official release or a fetched English source/transcript. <b>Earnings</b> = company results/call; <b>News</b> = sector/commodity news; <b>Market</b> = share-price / investor reaction.</div>`;
 
-    content.innerHTML = '<style>' + css + '</style><div class="gcv-wrap">' + summary + lead + '<div class="gcv-tl">' + cards + '</div>' + legend + '</div>';
+    const themes = `<div class="gcv-themes">
+        <h3>O que os reports e as notícias dizem — por camada</h3>
+        <p><b>(i) Reports e resultados das marcas (Nike, adidas, Puma, On, Under Armour, ASICS, Mizuno).</b> O assunto que domina, de longe, é tarifa dos EUA — Nike levou ~300bp de margem bruta e já pagou ~US$1,0bn de tarifa IEEPA não-recuperável; adidas guiou um baque de ~€400m de tarifa+câmbio; On carrega 20% de tarifa sobre o sourcing do Vietnã; ASICS e Mizuno citam a tarifa como o motivo da queda de margem nas Américas. Em segundo lugar vêm demanda fraca e ambiente promocional — o reset da China na Nike (−20%), o consumidor europeu pressionado, markdowns elevados e marketplace "too promotional". A margem é analisada via "bridges" onde tarifa e câmbio mandam, e petróleo/matéria-prima aparece só como risco à frente (Nike/BofA: "higher oil prices will push product costs higher"; adidas: o óleo "já move discussões de preço de material e transporte, mas sem aumento de preço de produto ainda"). O saldo: ações de-ratadas no ano (Nike ~−28%, adidas ~−16%), com rebaixamentos — exceto On, que segue performando no operacional via full-price premium.</p>
+        <p><b>(ii) Reports e resultados das fabricantes / OEMs (Pou Chen/Yue Yuen, Feng Tay).</b> Aqui o tema central é compressão de margem (Yue Yuen: margem bruta de manufatura 14,8%; Feng Tay: 17,4%), mas a causa não é matéria-prima — é rateio de tarifa com as marcas (Yue Yuen passou a dividir com 4 clientes, vs nenhum no 1S25), mão de obra subindo e ineficiência de produção ao realocar fábrica da China pro Sudeste Asiático e por sobreposição de feriados (Ano Novo Chinês + Ramadã/Eid). Soma-se demanda cautelosa das marcas, visibilidade de pedido baixa (~2-3 meses) e dependência do turnaround da Nike. O petróleo/petroquímico é tratado a fundo só numa nota temática do Goldman ("Gauging the rising crude oil cost impact"), que quantifica o que importa pra sua tese — 60-70% da matéria-prima de um tênis é petroquímico (EVA, borracha, PU), e MP é ~metade do COGS — mas conclui que, pelo modelo cost-plus/FOB, esse custo é repassado às marcas, com defasagem (oil-linked inputs em mid-teens% do COGS). Os bancos esperam recuperação sequencial da margem no 2S26 e divergem no rating (Goldman Sell em Feng Tay, BofA Buy).</p>
+        <p><b>(iii) Notícias do setor.</b> É na imprensa setorial que o elo óleo → custo do calçado aparece mais claramente. A FDRA publicou um estudo dimensionando a exposição (óleo é feedstock direto de ~30% dos materiais de um tênis sintético, ~70% têm exposição ao petróleo; se o Brent ficar acima de US$90, o custo FOB sobe 1,5-3% por par); o EVA (entressola) subiu +13% nos EUA e +17% no Brasil; o Brent disparou de ~US$71 pra >US$100 com o fechamento do Estreito de Ormuz; o frete saltou 30-40% e a Maersk falou em +US$500m/mês de combustível, "passing on these costs to customers". Do lado do consumidor, o preço do calçado nos EUA já sobe no ritmo mais rápido em 3+ anos (custo desembarcado por par +13,7% a/a), e no Brasil a Abicalçados projeta exportações −4 a −9% em 2026. O enquadramento da mídia é de um coquetel de custo — petróleo + Oriente Médio + tarifa + frete — pressionando a cadeia, com o repasse ao preço final já visível, mas ainda sem ter batido cheio nos resultados das empresas.</p>
+    </div>`;
+
+    content.innerHTML = '<style>' + css + '</style><div class="gcv-wrap">' + themes + summary + lead + '<div class="gcv-tl">' + cards + '</div>' + legend + '</div>';
 }
 
 function renderContent() {
