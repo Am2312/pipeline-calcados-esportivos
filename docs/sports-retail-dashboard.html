@@ -4977,7 +4977,7 @@ function renderCostIndexLagCard() {
             <td style="${td};font-weight:700;">${monthLabel(r.year, r.month)}${fc ? 'E' : ''}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_VULC_MONTHS)}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_PEERS_MONTHS)}</td>
-            <td style="${td};font-weight:700;">${ciLagFmtIndex(val)}</td>
+            <td style="${td};font-weight:700;${fc ? 'background:#FFFDE7;' : ''}">${ciLagFmtIndex(val)}</td>
             <td style="${td}">${ciLagFmtYoY(yoy)}</td>
         </tr>`;
     }).join('');
