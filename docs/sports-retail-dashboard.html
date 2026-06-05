@@ -4874,6 +4874,127 @@ function renderCostIndexTableCard(replaceOnly=false) {
     if (scroller) scroller.scrollLeft = scroller.scrollWidth;
 }
 
+/* ===== Cost Index — Lag table (Spot month → quando bate em VULC/Peers) =====
+   O preço spot de um mês impacta o resultado da Vulcabras +5 meses depois e o
+   dos concorrentes +10 meses depois (giro de estoque). Como o resultado é
+   trimestral, mapeia mês+5 / mês+10 pro trimestre que os contém. Índice mensal
+   = média das semanas (blended/Petrochemical). Currency USD/BRL, range From/To
+   mensal e Forecast (flat-forward 52 semanas, igual à tabela existente). */
+const ciLagState = { currency: 'usd', forecast: 'off', from: null, to: null };
+const CI_LAG_VULC_MONTHS = 5;    // lag Vulcabras (meses)
+const CI_LAG_PEERS_MONTHS = 10;  // lag concorrência (meses)
+
+function ciLagShiftQuarter(year, month, addMonths) {
+    const abs = year * 12 + (month - 1) + addMonths;
+    return quarterLabel(Math.floor(abs / 12), quarterOf((abs % 12) + 1));
+}
+
+function ciLagMonthlyRows() {
+    const usdMap = costIndexBlendedSeries('usd');
+    const brlMap = costIndexBlendedSeries('brl');
+    const dates = Array.from(new Set([...usdMap.keys(), ...brlMap.keys()])).sort((a, b) => a.localeCompare(b));
+    let weekly = dates.map(date => {
+        const d = new Date(`${date}T00:00:00`);
+        return { key: date, year: d.getFullYear(), month: d.getMonth() + 1, usd: usdMap.has(date) ? usdMap.get(date) : null, brl: brlMap.has(date) ? brlMap.get(date) : null, forecast: false };
+    }).filter(r => Number.isFinite(r.usd) || Number.isFinite(r.brl));
+    if (ciLagState.forecast === 'on' && weekly.length) {
+        const last = weekly[weekly.length - 1];
+        for (let i = 1; i <= 52; i++) {
+            const key = costIndexAddDays(last.key, i * 7);
+            const d = new Date(`${key}T00:00:00`);
+            weekly.push({ key, year: d.getFullYear(), month: d.getMonth() + 1, usd: last.usd, brl: last.brl, forecast: true });
+        }
+    }
+    const groups = new Map();
+    weekly.forEach(r => {
+        const k = periodKey(r.year, r.month);
+        if (!groups.has(k)) groups.set(k, { key: k, year: r.year, month: r.month, weeks: [] });
+        groups.get(k).weeks.push(r);
+    });
+    const avg = (ws, f) => { const v = ws.map(w => w[f]).filter(Number.isFinite); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+    return Array.from(groups.values()).map(g => ({
+        key: g.key, year: g.year, month: g.month,
+        usd: avg(g.weeks, 'usd'), brl: avg(g.weeks, 'brl'),
+        forecast: g.weeks.some(w => w.forecast)
+    })).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function ensureCiLagRange() {
+    const rows = ciLagMonthlyRows();
+    if (!rows.length) return rows;
+    const keys = rows.map(r => r.key);
+    const defFrom = `${new Date().getFullYear()}-01`;
+    if (!ciLagState.from || !keys.includes(ciLagState.from)) ciLagState.from = keys.includes(defFrom) ? defFrom : keys[0];
+    if (!ciLagState.to || !keys.includes(ciLagState.to)) ciLagState.to = keys[keys.length - 1];
+    if (keys.indexOf(ciLagState.from) > keys.indexOf(ciLagState.to)) [ciLagState.from, ciLagState.to] = [ciLagState.to, ciLagState.from];
+    return rows;
+}
+
+function ciLagSelect(id, current, onchangeFn, rows) {
+    return `<select id="${id}" class="df-input" onchange="${onchangeFn}" style="width:116px;">${rows.map(r => `<option value="${r.key}" ${current === r.key ? 'selected' : ''}>${monthLabel(r.year, r.month)}</option>`).join('')}</select>`;
+}
+
+function ciLagControlsHtml(rows) {
+    return `<div class="imports-controls" style="display:flex;align-items:center;justify-content:flex-end;gap:24px;flex-wrap:wrap;margin-left:auto;">
+        ${selectBlock('Currency', `<select id="ci-lag-currency" class="df-input" onchange="setCiLagCurrency()" style="width:104px;"><option value="usd" ${ciLagState.currency === 'usd' ? 'selected' : ''}>USD</option><option value="brl" ${ciLagState.currency === 'brl' ? 'selected' : ''}>BRL</option></select>`)}
+        ${selectBlock('From', ciLagSelect('ci-lag-from', ciLagState.from, 'setCiLagRange()', rows))}
+        ${selectBlock('To', ciLagSelect('ci-lag-to', ciLagState.to, 'setCiLagRange()', rows))}
+        ${selectBlock('Forecast', `<select id="ci-lag-forecast" class="df-input" onchange="setCiLagForecast()" style="width:90px;"><option value="off" ${ciLagState.forecast === 'off' ? 'selected' : ''}>Off</option><option value="on" ${ciLagState.forecast === 'on' ? 'selected' : ''}>On</option></select>`)}
+    </div>`;
+}
+
+function ciLagFmtIndex(v) { return Number.isFinite(v) ? v.toFixed(2) : '-'; }
+function ciLagFmtYoY(v) { if (!Number.isFinite(v)) return '-'; const p = Math.round(v * 100); return (p >= 0 ? '+' : '') + p + '%'; }
+
+function setCiLagCurrency() { const el = document.getElementById('ci-lag-currency'); if (el) ciLagState.currency = el.value; renderCostIndexLagCard(true); }
+function setCiLagForecast() { const el = document.getElementById('ci-lag-forecast'); if (el) ciLagState.forecast = el.value; ciLagState.from = null; ciLagState.to = null; renderCostIndexLagCard(true); }
+function setCiLagRange() { const f = document.getElementById('ci-lag-from'), t = document.getElementById('ci-lag-to'); if (f) ciLagState.from = f.value; if (t) ciLagState.to = t.value; if (ciLagState.from > ciLagState.to) [ciLagState.from, ciLagState.to] = [ciLagState.to, ciLagState.from]; renderCostIndexLagCard(true); }
+
+function renderCostIndexLagCard() {
+    const content = document.getElementById('tab-content');
+    const allRows = ensureCiLagRange();
+    const cur = ciLagState.currency;
+    const byKey = new Map(allRows.map(r => [r.key, r]));
+    const rows = allRows.filter(r => r.key >= ciLagState.from && r.key <= ciLagState.to);
+    const existing = document.getElementById('cost-index-lag-card');
+    const card = existing || document.createElement('section');
+    card.id = 'cost-index-lag-card';
+    card.style.cssText = cardStyle('margin-bottom:24px;');
+    const th = (txt, bg) => `<th style="padding:7px 16px;background:${bg};color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;white-space:nowrap;">${txt}</th>`;
+    const body = rows.map(r => {
+        const val = r[cur];
+        const prev = byKey.get(periodKey(r.year - 1, r.month));
+        const prevVal = prev ? prev[cur] : null;
+        const yoy = (Number.isFinite(val) && Number.isFinite(prevVal) && prevVal !== 0) ? (val / prevVal - 1) : null;
+        const fc = r.forecast;
+        const td = `padding:5px 16px;text-align:center;font-size:13px;color:${fc ? C.cereja : C.azulEscuro};${fc ? 'font-style:italic;' : ''}`;
+        return `<tr${fc ? ` style="background:${C.cereja}0D;"` : ''}>
+            <td style="${td};font-weight:700;">${monthLabel(r.year, r.month)}${fc ? ' *' : ''}</td>
+            <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_VULC_MONTHS)}</td>
+            <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_PEERS_MONTHS)}</td>
+            <td style="${td};font-weight:700;">${ciLagFmtIndex(val)}</td>
+            <td style="${td};font-weight:700;">${ciLagFmtYoY(yoy)}</td>
+        </tr>`;
+    }).join('');
+    card.innerHTML = `
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
+            <div style="align-self:flex-start;">
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Spot vs Results Lag</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">Spot month → quando o índice chega no resultado da Vulcabras (+${CI_LAG_VULC_MONTHS}m) e dos concorrentes (+${CI_LAG_PEERS_MONTHS}m)</p>
+            </div>
+            ${ciLagControlsHtml(allRows)}
+        </div>
+        <div style="overflow-x:auto;">
+            <table style="border-collapse:collapse;min-width:560px;">
+                <thead><tr>
+                    ${th('Spot', '#082654')}${th('VULC Result', '#082654')}${th('Peers Result', '#082654')}${th('Index ' + cur.toUpperCase(), C.cereja)}${th('YoY', C.cereja)}
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>${ciLagState.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.cereja};font-style:italic;">* meses projetados (último valor mantido constante)</div>` : ''}`;
+    if (!existing) content.appendChild(card);
+}
+
 function renderCostIndexCard() {
     const content = document.getElementById('tab-content');
     ensureCostIndexRange();
@@ -5035,6 +5156,7 @@ function renderContent() {
     }
     if (activeTab === 'cost-index') {
         renderCostIndexCard();
+        renderCostIndexLagCard();
         renderCostIndexTableCard();
         document.getElementById('footer-source').textContent = 'Source: Bloomberg / BigQuery table constellation_vibe_coding.sports_retail_cost_indices_weekly';
         return;
