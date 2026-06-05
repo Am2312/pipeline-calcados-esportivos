@@ -4974,7 +4974,7 @@ function renderCostIndexLagCard() {
         const fc = r.forecast;
         const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};border-bottom:1px solid #E6EBF1;`;
         return `<tr>
-            <td style="${td};font-weight:700;">${monthLabel(r.year, r.month)}${fc ? ' *' : ''}</td>
+            <td style="${td};font-weight:700;">${monthLabel(r.year, r.month)}${fc ? 'E' : ''}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_VULC_MONTHS)}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_PEERS_MONTHS)}</td>
             <td style="${td};font-weight:700;">${ciLagFmtIndex(val)}</td>
@@ -4996,7 +4996,7 @@ function renderCostIndexLagCard() {
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
-        </div>${ciLagState.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">* forecasted (último valor mantido constante)</div>` : ''}`;
+        </div>${ciLagState.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">E = forecasted (último valor mantido constante)</div>` : ''}`;
     if (!existing) content.appendChild(card);
 }
 
