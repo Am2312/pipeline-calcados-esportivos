@@ -2418,7 +2418,7 @@ registerChart({
 });
 
 registerChart({
-  id: 'cost-index', titulo: 'Cost Index — Historical Distribution', unidade: '(x, average of weekly observations)', dashboardNative: true,
+  id: 'cost-index', titulo: "Vulcabras' Petrochemical Cost Index", unidade: '(x)', dashboardNative: true,
   legendaDinamica() {
     const cfg = (typeof costIndexConfig !== 'undefined' && costIndexConfig[presentationCostState.variable]) || { label: 'Index' };
     const sd = presentationCostState.stdDev;
