@@ -4974,7 +4974,7 @@ function renderCostIndexLagCard() {
         const fc = r.forecast;
         const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};border-bottom:1px solid #E6EBF1;`;
         return `<tr>
-            <td style="${td};font-weight:700;">${monthLabel(r.year, r.month)}${fc ? 'E' : ''}</td>
+            <td style="${td}">${monthLabel(r.year, r.month)}${fc ? 'E' : ''}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_VULC_MONTHS)}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_PEERS_MONTHS)}</td>
             <td style="${td};font-weight:700;${fc ? 'background:#FFFDE7;color:#4472C4;' : ''}">${ciLagFmtIndex(val)}</td>
