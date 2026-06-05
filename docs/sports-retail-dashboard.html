@@ -5048,14 +5048,15 @@ function renderCostIndexLagCompareCard() {
     const th = (txt, bg) => `<th style="padding:7px 16px;background:${bg};color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;white-space:nowrap;">${txt}</th>`;
     const tdBase = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};`;
     const body = quarters.map(qq => {
-        const v = laggedYoY(qq.y, qq.q, VULC);
-        const p = laggedYoY(qq.y, qq.q, PEERS);
-        const isFc = (v && v.forecast) || (p && p.forecast);
-        const cell = r => `<td style="${tdBase}">${ciLagFmtYoY(r ? r.yoy : NaN)}</td>`;
+        const va = laggedAvg(qq.y, qq.q, VULC), vy = laggedYoY(qq.y, qq.q, VULC);
+        const pa = laggedAvg(qq.y, qq.q, PEERS), py = laggedYoY(qq.y, qq.q, PEERS);
+        const isFc = (va && va.forecast) || (pa && pa.forecast);
+        const idxCell = a => `<td style="${tdBase}font-weight:700;">${a ? ciLagFmtIndex(a.avg) : '-'}</td>`;
+        const yoyCell = y => `<td style="${tdBase}">${ciLagFmtYoY(y ? y.yoy : NaN)}</td>`;
         return `<tr>
             <td style="${tdBase}font-weight:700;">${qLabel(qq.y, qq.q)}${isFc ? 'E' : ''}</td>
-            ${cell(v)}
-            ${cell(p)}
+            ${idxCell(va)}${yoyCell(vy)}
+            ${idxCell(pa)}${yoyCell(py)}
         </tr>`;
     }).join('');
     card.innerHTML = `
@@ -5067,8 +5068,8 @@ function renderCostIndexLagCompareCard() {
             ${controls}
         </div>
         <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse;min-width:420px;">
-                <thead><tr>${th('Quarter', '#082654')}${th('Index for Vulcabras', '#082654')}${th('Index for Peers', '#082654')}</tr></thead>
+            <table style="border-collapse:collapse;min-width:620px;">
+                <thead><tr>${th('Quarter', '#082654')}${th('Index for Vulcabras', '#082654')}${th('YoY', '#082654')}${th('Index for Peers', C.cereja)}${th('YoY', C.cereja)}</tr></thead>
                 <tbody>${body}</tbody>
             </table>
         </div>${m.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">E = inclui custo em forecast (último valor mantido constante)</div>` : ''}`;
