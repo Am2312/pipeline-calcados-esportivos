@@ -4948,7 +4948,7 @@ function ciLagFmtYoY(v) {   // heat-map de texto: verde se sobe, vermelho se cai
     if (!Number.isFinite(v)) return `<span style="color:#667D99;">n.a.</span>`;
     const p = Math.round(v * 100);
     const color = p > 0 ? '#0D8B80' : p < 0 ? '#C2384E' : C.azulEscuro;
-    return `<span style="color:${color};font-weight:700;">${p}%</span>`;
+    return `<span style="color:${color};font-weight:700;">${p > 0 ? '+' : ''}${p}%</span>`;
 }
 
 function setCiLagCurrency() { const el = document.getElementById('ci-lag-currency'); if (el) ciLagState.currency = el.value; renderCostIndexLagCard(true); }
