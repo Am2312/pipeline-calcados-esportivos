@@ -5051,7 +5051,7 @@ function renderCostIndexLagCompareCard() {
         const v = laggedYoY(qq.y, qq.q, VULC);
         const p = laggedYoY(qq.y, qq.q, PEERS);
         const isFc = (v && v.forecast) || (p && p.forecast);
-        const cell = r => `<td style="${tdBase}${r && r.forecast ? 'background:#FFFDE7;' : ''}">${ciLagFmtYoY(r ? r.yoy : NaN)}</td>`;
+        const cell = r => `<td style="${tdBase}">${ciLagFmtYoY(r ? r.yoy : NaN)}</td>`;
         return `<tr>
             <td style="${tdBase}font-weight:700;">${qLabel(qq.y, qq.q)}${isFc ? 'E' : ''}</td>
             ${cell(v)}
