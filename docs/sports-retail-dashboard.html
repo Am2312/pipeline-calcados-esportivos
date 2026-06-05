@@ -4962,7 +4962,7 @@ function renderCostIndexLagCard() {
      Index for Vulcabras = YoY do custo médio de (Q − VULC_MONTHS)  [verticalizada: custo chega antes]
      Index for Peers     = YoY do custo médio de (Q − PEERS_MONTHS)
    YoY = média trimestral do índice ÷ mesmo trimestre do ano anterior − 1. */
-const ciLagCompareState = { currency: 'usd', forecast: 'off', from: null, to: null };
+const ciLagCompareState = { currency: 'brl', forecast: 'on', from: '2026-Q1', to: '2028-Q1' };
 
 function setCiLagCompareCurrency() { const el = document.getElementById('ci-lag-cmp-currency'); if (el) ciLagCompareState.currency = el.value; renderCostIndexLagCompareCard(); }
 function setCiLagCompareForecast() { const el = document.getElementById('ci-lag-cmp-forecast'); if (el) ciLagCompareState.forecast = el.value; ciLagCompareState.from = null; ciLagCompareState.to = null; renderCostIndexLagCompareCard(); }
