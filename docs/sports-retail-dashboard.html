@@ -4926,7 +4926,7 @@ function renderCostIndexLagCard() {
     card.style.cssText = cardStyle('margin-bottom:24px;');
     const th = (txt, bg) => `<th style="padding:7px 16px;background:${bg};color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;white-space:nowrap;">${txt}</th>`;
     const body = model.rows.map(r => {
-        const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};border-bottom:1px solid #E6EBF1;`;
+        const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};`;
         return `<tr>
             <td style="${td}">${r.spot}</td>
             <td style="${td}">${r.vulcQ}</td>
@@ -4951,6 +4951,76 @@ function renderCostIndexLagCard() {
                 <tbody>${body}</tbody>
             </table>
         </div>${model.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">E = forecasted (último valor mantido constante)</div>` : ''}`;
+    if (!existing) content.appendChild(card);
+    renderCostIndexLagCompareCard();
+}
+
+/* ===== Cost Index — Effect by Company, Same Quarter (YoY) =====
+   Card abaixo da tabela de lag. Segue o MESMO ciLagState (moeda/forecast/range).
+   Eixo = trimestres dos meses spot visíveis. Por trimestre Q:
+     Index for Vulcabras = YoY do custo médio de (Q − VULC_MONTHS)  [verticalizada: custo chega antes]
+     Index for Peers     = YoY do custo médio de (Q − PEERS_MONTHS)
+   YoY = média trimestral do índice ÷ mesmo trimestre do ano anterior − 1. */
+function renderCostIndexLagCompareCard() {
+    const content = document.getElementById('tab-content');
+    const m = ciLagModel();
+    const cur = m.currency;
+    const VULC = m.VULC_MONTHS || 5, PEERS = m.PEERS_MONTHS || 10;
+    const qOf = mm => Math.floor((mm - 1) / 3) + 1;
+    const qLabel = (y, q) => q + 'Q' + String(y).slice(-2);
+    const qAbs = (y, q) => y * 4 + (q - 1);
+    const amOf = (y, mm) => y * 12 + (mm - 1);
+    // índice mensal (moeda atual) + flag forecast, indexados pelo mês absoluto
+    const idxByAm = new Map(), fcByAm = new Map();
+    (m.months || []).forEach(mo => { idxByAm.set(amOf(mo.year, mo.month), mo[cur]); fcByAm.set(amOf(mo.year, mo.month), mo.forecast); });
+    // média do custo que bate no trimestre (ry,rq) com defasagem L meses (spot = trimestre − L)
+    const laggedAvg = (ry, rq, L) => {
+        const startM = (rq - 1) * 3 + 1;
+        const ams = [0, 1, 2].map(k => amOf(ry, startM + k) - L);
+        const vals = ams.map(a => idxByAm.get(a)).filter(Number.isFinite);
+        if (!vals.length) return null;
+        return { avg: vals.reduce((s, x) => s + x, 0) / vals.length, forecast: ams.some(a => fcByAm.get(a) === true) };
+    };
+    const laggedYoY = (ry, rq, L) => {
+        const c = laggedAvg(ry, rq, L), p = laggedAvg(ry - 1, rq, L);
+        if (!c || !p || !p.avg) return null;
+        return { yoy: c.avg / p.avg - 1, forecast: c.forecast };
+    };
+    // eixo de trimestres = trimestres dos meses spot visíveis (segue o range da tabela de cima)
+    const qmap = new Map();
+    (m.rows || []).forEach(r => { const q = qOf(r.month); qmap.set(qAbs(r.year, q), { y: r.year, q }); });
+    const quarters = Array.from(qmap.values()).sort((a, b) => qAbs(a.y, a.q) - qAbs(b.y, b.q));
+
+    const existing = document.getElementById('cost-index-lag-compare-card');
+    const card = existing || document.createElement('section');
+    card.id = 'cost-index-lag-compare-card';
+    card.style.cssText = cardStyle('margin-bottom:24px;');
+    const th = (txt, bg) => `<th style="padding:7px 16px;background:${bg};color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;white-space:nowrap;">${txt}</th>`;
+    const tdBase = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};`;
+    const body = quarters.map(qq => {
+        const v = laggedYoY(qq.y, qq.q, VULC);
+        const p = laggedYoY(qq.y, qq.q, PEERS);
+        const isFc = (v && v.forecast) || (p && p.forecast);
+        const cell = r => `<td style="${tdBase}${r && r.forecast ? 'background:#FFFDE7;' : ''}">${ciLagFmtYoY(r ? r.yoy : NaN)}</td>`;
+        return `<tr>
+            <td style="${tdBase}font-weight:700;${isFc ? 'background:#FFFDE7;color:#4472C4;' : ''}">${qLabel(qq.y, qq.q)}${isFc ? 'E' : ''}</td>
+            ${cell(v)}
+            ${cell(p)}
+        </tr>`;
+    }).join('');
+    card.innerHTML = `
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
+            <div style="align-self:flex-start;">
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Cost Index — Effect by Company, Same Quarter</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Index YoY, %) · Vulcabras = cost ${VULC} months earlier · Peers = ${PEERS} months earlier · ${cur.toUpperCase()}</p>
+            </div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table style="border-collapse:collapse;min-width:420px;">
+                <thead><tr>${th('Quarter', '#082654')}${th('Index for Vulcabras', C.cereja)}${th('Index for Peers', C.cereja)}</tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>${m.forecast === 'on' ? `<div style="margin-top:8px;font-size:11px;color:${C.azulEscuro60};">E = inclui custo em forecast (último valor mantido constante)</div>` : ''}`;
     if (!existing) content.appendChild(card);
 }
 
