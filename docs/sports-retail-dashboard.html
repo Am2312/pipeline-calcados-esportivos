@@ -4972,7 +4972,7 @@ function renderCostIndexLagCard() {
         const prevVal = prev ? prev[cur] : null;
         const yoy = (Number.isFinite(val) && Number.isFinite(prevVal) && prevVal !== 0) ? (val / prevVal - 1) : null;
         const fc = r.forecast;
-        const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};`;
+        const td = `padding:5px 16px;text-align:center;font-size:13px;color:${C.azulEscuro};border-bottom:1px solid #E6EBF1;`;
         return `<tr>
             <td style="${td};font-weight:700;">${monthLabel(r.year, r.month)}${fc ? ' *' : ''}</td>
             <td style="${td}">${ciLagShiftQuarter(r.year, r.month, CI_LAG_VULC_MONTHS)}</td>
