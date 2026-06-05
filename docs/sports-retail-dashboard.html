@@ -4955,20 +4955,31 @@ function renderCostIndexLagCard() {
     renderCostIndexLagCompareCard();
 }
 
-/* ===== Cost Index — Effect by Company, Same Quarter (YoY) =====
-   Card abaixo da tabela de lag. Segue o MESMO ciLagState (moeda/forecast/range).
-   Eixo = trimestres dos meses spot visíveis. Por trimestre Q:
+/* ===== Cost Index — Effect on the Company's Results (YoY) =====
+   Card abaixo da tabela de lag, com CONTROLES PRÓPRIOS (ciLagCompareState):
+   Currency (USD/BRL), From/To por TRIMESTRE, Forecast On/Off.
+   Eixo = trimestres no range escolhido. Por trimestre Q:
      Index for Vulcabras = YoY do custo médio de (Q − VULC_MONTHS)  [verticalizada: custo chega antes]
      Index for Peers     = YoY do custo médio de (Q − PEERS_MONTHS)
    YoY = média trimestral do índice ÷ mesmo trimestre do ano anterior − 1. */
+const ciLagCompareState = { currency: 'usd', forecast: 'off', from: null, to: null };
+
+function setCiLagCompareCurrency() { const el = document.getElementById('ci-lag-cmp-currency'); if (el) ciLagCompareState.currency = el.value; renderCostIndexLagCompareCard(); }
+function setCiLagCompareForecast() { const el = document.getElementById('ci-lag-cmp-forecast'); if (el) ciLagCompareState.forecast = el.value; ciLagCompareState.from = null; ciLagCompareState.to = null; renderCostIndexLagCompareCard(); }
+function setCiLagCompareRange() { const f = document.getElementById('ci-lag-cmp-from'), t = document.getElementById('ci-lag-cmp-to'); if (f) ciLagCompareState.from = f.value; if (t) ciLagCompareState.to = t.value; renderCostIndexLagCompareCard(); }
+
 function renderCostIndexLagCompareCard() {
     const content = document.getElementById('tab-content');
-    const m = ciLagModel();
+    const m = window.buildCostIndexLagModel
+        ? window.buildCostIndexLagModel({ currency: ciLagCompareState.currency, forecast: ciLagCompareState.forecast })
+        : { currency: ciLagCompareState.currency, forecast: ciLagCompareState.forecast, months: [], VULC_MONTHS: 5, PEERS_MONTHS: 10 };
     const cur = m.currency;
     const VULC = m.VULC_MONTHS || 5, PEERS = m.PEERS_MONTHS || 10;
     const qOf = mm => Math.floor((mm - 1) / 3) + 1;
     const qLabel = (y, q) => q + 'Q' + String(y).slice(-2);
+    const qKey = (y, q) => y + '-Q' + q;
     const qAbs = (y, q) => y * 4 + (q - 1);
+    const parseQ = k => { const p = String(k).split('-Q'); return { y: +p[0], q: +p[1] }; };
     const amOf = (y, mm) => y * 12 + (mm - 1);
     // índice mensal (moeda atual) + flag forecast, indexados pelo mês absoluto
     const idxByAm = new Map(), fcByAm = new Map();
@@ -4986,10 +4997,29 @@ function renderCostIndexLagCompareCard() {
         if (!c || !p || !p.avg) return null;
         return { yoy: c.avg / p.avg - 1, forecast: c.forecast };
     };
-    // eixo de trimestres = trimestres dos meses spot visíveis (segue o range da tabela de cima)
-    const qmap = new Map();
-    (m.rows || []).forEach(r => { const q = qOf(r.month); qmap.set(qAbs(r.year, q), { y: r.year, q }); });
-    const quarters = Array.from(qmap.values()).sort((a, b) => qAbs(a.y, a.q) - qAbs(b.y, b.q));
+    // todos os trimestres disponíveis (a partir dos meses do modelo) p/ os seletores
+    const qseen = new Map();
+    (m.months || []).forEach(mo => { const q = qOf(mo.month), k = qKey(mo.year, q); if (!qseen.has(k)) qseen.set(k, { y: mo.year, q: q, key: k, label: qLabel(mo.year, q), abs: qAbs(mo.year, q) }); });
+    const allQ = Array.from(qseen.values()).sort((a, b) => a.abs - b.abs);
+    const keys = allQ.map(x => x.key);
+    // resolve from/to (default From = 1º trimestre do ano corrente; To = último trimestre)
+    let from = ciLagCompareState.from, to = ciLagCompareState.to;
+    const defFrom = qKey((new Date()).getFullYear(), 1);
+    if (!from || keys.indexOf(from) < 0) from = keys.indexOf(defFrom) >= 0 ? defFrom : keys[0];
+    if (!to || keys.indexOf(to) < 0) to = keys[keys.length - 1];
+    if (keys.length && keys.indexOf(from) > keys.indexOf(to)) { const tmp = from; from = to; to = tmp; }
+    ciLagCompareState.from = from; ciLagCompareState.to = to;
+    const fromAbs = from ? qAbs(parseQ(from).y, parseQ(from).q) : -Infinity;
+    const toAbs = to ? qAbs(parseQ(to).y, parseQ(to).q) : Infinity;
+    const quarters = allQ.filter(x => x.abs >= fromAbs && x.abs <= toAbs);
+
+    const qSelect = (id, current) => `<select id="${id}" class="df-input" onchange="setCiLagCompareRange()" style="width:96px;">${allQ.map(x => `<option value="${x.key}" ${current === x.key ? 'selected' : ''}>${x.label}</option>`).join('')}</select>`;
+    const controls = `<div class="imports-controls" style="display:flex;align-items:center;justify-content:flex-end;gap:24px;flex-wrap:wrap;margin-left:auto;">
+        ${selectBlock('Currency', `<select id="ci-lag-cmp-currency" class="df-input" onchange="setCiLagCompareCurrency()" style="width:104px;"><option value="usd" ${cur === 'usd' ? 'selected' : ''}>USD</option><option value="brl" ${cur === 'brl' ? 'selected' : ''}>BRL</option></select>`)}
+        ${selectBlock('From', qSelect('ci-lag-cmp-from', from))}
+        ${selectBlock('To', qSelect('ci-lag-cmp-to', to))}
+        ${selectBlock('Forecast', `<select id="ci-lag-cmp-forecast" class="df-input" onchange="setCiLagCompareForecast()" style="width:90px;"><option value="off" ${m.forecast === 'off' ? 'selected' : ''}>Off</option><option value="on" ${m.forecast === 'on' ? 'selected' : ''}>On</option></select>`)}
+    </div>`;
 
     const existing = document.getElementById('cost-index-lag-compare-card');
     const card = existing || document.createElement('section');
@@ -5011,9 +5041,10 @@ function renderCostIndexLagCompareCard() {
     card.innerHTML = `
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
             <div style="align-self:flex-start;">
-                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Cost Index — Effect by Company, Same Quarter</h3>
-                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Index YoY, %) · Vulcabras = cost ${VULC} months earlier · Peers = ${PEERS} months earlier · ${cur.toUpperCase()}</p>
+                <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Cost Index — Effect on the Company's Results</h3>
+                <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Percentage)</p>
             </div>
+            ${controls}
         </div>
         <div style="overflow-x:auto;">
             <table style="border-collapse:collapse;min-width:420px;">
