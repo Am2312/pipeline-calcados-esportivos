@@ -4896,8 +4896,9 @@ function renderCostIndexCard() {
     const card = existing || document.createElement('section');
     card.id = 'cost-index-card';
     card.style.cssText = cardStyle('margin-bottom:24px;');
+    const ciDef = (window.DASHBOARD_CHARTS || []).find(c => c.id === 'cost-index') || {};   // título/subtítulo da RECEITA ÚNICA (charts-registry.js) — unificado com o PPT
     card.innerHTML = `
-            ${sectionTitle(`${cfg.label} - Historical Distribution`, '(x)', controls)}
+            ${sectionTitle(ciDef.titulo || `${cfg.label} - Historical Distribution`, ciDef.unidade || '(x)', controls)}
             <div style="position:relative;height:630px;margin-top:-18px;"><canvas id="cost-index-chart"></canvas></div>
         `;
     if (!existing) content.appendChild(card);
