@@ -4989,7 +4989,7 @@ function renderCostIndexLagCompareCard() {
         const startM = (rq - 1) * 3 + 1;
         const ams = [0, 1, 2].map(k => amOf(ry, startM + k) - L);
         const vals = ams.map(a => idxByAm.get(a)).filter(Number.isFinite);
-        if (vals.length < 3) return null;   // exige o trimestre cheio (3 meses) — evita parcial disfarçado de trimestral
+        if (!vals.length) return null;   // calcula com os meses disponíveis; n.a. só quando não há nenhum dado-fonte
         return { avg: vals.reduce((s, x) => s + x, 0) / vals.length, forecast: ams.some(a => fcByAm.get(a) === true) };
     };
     const laggedYoY = (ry, rq, L) => {
@@ -5041,7 +5041,7 @@ function renderCostIndexLagCompareCard() {
         const isFc = (v && v.forecast) || (p && p.forecast);
         const cell = r => `<td style="${tdBase}${r && r.forecast ? 'background:#FFFDE7;' : ''}">${ciLagFmtYoY(r ? r.yoy : NaN)}</td>`;
         return `<tr>
-            <td style="${tdBase}font-weight:700;${isFc ? 'background:#FFFDE7;color:#4472C4;' : ''}">${qLabel(qq.y, qq.q)}${isFc ? 'E' : ''}</td>
+            <td style="${tdBase}font-weight:700;">${qLabel(qq.y, qq.q)}${isFc ? 'E' : ''}</td>
             ${cell(v)}
             ${cell(p)}
         </tr>`;
