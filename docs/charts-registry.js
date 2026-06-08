@@ -2461,6 +2461,47 @@ registerChart({
 });
 
 registerChart({
+  id: 'caged-churn', titulo: "Vulcabras' Factory Churn", unidade: '(Percentage)', dashboardNative: true,
+  legenda: [{ cor: '#021C45', texto: 'Churn' }, { cor: '#FF4F6C', texto: 'Average' }],
+  desenhar(canvas) { regClaimId(canvas, 'caged-churn-chart'); if (typeof renderCagedChurnChart === 'function') renderCagedChurnChart(); return Chart.getChart(canvas); },
+  montarControles() {
+    return `<label>View <select data-churn="grain">
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option></select></label>
+            <label>Base <select data-churn="base">
+              <option value="spot">Spot</option>
+              <option value="ltm">LTM</option></select></label>
+            <label>From <select data-churn="from"></select></label>
+            <label>To <select data-churn="to"></select></label>`;
+  },
+  ligarControles(box, redesenhar) {
+    const g = box.querySelector('[data-churn="grain"]');
+    const b = box.querySelector('[data-churn="base"]');
+    const fromSel = box.querySelector('[data-churn="from"]');
+    const toSel = box.querySelector('[data-churn="to"]');
+    const popular = () => {
+      cagedChurnState.grain = g.value;
+      cagedChurnState.base = (cagedChurnState.grain === 'annual') ? 'spot' : b.value;
+      ensureCagedChurnRange();
+      const rows = cagedChurnPeriodRows();
+      const ops = rows.map(r => `<option value="${r.key}">${r.label}</option>`).join('');
+      fromSel.innerHTML = ops; toSel.innerHTML = ops;
+      fromSel.value = cagedChurnState.from; toSel.value = cagedChurnState.to;
+      b.disabled = (cagedChurnState.grain === 'annual');
+    };
+    g.value = cagedChurnState.grain; b.value = cagedChurnState.base;
+    popular();
+    g.addEventListener('change', () => { cagedChurnState.from = null; cagedChurnState.to = null; popular(); redesenhar(); });
+    b.addEventListener('change', () => { cagedChurnState.base = b.value; cagedChurnState.from = null; cagedChurnState.to = null; popular(); redesenhar(); });
+    fromSel.addEventListener('change', () => { cagedChurnState.from = fromSel.value; redesenhar(); });
+    toSel.addEventListener('change', () => { cagedChurnState.to = toSel.value; redesenhar(); });
+  },
+  estadoAtual() { return { grain: cagedChurnState.grain, base: cagedChurnState.base, from: cagedChurnState.from, to: cagedChurnState.to }; },
+  aplicarEstado(e) { if (e) Object.assign(cagedChurnState, e); }
+});
+
+registerChart({
   id: 'headcount-volume', titulo: 'Factory Headcount Growth vs Volume Growth', unidade: '(Percentage)', dashboardNative: true,
   legenda: [{ cor: '#021C45', texto: 'Employees YoY' }, { cor: '#6FDDCB', texto: 'Volume YoY' }],
   desenhar(canvas) { regClaimId(canvas, 'presentation-volume-yoy-chart'); renderPresentationVolumeYoyChart(); return Chart.getChart(canvas); },
