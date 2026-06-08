@@ -1657,6 +1657,72 @@ function refreshTamTableCard() {
     bindTamTableControls();
 }
 
+// ===== Mizuno Brazil revenue (Mizuno Global IR "Brazil distributor sales", JPY->BRL via Bloomberg USDBRL/USDJPY quarterly avg) =====
+// Source: corp.mizuno.com 決算説明資料 slide "ブラジル現地代理店 売上" (oku-yen), current/113th-period restated basis.
+// Quarter labels are Brazil-calendar (Mizuno fiscal quarters are already calendar-aligned). R$ mn.
+// To update each quarter: append [label, R$ mn] to .q (and the completed calendar year to .y).
+const MIZUNO_BR_REV = {
+    q: [['2Q23',178.3],['3Q23',143.3],['4Q23',181.1],['1Q24',193.5],['2Q24',157.6],['3Q24',167.2],['4Q24',210.8],['1Q25',245.4],['2Q25',189.5],['3Q25',187.0],['4Q25',210.3],['1Q26',237.7]],
+    y: [['2024',729.1],['2025',832.2]]
+};
+
+function buildMizunoRevTableHtml() {
+    const mzYoy = v => v == null ? `<span style="color:#667D99;">n.a.</span>` : `<span style="color:${v >= 0 ? '#0D8B80' : '#C2384E'};">${(v > 0 ? '+' : '') + tamFmtPct(v, 0)}</span>`;
+    const gapCell = `<td style="width:22px;min-width:22px;padding:0;border:none;background:transparent;"></td>`;
+    const gapHead = `<th style="width:22px;min-width:22px;padding:0;border:none;background:transparent;"></th>`;
+    const yoyCellStyle = 'color:#021C45;font-size:11.5px;line-height:1.35;';
+    // --- Quarterly ---
+    const ql = MIZUNO_BR_REV.q.map(r => r[0]), qv = MIZUNO_BR_REV.q.map(r => r[1]);
+    const qYoY = qv.map((v, i) => (i < 4 || !qv[i - 4]) ? null : (v / qv[i - 4] - 1) * 100);
+    const qQoQ = qv.map((v, i) => (i < 1 || !qv[i - 1]) ? null : (v / qv[i - 1] - 1) * 100);
+    const qVar = (qv.length >= 2 && qv[0]) ? (qv[qv.length - 1] / qv[0] - 1) * 100 : null;
+    const qHead = `<tr>
+        <th style="background:#082654;color:#FFFFFF;text-align:left;padding:14px 14px;font-size:12.5px;font-weight:700;width:150px;min-width:150px;position:sticky;left:0;z-index:2;border-radius:6px 0 0 0;"></th>
+        ${ql.map((l, i) => `<th style="background:#082654;color:#FFFFFF;font-size:12.5px;font-weight:700;padding:14px 10px;text-align:center;white-space:nowrap;${i === ql.length - 1 ? 'border-radius:0 6px 0 0;' : ''}">${l}</th>`).join('')}
+        ${gapHead}
+        <th style="background:#FF5B76;color:#FFFFFF;font-size:12.5px;font-weight:700;padding:14px 12px;text-align:center;white-space:nowrap;width:96px;min-width:96px;border-radius:6px 6px 0 0;">Var</th>
+    </tr>`;
+    const qRows = `<tr>
+        <td style="padding:6px 14px;font-size:13px;font-weight:700;color:#021C45;position:sticky;left:0;background:#A7DDDB;white-space:nowrap;">Receita</td>
+        ${qv.map(v => `<td style="text-align:center;padding:6px 10px;font-size:13px;font-weight:700;color:#021C45;background:#A7DDDB;">${tamFmtNum(v, 0)}</td>`).join('')}
+        ${gapCell}
+        <td style="text-align:center;padding:6px 12px;font-size:13px;font-weight:700;color:#021C45;background:#FFFFFF;white-space:nowrap;">${qVar == null ? 'n.a.' : (qVar > 0 ? '+' : '') + tamFmtPct(qVar, 0)}</td>
+    </tr>
+    <tr style="background:#FFFFFF;">
+        <td style="padding:6px 14px 2px;${yoyCellStyle}position:sticky;left:0;background:#FFFFFF;white-space:nowrap;">YoY (%)</td>
+        ${qYoY.map(v => `<td style="text-align:center;padding:6px 10px 2px;${yoyCellStyle}">${mzYoy(v)}</td>`).join('')}
+        ${gapCell}<td style="background:#FFFFFF;"></td>
+    </tr>
+    <tr style="background:#FFFFFF;">
+        <td style="padding:2px 14px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;position:sticky;left:0;background:#FFFFFF;white-space:nowrap;">QoQ (%)</td>
+        ${qQoQ.map(v => `<td style="text-align:center;padding:2px 10px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;">${mzYoy(v)}</td>`).join('')}
+        ${gapCell}<td style="border-bottom:1px solid #CFD8E3;background:#FFFFFF;"></td>
+    </tr>`;
+    const qTable = `<div style="overflow-x:auto;"><table style="border-collapse:separate;border-spacing:0;width:100%;min-width:1080px;background:#FFFFFF;"><thead>${qHead}</thead><tbody>${qRows}</tbody></table></div>`;
+    // --- Annual (calendar, complete years) ---
+    const yl = MIZUNO_BR_REV.y.map(r => r[0]), yv = MIZUNO_BR_REV.y.map(r => r[1]);
+    const yYoY = yv.map((v, i) => (i < 1 || !yv[i - 1]) ? null : (v / yv[i - 1] - 1) * 100);
+    const yHead = `<tr>
+        <th style="background:#082654;color:#FFFFFF;text-align:left;padding:12px 14px;font-size:12.5px;font-weight:700;width:150px;min-width:150px;border-radius:6px 0 0 0;"></th>
+        ${yl.map((l, i) => `<th style="background:#082654;color:#FFFFFF;font-size:12.5px;font-weight:700;padding:12px 16px;text-align:center;white-space:nowrap;${i === yl.length - 1 ? 'border-radius:0 6px 0 0;' : ''}">${l}</th>`).join('')}
+    </tr>`;
+    const yRows = `<tr>
+        <td style="padding:6px 14px;font-size:13px;font-weight:700;color:#021C45;background:#A7DDDB;white-space:nowrap;">Receita</td>
+        ${yv.map(v => `<td style="text-align:center;padding:6px 16px;font-size:13px;font-weight:700;color:#021C45;background:#A7DDDB;">${tamFmtNum(v, 0)}</td>`).join('')}
+    </tr>
+    <tr style="background:#FFFFFF;">
+        <td style="padding:6px 14px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;white-space:nowrap;">YoY (%)</td>
+        ${yYoY.map(v => `<td style="text-align:center;padding:6px 16px 10px;${yoyCellStyle}border-bottom:1px solid #CFD8E3;">${mzYoy(v)}</td>`).join('')}
+    </tr>`;
+    const yTable = `<div style="overflow-x:auto;max-width:520px;"><table style="border-collapse:separate;border-spacing:0;width:100%;background:#FFFFFF;"><thead>${yHead}</thead><tbody>${yRows}</tbody></table></div>`;
+    const header = `<div style="margin:2px 0 12px 0;">
+        <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin:0 0 4px 0;">Mizuno &mdash; Receita Brasil</h3>
+        <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(R$ milh&otilde;es, Percentage) &middot; venda do licenciado local (base de royalty) &middot; fonte: Mizuno Global IR, c&acirc;mbio Bloomberg</p>
+    </div>`;
+    const annualLabel = `<p style="color:${C.azulEscuro60};font-size:11.5px;font-weight:600;margin:20px 0 8px 0;text-transform:uppercase;letter-spacing:0.04em;">Ano-calend&aacute;rio fechado</p>`;
+    return `${header}${qTable}${annualLabel}${yTable}`;
+}
+
 // ===== Footwear value-growth decomposition: Price x Volume =====
 // Total = YoY of Footwear retail value (Euromonitor). Volume = YoY of apparent
 // consumption (Abicalcados). Price derived: (1+price) = (1+total)/(1+volume).
@@ -1739,6 +1805,11 @@ function renderSportswearTamCards() {
     tableCard.innerHTML = buildTamTableHtml();
     content.appendChild(tableCard);
     bindTamTableControls();
+    const mizunoCard = document.createElement('section');
+    mizunoCard.id = 'mizuno-rev-card';
+    mizunoCard.style.cssText = cardStyle('margin-bottom:24px;');
+    mizunoCard.innerHTML = buildMizunoRevTableHtml();
+    content.appendChild(mizunoCard);
     const decompCard = document.createElement('section');
     decompCard.id = 'footwear-decomp-card';
     decompCard.style.cssText = cardStyle('margin-bottom:24px;');
