@@ -2463,7 +2463,7 @@ registerChart({
 registerChart({
   id: 'caged-churn', titulo: "Vulcabras' Factory Churn", unidade: '(Percentage)', dashboardNative: true,
   legenda: [{ cor: '#021C45', texto: 'Churn' }, { cor: '#FF4F6C', texto: 'Average' }],
-  desenhar(canvas) { regClaimId(canvas, 'caged-churn-chart'); if (typeof renderCagedChurnChart === 'function') renderCagedChurnChart(); return Chart.getChart(canvas); },
+  desenhar(canvas) { regClaimId(canvas, 'caged-churn-chart'); var D = window.DASH || window; if (D && typeof D.renderCagedChurnChart === 'function') D.renderCagedChurnChart(); return Chart.getChart(canvas); },
   montarControles() {
     return `<label>View <select data-churn="grain">
               <option value="monthly">Monthly</option>
@@ -2476,29 +2476,30 @@ registerChart({
             <label>To <select data-churn="to"></select></label>`;
   },
   ligarControles(box, redesenhar) {
+    var D = window.DASH || window; var st = D.cagedChurnState;
     const g = box.querySelector('[data-churn="grain"]');
     const b = box.querySelector('[data-churn="base"]');
     const fromSel = box.querySelector('[data-churn="from"]');
     const toSel = box.querySelector('[data-churn="to"]');
     const popular = () => {
-      cagedChurnState.grain = g.value;
-      cagedChurnState.base = (cagedChurnState.grain === 'annual') ? 'spot' : b.value;
-      ensureCagedChurnRange();
-      const rows = cagedChurnPeriodRows();
+      st.grain = g.value;
+      st.base = (st.grain === 'annual') ? 'spot' : b.value;
+      D.ensureCagedChurnRange();
+      const rows = D.cagedChurnPeriodRows();
       const ops = rows.map(r => `<option value="${r.key}">${r.label}</option>`).join('');
       fromSel.innerHTML = ops; toSel.innerHTML = ops;
-      fromSel.value = cagedChurnState.from; toSel.value = cagedChurnState.to;
-      b.disabled = (cagedChurnState.grain === 'annual');
+      fromSel.value = st.from; toSel.value = st.to;
+      b.disabled = (st.grain === 'annual');
     };
-    g.value = cagedChurnState.grain; b.value = cagedChurnState.base;
+    g.value = st.grain; b.value = st.base;
     popular();
-    g.addEventListener('change', () => { cagedChurnState.from = null; cagedChurnState.to = null; popular(); redesenhar(); });
-    b.addEventListener('change', () => { cagedChurnState.base = b.value; cagedChurnState.from = null; cagedChurnState.to = null; popular(); redesenhar(); });
-    fromSel.addEventListener('change', () => { cagedChurnState.from = fromSel.value; redesenhar(); });
-    toSel.addEventListener('change', () => { cagedChurnState.to = toSel.value; redesenhar(); });
+    g.addEventListener('change', () => { st.from = null; st.to = null; popular(); redesenhar(); });
+    b.addEventListener('change', () => { st.base = b.value; st.from = null; st.to = null; popular(); redesenhar(); });
+    fromSel.addEventListener('change', () => { st.from = fromSel.value; redesenhar(); });
+    toSel.addEventListener('change', () => { st.to = toSel.value; redesenhar(); });
   },
-  estadoAtual() { return { grain: cagedChurnState.grain, base: cagedChurnState.base, from: cagedChurnState.from, to: cagedChurnState.to }; },
-  aplicarEstado(e) { if (e) Object.assign(cagedChurnState, e); }
+  estadoAtual() { var st = (window.DASH || window).cagedChurnState; return { grain: st.grain, base: st.base, from: st.from, to: st.to }; },
+  aplicarEstado(e) { if (e) Object.assign((window.DASH || window).cagedChurnState, e); }
 });
 
 registerChart({
