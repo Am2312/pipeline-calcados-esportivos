@@ -208,7 +208,7 @@ const C = {
     cereja: '#FF4F6C', berinjela: '#5A0F4A', azulClaro: '#18A6F1', turquesa: '#6FDDCB', branco: '#FFFFFF'
 };
 
-const TABS = [{ id: 'cost-index', label: 'Cost Index' }, { id: 'caged', label: 'CAGED' }, { id: 'industry-data', label: 'Sector Data' }, { id: 'market-share', label: 'Market Share' }, { id: 'ecom-data', label: 'E-commerce Data' }, { id: 'imports-data', label: 'Imports Data' }, { id: 'global-companies', label: 'Global Companies' }, { id: 'methodology', label: 'Methodology' }];
+const TABS = [{ id: 'cost-index', label: 'Cost Index' }, { id: 'caged', label: 'CAGED' }, { id: 'industry-data', label: 'Sector Data' }, { id: 'market-share', label: 'Market Share' }, { id: 'mizuno', label: 'Mizuno' }, { id: 'ecom-data', label: 'E-commerce Data' }, { id: 'imports-data', label: 'Imports Data' }, { id: 'global-companies', label: 'Global Companies' }, { id: 'methodology', label: 'Methodology' }];
 let activeTab = 'cost-index';
 let importsChartInstance = null;
 let industryChartInstance = null;
@@ -1723,6 +1723,15 @@ function buildMizunoRevTableHtml() {
     return `${header}${qTable}${annualLabel}${yTable}`;
 }
 
+function renderMizunoTab() {
+    const content = document.getElementById('tab-content');
+    const card = document.createElement('section');
+    card.id = 'mizuno-rev-card';
+    card.style.cssText = cardStyle('margin-bottom:24px;');
+    card.innerHTML = buildMizunoRevTableHtml();
+    content.appendChild(card);
+}
+
 // ===== Footwear value-growth decomposition: Price x Volume =====
 // Total = YoY of Footwear retail value (Euromonitor). Volume = YoY of apparent
 // consumption (Abicalcados). Price derived: (1+price) = (1+total)/(1+volume).
@@ -1805,11 +1814,6 @@ function renderSportswearTamCards() {
     tableCard.innerHTML = buildTamTableHtml();
     content.appendChild(tableCard);
     bindTamTableControls();
-    const mizunoCard = document.createElement('section');
-    mizunoCard.id = 'mizuno-rev-card';
-    mizunoCard.style.cssText = cardStyle('margin-bottom:24px;');
-    mizunoCard.innerHTML = buildMizunoRevTableHtml();
-    content.appendChild(mizunoCard);
     const decompCard = document.createElement('section');
     decompCard.id = 'footwear-decomp-card';
     decompCard.style.cssText = cardStyle('margin-bottom:24px;');
@@ -5424,6 +5428,11 @@ function renderContent() {
     if (activeTab === 'market-share') {
         renderMarketShareCard();
         document.getElementById('footer-source').textContent = 'Source: Euromonitor Brand Shares (Sportswear), retail value RSP. Vulcabras = Olympikus + Mizuno + Under Armour.';
+        return;
+    }
+    if (activeTab === 'mizuno') {
+        renderMizunoTab();
+        document.getElementById('footer-source').textContent = 'Source: Mizuno Global IR (Brazil local-distributor sales); FX Bloomberg USDBRL/USDJPY quarterly average';
         return;
     }
     if (activeTab === 'cost-index') {
