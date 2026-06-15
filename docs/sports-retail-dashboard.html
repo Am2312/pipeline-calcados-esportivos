@@ -5174,8 +5174,12 @@ function renderCostIndexCard() {
     card.id = 'cost-index-card';
     card.style.cssText = cardStyle('margin-bottom:24px;');
     const ciDef = (window.DASHBOARD_CHARTS || []).find(c => c.id === 'cost-index') || {};   // título/subtítulo da RECEITA ÚNICA (charts-registry.js) — unificado com o PPT
+    // título varia com a caixa "Variable": blended usa "Petrochemical Cost Index"; demais séries usam "<série> Cost Index"
+    const ciTitle = costIndexState.variable === 'blended'
+        ? (cfg.label || 'Petrochemical Cost Index')
+        : `${cfg.label} Cost Index`;
     card.innerHTML = `
-            ${sectionTitle(ciDef.titulo || `${cfg.label} - Historical Distribution`, ciDef.unidade || '(x)', controls)}
+            ${sectionTitle(ciTitle, ciDef.unidade || '(x)', controls)}
             <div style="position:relative;height:630px;margin-top:-18px;"><canvas id="cost-index-chart"></canvas></div>
         `;
     if (!existing) content.appendChild(card);
