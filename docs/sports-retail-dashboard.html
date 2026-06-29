@@ -330,14 +330,19 @@ function cagedActiveBase() { return (CAGED_COMPANIES[cagedCompany] || CAGED_COMP
 function cagedCompanyPoss() { return (CAGED_COMPANIES[cagedCompany] || CAGED_COMPANIES.vulcabras).poss; }
 function cagedIsCompare() { return cagedCompany === 'compare'; }
 function cagedScopeLabel() { return cagedIsCompare() ? 'Vulcabras × Grupo Dass' : cagedCompanyPoss() + ' Factories'; }
-function cagedCompanySelectHtml() {
-    const opts = [['vulcabras', 'Vulcabras'], ['dass', 'Grupo Dass'], ['compare', 'Vulcabras × Grupo Dass']];
-    return selectBlock('Company', `<select class="df-input" onchange="setCagedCompany(this.value)" style="width:160px;">`
-        + opts.map(([v, l]) => `<option value="${v}" ${v === cagedCompany ? 'selected' : ''}>${l}</option>`).join('')
+const CAGED_CHART_STATES = { netadds: cagedState, comparison: cagedMonthlyComparisonState, jobs: cagedJobsState, table: cagedJobsTableState, volume: cagedVolumeYoyState, churn: cagedChurnState };
+const CAGED_COMPARE_CHARTS = new Set(['netadds', 'jobs', 'churn']);  // só estes oferecem o modo comparação (linha)
+function cagedChartCompany(id) { const s = CAGED_CHART_STATES[id]; return (s && s.company) || 'vulcabras'; }
+function cagedCompanySelectHtml(id) {
+    const cur = cagedChartCompany(id);
+    const opts = [['vulcabras', 'Vulcabras'], ['dass', 'Grupo Dass']];
+    if (CAGED_COMPARE_CHARTS.has(id)) opts.push(['compare', 'Vulcabras × Grupo Dass']);
+    return selectBlock('Company', `<select class="df-input" onchange="setCagedChartCompany('${id}', this.value)" style="width:160px;">`
+        + opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('')
         + `</select>`);
 }
-function setCagedCompany(v) { if (v !== 'compare' && !CAGED_COMPANIES[v]) return; cagedCompany = v; renderCagedCard(); }
-// --- modo comparação Vulcabras × Grupo Dass (gráficos de linha, 2 séries) ---
+function setCagedChartCompany(id, v) { const s = CAGED_CHART_STATES[id]; if (!s) return; if (v !== 'compare' && !CAGED_COMPANIES[v]) return; s.company = v; renderCagedCard(); }
+// --- modo comparação Vulcabras × Grupo Dass: gráficos de linha idênticos ao "SSS Comparison" do varejo-alimentar-dashboard ---
 function withCagedCompany(c, fn) { const prev = cagedCompany; cagedCompany = c; try { return fn(); } finally { cagedCompany = prev; } }
 function cagedCompareSeries(getter) {
     const vu = withCagedCompany('vulcabras', getter) || [];
@@ -347,24 +352,113 @@ function cagedCompareSeries(getter) {
     const keys = [...meta.keys()].sort((a, b) => String(a).localeCompare(String(b)));
     return { keys, labels: keys.map(k => meta.get(k)), vu: new Map(vu.map(r => [r.key, r])), da: new Map(da.map(r => [r.key, r])) };
 }
-function buildCagedCompareLine(el, labels, vuVals, daVals, opts) {
+function cagedNiceLineAxis(values) {
+    const finite = values.filter(Number.isFinite);
+    if (!finite.length) return { min: -2, max: 2 };
+    const lo = Math.min(...finite), hi = Math.max(...finite);
+    const range = Math.max(hi - lo, 1.5);
+    const pad = Math.max(range * 0.16, 0.6);
+    return { min: Math.floor((lo - pad) * 2) / 2, max: Math.ceil((hi + pad) * 2) / 2 };
+}
+function placeCagedCenteredLabels(pills, chartArea, canvasWidth) {
+    const pad = 2, gap = 4;
+    const rightBound = canvasWidth != null ? canvasWidth : chartArea.right;
+    const clampY = (pill, y) => Math.max(chartArea.top + pad, Math.min(y, chartArea.bottom - pill.h - pad));
+    const clampX = pill => { const center = pill.anchorX || pill.x + pill.w / 2; return Math.max(0, Math.min(center - pill.w / 2, rightBound - pill.w - pad)); };
+    const groups = [];
+    pills.forEach(pill => {
+        const center = pill.anchorX || pill.x + pill.w / 2;
+        let group = groups.find(candidate => Math.abs(candidate.center - center) < 8);
+        if (!group) { group = { center, items: [] }; groups.push(group); }
+        group.items.push({ ...pill, x: clampX(pill) });
+    });
+    return groups.flatMap(group => {
+        const items = group.items.slice().sort((a, b) => { const d = Number(b.value) - Number(a.value); return Math.abs(d) > 0.0001 ? d : a.pointY - b.pointY; }).map(pill => ({ ...pill, y: clampY(pill, pill.y) }));
+        items.forEach((pill, index) => { if (index === 0) return; const prev = items[index - 1]; pill.y = Math.max(pill.y, prev.y + prev.h + gap); });
+        const overflow = items.length ? items[items.length - 1].y + items[items.length - 1].h - (chartArea.bottom - pad) : 0;
+        if (overflow > 0) items.forEach(pill => { pill.y -= overflow; });
+        const underflow = items.length ? chartArea.top + pad - items[0].y : 0;
+        if (underflow > 0) items.forEach(pill => { pill.y += underflow; });
+        items.forEach((pill, index) => { if (index === 0) return; const prev = items[index - 1]; pill.y = Math.max(pill.y, prev.y + prev.h + gap); });
+        return items;
+    });
+}
+function cagedComparePctFmt(v) { const n = Number(v); if (!Number.isFinite(n)) return ''; const a = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); return n < 0 ? `(${a}%)` : `${a}%`; }
+function cagedCompareCountFmt(v) { const r = Math.round(Number(v)); if (!Number.isFinite(r)) return ''; return r < 0 ? `(${cagedNumber(Math.abs(r))})` : cagedNumber(r); }
+// builder idêntico ao buildNielsenMultiLineChart (pills coloridas por série, linha de eixo, eixo Y oculto)
+function buildCagedCompareLine(el, labels, datasets, opts) {
     opts = opts || {};
+    const fmt = opts.valueFormatter || cagedCompareCountFmt;
+    const freq = opts.frequency || 'monthly';
+    const visibleValues = datasets.filter(d => !d.hidden).flatMap(d => d.data).filter(Number.isFinite);
+    const axis = cagedNiceLineAxis(visibleValues);
+    const labelIndices = labels.map((_, i) => i);
+    const labelPlugin = {
+        id: 'cagedComparePills',
+        afterDatasetsDraw(chart) {
+            const { ctx, chartArea } = chart;
+            const pills = [];
+            chart.data.datasets.forEach((ds, di) => {
+                const meta = chart.getDatasetMeta(di);
+                if (!chart.isDatasetVisible(di)) return;
+                labelIndices.forEach(i => {
+                    const pt = meta.data[i]; const val = ds.data[i];
+                    if (!pt || !Number.isFinite(val)) return;
+                    const text = fmt(val);
+                    ctx.save(); ctx.font = '700 11px Verdana';
+                    const bw = ctx.measureText(text).width + 14; const bh = 22;
+                    ctx.restore();
+                    pills.push({ x: pt.x - bw / 2, y: pt.y - bh / 2, w: bw, h: bh, pointY: pt.y, anchorX: pt.x, value: val, text, color: ds.borderColor });
+                });
+            });
+            placeCagedCenteredLabels(pills, chartArea, chart.width).forEach(pl => {
+                ctx.save();
+                ctx.fillStyle = pl.color;
+                roundedRect(ctx, pl.x, pl.y, pl.w, pl.h, 4);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '700 11px Verdana';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(pl.text, pl.x + pl.w / 2, pl.y + pl.h / 2 + 0.5);
+                ctx.restore();
+            });
+        }
+    };
+    const axisLinePlugin = {
+        id: 'cagedCompareAxisLine',
+        afterDraw(chart) {
+            const xScale = chart.scales.x; if (!xScale) return;
+            const ctx = chart.ctx;
+            ctx.save(); ctx.strokeStyle = C.azulEscuro20; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(8, xScale.top); ctx.lineTo(chart.width - 8, xScale.top); ctx.stroke();
+            ctx.restore();
+        }
+    };
     return new Chart(el.getContext('2d'), {
         type: 'line',
-        data: { labels, datasets: [
-            { label: 'Vulcabras', data: vuVals, borderColor: C.azulEscuro, backgroundColor: C.azulEscuro, borderWidth: 2.4, pointRadius: 0, tension: 0.25, spanGaps: true },
-            { label: 'Grupo Dass', data: daVals, borderColor: C.cereja, backgroundColor: C.cereja, borderWidth: 2.4, pointRadius: 0, tension: 0.25, spanGaps: true },
-        ] },
-        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => opts.pct ? `${c.dataset.label}: ${Number(c.parsed.y).toFixed(1)}%` : `${c.dataset.label}: ${cagedNumber(Math.round(c.parsed.y))}` } } },
+        plugins: [labelPlugin, axisLinePlugin],
+        data: { labels, datasets: datasets.map(ds => ({ ...ds, borderWidth: 2.5, backgroundColor: ds.borderColor, pointRadius: 3, pointBackgroundColor: ds.borderColor, pointBorderColor: ds.borderColor, pointHoverRadius: 5, pointHitRadius: 18, tension: 0.25 })) },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            layout: { padding: { left: 52, right: 52, top: 18, bottom: 0 } },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: 'rgba(2,28,69,0.94)', titleColor: '#9AA8BB', bodyColor: '#FFFFFF', borderColor: '#344F75', borderWidth: 1, cornerRadius: 8, padding: 12, callbacks: { label: c => `  ${c.dataset.label}: ${fmt(c.parsed.y)}` } }
+            },
             scales: {
-                y: { ticks: { color: C.azulEscuro40, font: { size: 11, family: 'Verdana' }, callback: v => opts.pct ? v + '%' : cagedNumber(v) }, grid: { color: '#EEF2F6' }, title: { display: !!opts.yTitle, text: opts.yTitle || '', color: C.azulEscuro60, font: { size: 13 } } },
-                x: { ticks: { color: C.azulEscuro40, font: { size: 11, family: 'Verdana' }, maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 26 }, grid: { display: false } }
+                x: { ticks: { autoSkip: false, minRotation: freq === 'annual' ? 0 : 90, maxRotation: freq === 'annual' ? 0 : 90, color: C.azulEscuro40, font: { size: 10.5, family: 'Verdana' }, callback: function(value) { return this.getLabelForValue(value); } }, grid: { display: false }, border: { display: false } },
+                y: { min: axis.min, max: axis.max, ticks: { display: false }, grid: { display: false }, border: { display: false } }
             }
         }
     });
 }
-function cagedCompareLegendHtml(id) { return `<div id="${id}">${legendHtml([{ label: 'Vulcabras', color: C.azulEscuro, datasetIndex: 0 }, { label: 'Grupo Dass', color: C.cereja, datasetIndex: 1 }])}</div>`; }
+function cagedCompareLegendHtml(id) {
+    const items = [{ label: 'Vulcabras', color: C.azulEscuro }, { label: 'Grupo Dass', color: C.cereja }];
+    return `<div id="${id}" class="nielsen-line-legend" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 0 0;">`
+        + items.map(it => `<span style="display:inline-flex;align-items:center;gap:7px;color:${C.azulEscuro};font-size:13px;font-weight:700;font-family:Verdana;"><span style="display:inline-block;width:8px;height:8px;background:${it.color};"></span>${it.label}</span>`).join('')
+        + `</div>`;
+}
 const COUNTRY_NAME_EN = {
     'Alemanha': 'Germany',
     'Argentina': 'Argentina',
@@ -2601,7 +2695,7 @@ function cagedControlsHtml() {
     ensureCagedRange();
     const baseDisabled = cagedState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${cagedCompanySelectHtml()}
+        ${cagedCompanySelectHtml('netadds')}
         ${selectBlock('Grain', `<select id="caged-grain-select" class="df-input" onchange="setCagedGrain()"><option value="monthly" ${cagedState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-base-select" class="df-input" onchange="setCagedBase()" ${baseDisabled}><option value="spot" ${cagedState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
         ${selectBlock('From', cagedPeriodSelect('caged-from-select', cagedState.from, 'setCagedRange()'))}
@@ -2779,7 +2873,7 @@ function cagedJobsControlsHtml() {
     // Caixa Grain vem da LISTA ÚNICA (window.CONTROL_SPECS['caged-jobs']) — mesma lista do PPT.
     const fixas = (window.regDashBoxes ? window.regDashBoxes('caged-jobs', cagedJobsState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${cagedCompanySelectHtml()}
+        ${cagedCompanySelectHtml('jobs')}
         ${fixas}
         ${selectBlock('From', cagedJobsPeriodSelect('caged-jobs-from-select', cagedJobsState.from, 'setCagedJobsRange()'))}
         ${selectBlock('To', cagedJobsPeriodSelect('caged-jobs-to-select', cagedJobsState.to, 'setCagedJobsRange()'))}
@@ -2874,7 +2968,7 @@ function cagedJobsTablePeriodSelect(id, current, onchangeFn) {
 function cagedJobsTableControlsHtml() {
     ensureCagedJobsTableRange();
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${cagedCompanySelectHtml()}
+        ${cagedCompanySelectHtml('table')}
         ${selectBlock('Grain', `<select id="caged-jobs-table-grain-select" class="df-input" onchange="setCagedJobsTableGrain()" style="width:126px;"><option value="monthly" ${cagedJobsTableState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedJobsTableState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedJobsTableState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('From', cagedJobsTablePeriodSelect('caged-jobs-table-from-select', cagedJobsTableState.from, 'setCagedJobsTableRange()'))}
         ${selectBlock('To', cagedJobsTablePeriodSelect('caged-jobs-table-to-select', cagedJobsTableState.to, 'setCagedJobsTableRange()'))}
@@ -3137,7 +3231,6 @@ function cagedVolumeYoyControlsHtml() {
     // Basis + Jobs Shift vêm da LISTA ÚNICA (window.CONTROL_SPECS['headcount-volume']) — mesma lista do PPT.
     const fixas = (window.regDashBoxes ? window.regDashBoxes('headcount-volume', cagedVolumeYoyState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${cagedCompanySelectHtml()}
         ${fixas}
         ${selectBlock('From', cagedVolumeYoyPeriodSelect('caged-volume-yoy-from-select', cagedVolumeYoyState.from, 'setCagedVolumeYoyRange()'))}
         ${selectBlock('To', cagedVolumeYoyPeriodSelect('caged-volume-yoy-to-select', cagedVolumeYoyState.to, 'setCagedVolumeYoyRange()'))}
@@ -3387,7 +3480,7 @@ function cagedChurnControlsHtml() {
     ensureCagedChurnRange();
     const baseDisabled = cagedChurnState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${cagedCompanySelectHtml()}
+        ${cagedCompanySelectHtml('churn')}
         ${selectBlock('Grain', `<select id="caged-churn-grain-select" class="df-input" onchange="setCagedChurnGrain()" style="width:126px;"><option value="monthly" ${cagedChurnState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedChurnState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedChurnState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-churn-base-select" class="df-input" onchange="setCagedChurnBase()" ${baseDisabled} style="width:126px;"><option value="spot" ${cagedChurnState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedChurnState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
         ${selectBlock('From', cagedChurnPeriodSelect('caged-churn-from-select', cagedChurnState.from, 'setCagedChurnRange()'))}
@@ -3461,10 +3554,10 @@ function renderCagedChurnChart() {
     if (cagedIsCompare()) {
         const s = cagedCompareSeries(() => cagedChurnSelectedRows());
         if (!s.keys.length) return;
-        cagedChurnChartInstance = buildCagedCompareLine(el, s.labels,
-            s.keys.map(k => s.vu.has(k) ? s.vu.get(k).churn : null),
-            s.keys.map(k => s.da.has(k) ? s.da.get(k).churn : null),
-            { pct: true, yTitle: 'Churn %' });
+        cagedChurnChartInstance = buildCagedCompareLine(el, s.labels, [
+            { key: 'vulcabras', label: 'Vulcabras', borderColor: C.azulEscuro, data: s.keys.map(k => s.vu.has(k) ? s.vu.get(k).churn : null) },
+            { key: 'dass', label: 'Grupo Dass', borderColor: C.cereja, data: s.keys.map(k => s.da.has(k) ? s.da.get(k).churn : null) },
+        ], { valueFormatter: cagedComparePctFmt, frequency: cagedChurnState.grain });
         return;
     }
     const rows = cagedChurnSelectedRows();
@@ -3633,10 +3726,10 @@ function renderCagedJobsChart() {
     if (cagedIsCompare()) {
         const s = cagedCompareSeries(() => cagedJobsSelectedRows());
         if (!s.keys.length) return;
-        cagedJobsChartInstance = buildCagedCompareLine(el, s.labels,
-            s.keys.map(k => s.vu.has(k) ? s.vu.get(k).value : null),
-            s.keys.map(k => s.da.has(k) ? s.da.get(k).value : null),
-            { yTitle: 'Estimated Jobs' });
+        cagedJobsChartInstance = buildCagedCompareLine(el, s.labels, [
+            { key: 'vulcabras', label: 'Vulcabras', borderColor: C.azulEscuro, data: s.keys.map(k => s.vu.has(k) ? s.vu.get(k).value : null) },
+            { key: 'dass', label: 'Grupo Dass', borderColor: C.cereja, data: s.keys.map(k => s.da.has(k) ? s.da.get(k).value : null) },
+        ], { valueFormatter: cagedCompareCountFmt, frequency: cagedJobsState.grain });
         return;
     }
     const rows = cagedJobsSelectedRows();
@@ -3749,7 +3842,7 @@ function cagedMonthlyComparisonControlsHtml() {
     const fromSelect = `<select id="caged-monthly-from-year-select" class="df-input" onchange="setCagedMonthlyComparisonRange()" style="width:126px;">${years.map(year => `<option value="${year}" ${year === cagedMonthlyComparisonState.fromYear ? 'selected' : ''}>${year}</option>`).join('') || yearOptions}</select>`;
     const toSelect = `<select id="caged-monthly-to-year-select" class="df-input" onchange="setCagedMonthlyComparisonRange()" style="width:126px;">${years.map(year => `<option value="${year}" ${year === cagedMonthlyComparisonState.toYear ? 'selected' : ''}>${year}</option>`).join('') || yearOptions}</select>`;
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
-        ${cagedCompanySelectHtml()}
+        ${cagedCompanySelectHtml('comparison')}
         ${selectBlock('Grain', grainSelect)}
         ${selectBlock(cagedMonthlyComparisonState.grain === 'quarterly' ? 'Quarter' : 'Month', periodSelect)}
         ${selectBlock('From Year', fromSelect)}
@@ -3875,10 +3968,10 @@ function renderCagedChart() {
     if (cagedIsCompare()) {
         const s = cagedCompareSeries(() => cagedSelectedRows());
         if (!s.keys.length) return;
-        cagedChartInstance = buildCagedCompareLine(el, s.labels,
-            s.keys.map(k => s.vu.has(k) ? s.vu.get(k).net : null),
-            s.keys.map(k => s.da.has(k) ? s.da.get(k).net : null),
-            { yTitle: 'Net Adds' });
+        cagedChartInstance = buildCagedCompareLine(el, s.labels, [
+            { key: 'vulcabras', label: 'Vulcabras', borderColor: C.azulEscuro, data: s.keys.map(k => s.vu.has(k) ? s.vu.get(k).net : null) },
+            { key: 'dass', label: 'Grupo Dass', borderColor: C.cereja, data: s.keys.map(k => s.da.has(k) ? s.da.get(k).net : null) },
+        ], { valueFormatter: cagedCompareCountFmt, frequency: cagedState.grain });
         return;
     }
     const rows = cagedSelectedRows();
@@ -4108,7 +4201,7 @@ function renderCagedCard() {
     ensureCagedRange();
     ensureCagedMonthlyComparisonState();
     content.innerHTML = `
-        <section id="caged-data-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('netadds'), '')}<section id="caged-data-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedTitle()}</h3>
@@ -4119,7 +4212,7 @@ function renderCagedCard() {
             ${cagedLegendHtml()}
             <div style="position:relative;height:560px;"><canvas id="caged-main-chart"></canvas></div>
         </section>
-        <section id="caged-monthly-comparison-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('comparison'), '')}<section id="caged-monthly-comparison-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedMonthlyComparisonTitle()}</h3>
@@ -4133,7 +4226,7 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:420px;"><canvas id="caged-monthly-comparison-chart"></canvas></div>
         </section>
-        <section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('jobs'), '')}<section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Estimated Formal Jobs - ${cagedScopeLabel()}</h3>
@@ -4144,7 +4237,7 @@ function renderCagedCard() {
             ${cagedJobsLegendHtml()}
             <div style="position:relative;height:560px;"><canvas id="caged-jobs-chart"></canvas></div>
         </section>
-        <section id="caged-jobs-table-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('table'), '')}<section id="caged-jobs-table-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Formal Jobs Breakdown</h3>
@@ -4154,7 +4247,7 @@ function renderCagedCard() {
             </div>
             ${renderCagedJobsTable()}
         </section>
-        <section id="caged-volume-yoy-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = 'vulcabras', '')}<section id="caged-volume-yoy-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Factory Headcount Growth vs Volume Growth</h3>
@@ -4168,7 +4261,7 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:400px;margin-top:-6px;margin-left:-8px;margin-right:-36px;width:calc(100% + 44px);"><canvas id="caged-volume-yoy-chart"></canvas></div>
         </section>
-        <section id="caged-churn-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('churn'), '')}<section id="caged-churn-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedChurnTitle()}</h3>
@@ -4185,20 +4278,13 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:400px;"><canvas id="caged-churn-chart"></canvas></div>
         </section>`;
-    renderCagedJobsChart();
-    renderCagedChart();
-    if (!cagedIsCompare()) renderCagedMonthlyComparisonChart();
-    // No modo comparação, "Monthly Net Adds Comparison" (barras por ano) e "Formal Jobs Breakdown" (tabela)
-    // não fazem sentido como overlay de 2 empresas — somem; ficam só os 3 gráficos de linha.
-    const cmpCard = document.getElementById('caged-monthly-comparison-card');
-    const tblCard = document.getElementById('caged-jobs-table-card');
-    if (cmpCard) cmpCard.style.display = cagedIsCompare() ? 'none' : '';
-    if (tblCard) tblCard.style.display = cagedIsCompare() ? 'none' : '';
-    // O card "Headcount vs Volume" usa volume de produção da Vulcabras — só aparece para Vulcabras.
-    const volCard = document.getElementById('caged-volume-yoy-card');
-    if (cagedCompany === 'vulcabras') { if (volCard) volCard.style.display = ''; renderCagedVolumeYoyChart(); }
-    else if (volCard) { volCard.style.display = 'none'; }
-    renderCagedChurnChart();
+    // Cada gráfico renderiza com a SUA empresa (caixa Company independente por card).
+    cagedCompany = cagedChartCompany('jobs'); renderCagedJobsChart();
+    cagedCompany = cagedChartCompany('netadds'); renderCagedChart();
+    cagedCompany = cagedChartCompany('comparison'); renderCagedMonthlyComparisonChart();
+    // "Headcount vs Volume" usa volume de produção da Vulcabras — sempre Vulcabras, sempre visível.
+    cagedCompany = 'vulcabras'; renderCagedVolumeYoyChart();
+    cagedCompany = cagedChartCompany('churn'); renderCagedChurnChart();
 }
 
 function vivaraCagedRows(scope='Core') {
