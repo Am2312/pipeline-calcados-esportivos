@@ -325,8 +325,30 @@ const CAGED_COMPANIES = {
             base: (window.DASS_NORDESTE_CAGED_DATA && window.DASS_NORDESTE_CAGED_DATA.rais_2019_base) || 10051 },
 };
 let cagedCompany = 'vulcabras';  // 'vulcabras' | 'dass' | 'compare'
+let cagedRegion = 'all';         // 'all' | 'bahia' | 'nordeste'  (contexto de render, setado por card)
+// estoque RAIS 31/12/2019 por município (para reancorar a base quando filtra por região)
+const CAGED_MUNI_BASE = {
+    'Horizonte/CE': 8415, 'Itapetinga/BA': 4690,
+    'Santo Estêvão/BA': 3469, 'Itaberaba/BA': 1741, 'Vitória da Conquista/BA': 1817, 'Santo Antônio de Jesus/BA': 497, 'Itapipoca/CE': 2527,
+};
+function cagedRegionMatch(scope, region) {
+    if (region === 'all' || !region) return true;
+    const uf = String(scope).split('/')[1] || '';
+    if (region === 'bahia') return uf === 'BA';
+    if (region === 'nordeste') return uf === 'BA' || uf === 'CE';
+    return true;
+}
 function cagedActiveData() { const c = CAGED_COMPANIES[cagedCompany] || CAGED_COMPANIES.vulcabras; return (c && c.data()) || { rows: [] }; }
-function cagedActiveBase() { return (CAGED_COMPANIES[cagedCompany] || CAGED_COMPANIES.vulcabras).base; }
+function cagedActiveBase() {
+    const company = CAGED_COMPANIES[cagedCompany] || CAGED_COMPANIES.vulcabras;
+    const region = cagedRegion || 'all';
+    if (region === 'all') return company.base;
+    const d = (company.data && company.data()) || {};
+    const munis = (d.filters && d.filters.municipalities) ? Object.values(d.filters.municipalities) : [];
+    let sum = 0, any = false;
+    munis.forEach(scope => { if (cagedRegionMatch(scope, region) && CAGED_MUNI_BASE[scope] != null) { sum += CAGED_MUNI_BASE[scope]; any = true; } });
+    return any ? sum : company.base;
+}
 function cagedCompanyPoss() { return (CAGED_COMPANIES[cagedCompany] || CAGED_COMPANIES.vulcabras).poss; }
 function cagedIsCompare() { return cagedCompany === 'compare'; }
 function cagedScopeLabel() { return cagedIsCompare() ? 'Vulcabras × Grupo Dass' : cagedCompanyPoss() + ' Factories'; }
@@ -342,6 +364,15 @@ function cagedCompanySelectHtml(id) {
         + `</select>`);
 }
 function setCagedChartCompany(id, v) { const s = CAGED_CHART_STATES[id]; if (!s) return; if (v !== 'compare' && !CAGED_COMPANIES[v]) return; s.company = v; renderCagedCard(); }
+function cagedChartRegion(id) { const s = CAGED_CHART_STATES[id]; return (s && s.region) || 'all'; }
+function cagedRegionSelectHtml(id) {
+    const cur = cagedChartRegion(id);
+    const opts = [['all', 'Todas'], ['bahia', 'Bahia'], ['nordeste', 'Nordeste']];
+    return selectBlock('Region', `<select class="df-input" onchange="setCagedChartRegion('${id}', this.value)" style="width:130px;">`
+        + opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('')
+        + `</select>`);
+}
+function setCagedChartRegion(id, v) { const s = CAGED_CHART_STATES[id]; if (!s || !['all', 'bahia', 'nordeste'].includes(v)) return; s.region = v; renderCagedCard(); }
 // --- modo comparação Vulcabras × Grupo Dass: gráficos de linha idênticos ao "SSS Comparison" do varejo-alimentar-dashboard ---
 function withCagedCompany(c, fn) { const prev = cagedCompany; cagedCompany = c; try { return fn(); } finally { cagedCompany = prev; } }
 function cagedCompareSeries(getter) {
@@ -2591,9 +2622,10 @@ function renderIndustryDataCard() {
 
 function cagedSourceRows() {
     const _d = cagedActiveData();
-    return (_d && _d.rows ? _d.rows : [])
-        .filter(row => row.scope === 'Total')
-        .map(row => ({
+    const rows = (_d && _d.rows) ? _d.rows : [];
+    const region = cagedRegion || 'all';
+    if (region === 'all') {
+        return rows.filter(row => row.scope === 'Total').map(row => ({
             key: periodKey(row.year, row.month),
             year: Number(row.year),
             month: Number(row.month),
@@ -2601,8 +2633,18 @@ function cagedSourceRows() {
             admissions: Number(row.admissions || 0),
             separations: Number(row.separations || 0),
             net: Number(row.net || 0),
-        }))
-        .sort((a, b) => a.key.localeCompare(b.key));
+        })).sort((a, b) => a.key.localeCompare(b.key));
+    }
+    // soma os municípios do estado escolhido, por período (Total recomputado)
+    const byPeriod = new Map();
+    rows.forEach(row => {
+        if (row.scope === 'Total' || !cagedRegionMatch(row.scope, region)) return;
+        const k = periodKey(row.year, row.month);
+        let t = byPeriod.get(k);
+        if (!t) { t = { key: k, year: Number(row.year), month: Number(row.month), label: monthLabel(Number(row.year), Number(row.month)), admissions: 0, separations: 0, net: 0 }; byPeriod.set(k, t); }
+        t.admissions += Number(row.admissions || 0); t.separations += Number(row.separations || 0); t.net += Number(row.net || 0);
+    });
+    return [...byPeriod.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 function cagedSumRows(rows, template) {
@@ -2696,6 +2738,7 @@ function cagedControlsHtml() {
     const baseDisabled = cagedState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('netadds')}
+        ${cagedRegionSelectHtml('netadds')}
         ${selectBlock('Grain', `<select id="caged-grain-select" class="df-input" onchange="setCagedGrain()"><option value="monthly" ${cagedState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-base-select" class="df-input" onchange="setCagedBase()" ${baseDisabled}><option value="spot" ${cagedState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
         ${selectBlock('From', cagedPeriodSelect('caged-from-select', cagedState.from, 'setCagedRange()'))}
@@ -2874,6 +2917,7 @@ function cagedJobsControlsHtml() {
     const fixas = (window.regDashBoxes ? window.regDashBoxes('caged-jobs', cagedJobsState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('jobs')}
+        ${cagedRegionSelectHtml('jobs')}
         ${fixas}
         ${selectBlock('From', cagedJobsPeriodSelect('caged-jobs-from-select', cagedJobsState.from, 'setCagedJobsRange()'))}
         ${selectBlock('To', cagedJobsPeriodSelect('caged-jobs-to-select', cagedJobsState.to, 'setCagedJobsRange()'))}
@@ -2969,6 +3013,7 @@ function cagedJobsTableControlsHtml() {
     ensureCagedJobsTableRange();
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('table')}
+        ${cagedRegionSelectHtml('table')}
         ${selectBlock('Grain', `<select id="caged-jobs-table-grain-select" class="df-input" onchange="setCagedJobsTableGrain()" style="width:126px;"><option value="monthly" ${cagedJobsTableState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedJobsTableState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedJobsTableState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('From', cagedJobsTablePeriodSelect('caged-jobs-table-from-select', cagedJobsTableState.from, 'setCagedJobsTableRange()'))}
         ${selectBlock('To', cagedJobsTablePeriodSelect('caged-jobs-table-to-select', cagedJobsTableState.to, 'setCagedJobsTableRange()'))}
@@ -3231,6 +3276,7 @@ function cagedVolumeYoyControlsHtml() {
     // Basis + Jobs Shift vêm da LISTA ÚNICA (window.CONTROL_SPECS['headcount-volume']) — mesma lista do PPT.
     const fixas = (window.regDashBoxes ? window.regDashBoxes('headcount-volume', cagedVolumeYoyState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedRegionSelectHtml('volume')}
         ${fixas}
         ${selectBlock('From', cagedVolumeYoyPeriodSelect('caged-volume-yoy-from-select', cagedVolumeYoyState.from, 'setCagedVolumeYoyRange()'))}
         ${selectBlock('To', cagedVolumeYoyPeriodSelect('caged-volume-yoy-to-select', cagedVolumeYoyState.to, 'setCagedVolumeYoyRange()'))}
@@ -3481,6 +3527,7 @@ function cagedChurnControlsHtml() {
     const baseDisabled = cagedChurnState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('churn')}
+        ${cagedRegionSelectHtml('churn')}
         ${selectBlock('Grain', `<select id="caged-churn-grain-select" class="df-input" onchange="setCagedChurnGrain()" style="width:126px;"><option value="monthly" ${cagedChurnState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedChurnState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedChurnState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-churn-base-select" class="df-input" onchange="setCagedChurnBase()" ${baseDisabled} style="width:126px;"><option value="spot" ${cagedChurnState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedChurnState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
         ${selectBlock('From', cagedChurnPeriodSelect('caged-churn-from-select', cagedChurnState.from, 'setCagedChurnRange()'))}
@@ -3843,6 +3890,7 @@ function cagedMonthlyComparisonControlsHtml() {
     const toSelect = `<select id="caged-monthly-to-year-select" class="df-input" onchange="setCagedMonthlyComparisonRange()" style="width:126px;">${years.map(year => `<option value="${year}" ${year === cagedMonthlyComparisonState.toYear ? 'selected' : ''}>${year}</option>`).join('') || yearOptions}</select>`;
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('comparison')}
+        ${cagedRegionSelectHtml('comparison')}
         ${selectBlock('Grain', grainSelect)}
         ${selectBlock(cagedMonthlyComparisonState.grain === 'quarterly' ? 'Quarter' : 'Month', periodSelect)}
         ${selectBlock('From Year', fromSelect)}
@@ -4201,7 +4249,7 @@ function renderCagedCard() {
     ensureCagedRange();
     ensureCagedMonthlyComparisonState();
     content.innerHTML = `
-        ${(cagedCompany = cagedChartCompany('netadds'), '')}<section id="caged-data-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('netadds'), cagedRegion = cagedChartRegion('netadds'), '')}<section id="caged-data-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedTitle()}</h3>
@@ -4212,7 +4260,7 @@ function renderCagedCard() {
             ${cagedLegendHtml()}
             <div style="position:relative;height:560px;"><canvas id="caged-main-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('comparison'), '')}<section id="caged-monthly-comparison-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('comparison'), cagedRegion = cagedChartRegion('comparison'), '')}<section id="caged-monthly-comparison-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedMonthlyComparisonTitle()}</h3>
@@ -4226,7 +4274,7 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:420px;"><canvas id="caged-monthly-comparison-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('jobs'), '')}<section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('jobs'), cagedRegion = cagedChartRegion('jobs'), '')}<section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Estimated Formal Jobs - ${cagedScopeLabel()}</h3>
@@ -4237,7 +4285,7 @@ function renderCagedCard() {
             ${cagedJobsLegendHtml()}
             <div style="position:relative;height:560px;"><canvas id="caged-jobs-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('table'), '')}<section id="caged-jobs-table-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('table'), cagedRegion = cagedChartRegion('table'), '')}<section id="caged-jobs-table-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Formal Jobs Breakdown</h3>
@@ -4247,7 +4295,7 @@ function renderCagedCard() {
             </div>
             ${renderCagedJobsTable()}
         </section>
-        ${(cagedCompany = 'vulcabras', '')}<section id="caged-volume-yoy-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = 'vulcabras', cagedRegion = cagedChartRegion('volume'), '')}<section id="caged-volume-yoy-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Factory Headcount Growth vs Volume Growth</h3>
@@ -4261,7 +4309,7 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:400px;margin-top:-6px;margin-left:-8px;margin-right:-36px;width:calc(100% + 44px);"><canvas id="caged-volume-yoy-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('churn'), '')}<section id="caged-churn-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('churn'), cagedRegion = cagedChartRegion('churn'), '')}<section id="caged-churn-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedChurnTitle()}</h3>
@@ -4278,13 +4326,13 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:400px;"><canvas id="caged-churn-chart"></canvas></div>
         </section>`;
-    // Cada gráfico renderiza com a SUA empresa (caixa Company independente por card).
-    cagedCompany = cagedChartCompany('jobs'); renderCagedJobsChart();
-    cagedCompany = cagedChartCompany('netadds'); renderCagedChart();
-    cagedCompany = cagedChartCompany('comparison'); renderCagedMonthlyComparisonChart();
+    // Cada gráfico renderiza com a SUA empresa e região (caixas Company/Region independentes por card).
+    cagedCompany = cagedChartCompany('jobs'); cagedRegion = cagedChartRegion('jobs'); renderCagedJobsChart();
+    cagedCompany = cagedChartCompany('netadds'); cagedRegion = cagedChartRegion('netadds'); renderCagedChart();
+    cagedCompany = cagedChartCompany('comparison'); cagedRegion = cagedChartRegion('comparison'); renderCagedMonthlyComparisonChart();
     // "Headcount vs Volume" usa volume de produção da Vulcabras — sempre Vulcabras, sempre visível.
-    cagedCompany = 'vulcabras'; renderCagedVolumeYoyChart();
-    cagedCompany = cagedChartCompany('churn'); renderCagedChurnChart();
+    cagedCompany = 'vulcabras'; cagedRegion = cagedChartRegion('volume'); renderCagedVolumeYoyChart();
+    cagedCompany = cagedChartCompany('churn'); cagedRegion = cagedChartRegion('churn'); renderCagedChurnChart();
 }
 
 function vivaraCagedRows(scope='Core') {
