@@ -16,6 +16,7 @@
     <script src="./data/sports_footwear_imports_data.js"></script>
     <script src="./data/sports_footwear_industry_data.js"></script>
     <script src="./data/vulcabras_caged_data.js"></script>
+    <script src="./data/dass_nordeste_caged_data.js"></script>
     <script src="./data/vivara_caged_data.js"></script>
     <script src="./data/vulcabras_volume_data.js"></script>
     <script src="./data/sports_retail_cost_index_data.js"></script>
@@ -316,6 +317,23 @@ const SECTOR_METRICS = {
 const COUNTRY_PALETTE = ['#021C45', '#6FDDCB', '#FF4F6C', '#18A6F1'];
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const CAGED_RAIS_2019_BASE = window.CAGED_RAIS_2019_BASE || 13105;  // RECEITA ÚNICA (charts-registry.js)
+// Seletor de empresa dos gráficos CAGED (Vulcabras / Grupo Dass). Mesma metodologia (município × CNAE de calçados),
+// âncora RAIS 31/12/2019 por empresa. Dass = 5 municípios "limpos" (base 10.051); Vulcabras = Horizonte+Itapetinga (13.105).
+const CAGED_COMPANIES = {
+    vulcabras: { label: 'Vulcabras', poss: "Vulcabras'", data: () => window.VULCABRAS_CAGED_DATA, base: CAGED_RAIS_2019_BASE },
+    dass: { label: 'Grupo Dass', poss: "Grupo Dass'", data: () => window.DASS_NORDESTE_CAGED_DATA,
+            base: (window.DASS_NORDESTE_CAGED_DATA && window.DASS_NORDESTE_CAGED_DATA.rais_2019_base) || 10051 },
+};
+let cagedCompany = 'vulcabras';
+function cagedActiveData() { const c = CAGED_COMPANIES[cagedCompany]; return (c && c.data()) || { rows: [] }; }
+function cagedActiveBase() { return CAGED_COMPANIES[cagedCompany].base; }
+function cagedCompanyPoss() { return CAGED_COMPANIES[cagedCompany].poss; }
+function cagedCompanySelectHtml() {
+    return selectBlock('Company', `<select class="df-input" onchange="setCagedCompany(this.value)" style="width:126px;">`
+        + Object.keys(CAGED_COMPANIES).map(k => `<option value="${k}" ${k === cagedCompany ? 'selected' : ''}>${CAGED_COMPANIES[k].label}</option>`).join('')
+        + `</select>`);
+}
+function setCagedCompany(v) { if (!CAGED_COMPANIES[v]) return; cagedCompany = v; renderCagedCard(); }
 const COUNTRY_NAME_EN = {
     'Alemanha': 'Germany',
     'Argentina': 'Argentina',
@@ -2447,7 +2465,8 @@ function renderIndustryDataCard() {
 }
 
 function cagedSourceRows() {
-    return (window.VULCABRAS_CAGED_DATA && window.VULCABRAS_CAGED_DATA.rows ? window.VULCABRAS_CAGED_DATA.rows : [])
+    const _d = cagedActiveData();
+    return (_d && _d.rows ? _d.rows : [])
         .filter(row => row.scope === 'Total')
         .map(row => ({
             key: periodKey(row.year, row.month),
@@ -2551,6 +2570,7 @@ function cagedControlsHtml() {
     ensureCagedRange();
     const baseDisabled = cagedState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedCompanySelectHtml()}
         ${selectBlock('Grain', `<select id="caged-grain-select" class="df-input" onchange="setCagedGrain()"><option value="monthly" ${cagedState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-base-select" class="df-input" onchange="setCagedBase()" ${baseDisabled}><option value="spot" ${cagedState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
         ${selectBlock('From', cagedPeriodSelect('caged-from-select', cagedState.from, 'setCagedRange()'))}
@@ -2587,9 +2607,8 @@ function setCagedRange() {
 }
 
 function cagedTitle() {
-    return cagedState.base === 'ltm' && cagedState.grain !== 'annual'
-        ? "CAGED - Vulcabras' Factories (LTM)"
-        : "CAGED - Vulcabras' Factories";
+    const t = `CAGED - ${cagedCompanyPoss()} Factories`;
+    return cagedState.base === 'ltm' && cagedState.grain !== 'annual' ? `${t} (LTM)` : t;
 }
 
 function cagedLegendHtml() {
@@ -2628,7 +2647,7 @@ function bindCagedLegendToggles() {
 }
 
 function cagedJobsMonthlyRows() {
-    let jobs = CAGED_RAIS_2019_BASE;
+    let jobs = cagedActiveBase();
     const monthly = cagedSourceRows().map(row => {
         jobs += row.net;
         return { key: row.key, year: row.year, month: row.month, label: row.label, value: jobs };
@@ -2728,6 +2747,7 @@ function cagedJobsControlsHtml() {
     // Caixa Grain vem da LISTA ÚNICA (window.CONTROL_SPECS['caged-jobs']) — mesma lista do PPT.
     const fixas = (window.regDashBoxes ? window.regDashBoxes('caged-jobs', cagedJobsState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedCompanySelectHtml()}
         ${fixas}
         ${selectBlock('From', cagedJobsPeriodSelect('caged-jobs-from-select', cagedJobsState.from, 'setCagedJobsRange()'))}
         ${selectBlock('To', cagedJobsPeriodSelect('caged-jobs-to-select', cagedJobsState.to, 'setCagedJobsRange()'))}
@@ -2821,6 +2841,7 @@ function cagedJobsTablePeriodSelect(id, current, onchangeFn) {
 function cagedJobsTableControlsHtml() {
     ensureCagedJobsTableRange();
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedCompanySelectHtml()}
         ${selectBlock('Grain', `<select id="caged-jobs-table-grain-select" class="df-input" onchange="setCagedJobsTableGrain()" style="width:126px;"><option value="monthly" ${cagedJobsTableState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedJobsTableState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedJobsTableState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('From', cagedJobsTablePeriodSelect('caged-jobs-table-from-select', cagedJobsTableState.from, 'setCagedJobsTableRange()'))}
         ${selectBlock('To', cagedJobsTablePeriodSelect('caged-jobs-table-to-select', cagedJobsTableState.to, 'setCagedJobsTableRange()'))}
@@ -3083,6 +3104,7 @@ function cagedVolumeYoyControlsHtml() {
     // Basis + Jobs Shift vêm da LISTA ÚNICA (window.CONTROL_SPECS['headcount-volume']) — mesma lista do PPT.
     const fixas = (window.regDashBoxes ? window.regDashBoxes('headcount-volume', cagedVolumeYoyState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedCompanySelectHtml()}
         ${fixas}
         ${selectBlock('From', cagedVolumeYoyPeriodSelect('caged-volume-yoy-from-select', cagedVolumeYoyState.from, 'setCagedVolumeYoyRange()'))}
         ${selectBlock('To', cagedVolumeYoyPeriodSelect('caged-volume-yoy-to-select', cagedVolumeYoyState.to, 'setCagedVolumeYoyRange()'))}
@@ -3332,6 +3354,7 @@ function cagedChurnControlsHtml() {
     ensureCagedChurnRange();
     const baseDisabled = cagedChurnState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedCompanySelectHtml()}
         ${selectBlock('Grain', `<select id="caged-churn-grain-select" class="df-input" onchange="setCagedChurnGrain()" style="width:126px;"><option value="monthly" ${cagedChurnState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedChurnState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedChurnState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-churn-base-select" class="df-input" onchange="setCagedChurnBase()" ${baseDisabled} style="width:126px;"><option value="spot" ${cagedChurnState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedChurnState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
         ${selectBlock('From', cagedChurnPeriodSelect('caged-churn-from-select', cagedChurnState.from, 'setCagedChurnRange()'))}
@@ -3368,9 +3391,8 @@ function setCagedChurnRange() {
 }
 
 function cagedChurnTitle() {
-    return cagedChurnState.base === 'ltm' && cagedChurnState.grain !== 'annual'
-        ? "Vulcabras' Factories Churn (LTM)"
-        : "Vulcabras' Factories Churn";
+    const t = `${cagedCompanyPoss()} Factories Churn`;
+    return cagedChurnState.base === 'ltm' && cagedChurnState.grain !== 'annual' ? `${t} (LTM)` : t;
 }
 
 function updateCagedChurnLegendStates() {
@@ -3676,6 +3698,7 @@ function cagedMonthlyComparisonControlsHtml() {
     const fromSelect = `<select id="caged-monthly-from-year-select" class="df-input" onchange="setCagedMonthlyComparisonRange()" style="width:126px;">${years.map(year => `<option value="${year}" ${year === cagedMonthlyComparisonState.fromYear ? 'selected' : ''}>${year}</option>`).join('') || yearOptions}</select>`;
     const toSelect = `<select id="caged-monthly-to-year-select" class="df-input" onchange="setCagedMonthlyComparisonRange()" style="width:126px;">${years.map(year => `<option value="${year}" ${year === cagedMonthlyComparisonState.toYear ? 'selected' : ''}>${year}</option>`).join('') || yearOptions}</select>`;
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
+        ${cagedCompanySelectHtml()}
         ${selectBlock('Grain', grainSelect)}
         ${selectBlock(cagedMonthlyComparisonState.grain === 'quarterly' ? 'Quarter' : 'Month', periodSelect)}
         ${selectBlock('From Year', fromSelect)}
@@ -4053,7 +4076,7 @@ function renderCagedCard() {
         <section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
-                    <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Estimated Formal Jobs - Vulcabras' Factories</h3>
+                    <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Estimated Formal Jobs - ${cagedCompanyPoss()} Factories</h3>
                     <p style="color:${C.azulEscuro60};font-size:12px;margin:0;">(Formal Jobs, YoY)</p>
                 </div>
                 ${cagedJobsControlsHtml()}
@@ -4102,7 +4125,10 @@ function renderCagedCard() {
     renderCagedJobsChart();
     renderCagedChart();
     renderCagedMonthlyComparisonChart();
-    renderCagedVolumeYoyChart();
+    // O card "Headcount vs Volume" usa volume de produção da Vulcabras — não há equivalente p/ a Dass, então some.
+    const volCard = document.getElementById('caged-volume-yoy-card');
+    if (cagedCompany === 'vulcabras') { if (volCard) volCard.style.display = ''; renderCagedVolumeYoyChart(); }
+    else if (volCard) { volCard.style.display = 'none'; }
     renderCagedChurnChart();
 }
 
@@ -4440,6 +4466,27 @@ function renderMethodologyPage() {
                     </tr>
                 </tbody>
             </table>
+        </section>
+
+        <section class="methodology-card" style="margin-top:18px;">
+            <h3>GRUPO DASS — MESMA METODOLOGIA (SELETOR "COMPANY")</h3>
+            <p>Os gráficos CAGED têm um seletor <strong>Company</strong> (Vulcabras / Grupo Dass). A série da <strong>Dass Nordeste Calçados e Artigos Esportivos S.A</strong> usa exatamente o mesmo recorte (CAGEDMOV no prazo, CNAEs 1531901/1532700/1533500/1539400/1540800, âncora RAIS 31/12/2019, empregos = base + saldo acumulado). Como a base é anonimizada, fizemos a mesma pesquisa de contaminação por estabelecimento (RAIS) e mantivemos só os municípios em que a Dass domina o CNAE de calçados.</p>
+            <table class="methodology-table">
+                <thead>
+                    <tr><th>Município</th><th>Uso na análise</th><th>RAIS 2019 / leitura de contaminação</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><strong>Santo Estêvão/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>1 único estabelecimento de calçado (6.423 vínculos em 2023) — é a Dass.</td></tr>
+                    <tr><td><strong>Itaberaba/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>1 único estabelecimento (3.389 em 2023).</td></tr>
+                    <tr><td><strong>Vitória da Conquista/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>Dass = 4.174; demais estabelecimentos pulverizados (6, 2, …). 2 plantas Dass na cidade.</td></tr>
+                    <tr><td><strong>Santo Antônio de Jesus/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>1 único estabelecimento (1.232 em 2023).</td></tr>
+                    <tr><td><strong>Itapipoca/CE</strong></td><td><span class="methodology-tag warn">Limpo c/ ressalva</span></td><td>Dass = 4.421 + outra fábrica de 356 (~7% de contaminação, mesmo patamar de Itapetinga/Vulcabras).</td></tr>
+                    <tr><td>Canindé/CE</td><td><span class="methodology-tag bad">Excluído</span></td><td>Duas fábricas grandes (482 e 402) — não dá para isolar a Dass.</td></tr>
+                    <tr><td>Ibicuí/BA</td><td><span class="methodology-tag bad">Excluído</span></td><td>Planta Dass só inaugurada em 2025; o estabelecimento de 2023 é outra empresa.</td></tr>
+                    <tr><td>Iguaí/BA</td><td><span class="methodology-tag bad">Excluído</span></td><td>Sem emprego de calçado em 2023 (planta Dass posterior).</td></tr>
+                </tbody>
+            </table>
+            <p style="margin-top:10px;">Âncora total RAIS 31/12/2019 dos 5 municípios limpos = <strong>10.051</strong> vínculos (vs. 13.105 da Vulcabras). Fonte do grosso: basedosdados (BigQuery); os meses mais recentes, não cobertos pelo basedosdados, vêm direto do microdado CAGEDMOV do FTP do MTE. O card "Headcount vs Volume" não aparece para a Dass por não haver série de volume de produção da companhia.</p>
         </section>
 
         <section class="methodology-card" style="margin-top:18px;">
