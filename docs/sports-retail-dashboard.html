@@ -5227,7 +5227,7 @@ function renderCostIndexCard() {
         : `${cfg.label} Cost Index`;
     card.innerHTML = `
             ${sectionTitle(ciTitle, ciDef.unidade || '(x)', controls)}
-            <div style="position:relative;height:630px;margin-top:-18px;"><canvas id="cost-index-chart"></canvas></div>
+            <div style="position:relative;height:460px;margin-top:-18px;"><canvas id="cost-index-chart"></canvas></div>
         `;
     if (!existing) content.appendChild(card);
     renderCostIndexChart();
