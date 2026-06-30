@@ -325,7 +325,7 @@ const CAGED_COMPANIES = {
             base: (window.DASS_NORDESTE_CAGED_DATA && window.DASS_NORDESTE_CAGED_DATA.rais_2019_base) || 10051 },
 };
 let cagedCompany = 'vulcabras';  // 'vulcabras' | 'dass' | 'compare'
-let cagedRegion = 'all';         // 'all' | 'bahia' | 'nordeste'  (contexto de render, setado por card)
+let cagedRegion = 'all';         // 'all' | 'nordeste' | 'rs'  (contexto de render, setado por card)
 let cagedSegment = 'footwear';   // 'footwear' | 'apparel' | 'both' (só Dass; Vulcabras é sempre footwear)
 // estoque RAIS 31/12/2019 por município (para reancorar a base quando filtra por região)
 const CAGED_MUNI_BASE = {
@@ -335,7 +335,7 @@ const CAGED_MUNI_BASE = {
 function cagedRegionMatch(scope, region) {
     if (region === 'all' || !region) return true;
     const uf = String(scope).split('/')[1] || '';
-    if (region === 'bahia') return uf === 'BA';
+    if (region === 'rs') return uf === 'RS';
     if (region === 'nordeste') return uf === 'BA' || uf === 'CE';
     return true;
 }
@@ -380,12 +380,12 @@ function setCagedChartCompany(id, v) { const s = CAGED_CHART_STATES[id]; if (!s)
 function cagedChartRegion(id) { const s = CAGED_CHART_STATES[id]; return (s && s.region) || 'all'; }
 function cagedRegionSelectHtml(id) {
     const cur = cagedChartRegion(id);
-    const opts = [['all', 'Todas'], ['bahia', 'Bahia'], ['nordeste', 'Nordeste']];
+    const opts = [['all', 'All'], ['nordeste', 'Northeast'], ['rs', 'RS']];
     return selectBlock('Region', `<select class="df-input" onchange="setCagedChartRegion('${id}', this.value)" style="width:130px;">`
         + opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('')
         + `</select>`);
 }
-function setCagedChartRegion(id, v) { const s = CAGED_CHART_STATES[id]; if (!s || !['all', 'bahia', 'nordeste'].includes(v)) return; s.region = v; renderCagedCard(); }
+function setCagedChartRegion(id, v) { const s = CAGED_CHART_STATES[id]; if (!s || !['all', 'nordeste', 'rs'].includes(v)) return; s.region = v; renderCagedCard(); }
 function cagedChartSegment(id) { const s = CAGED_CHART_STATES[id]; return (s && s.segment) || 'footwear'; }
 function cagedSegmentSelectHtml(id) {
     if (cagedChartCompany(id) !== 'dass') return '';  // só a Dass tem confecção rastreável
@@ -4701,7 +4701,7 @@ function renderMethodologyPage() {
 
         <section class="methodology-card" style="margin-top:18px;">
             <h3>GRUPO DASS — SELETORES COMPANY / SEGMENT / REGION</h3>
-            <p>Para a Dass, os gráficos CAGED têm <strong>Company</strong> (Vulcabras / Grupo Dass / comparação), <strong>Segment</strong> (Calçados / Vestuário / Ambos) e <strong>Region</strong> (Todas / Bahia / Nordeste). Mesma metodologia da Vulcabras (município × CNAE anonimizado; âncora RAIS 31/12/2019; empregos = base + saldo acumulado). Fonte das empresas via cadastro RFB/CNPJ: <strong>Dass Nordeste S.A.</strong> (CNPJ 01.287.588) e a irmã <strong>Dass Sul Ltda</strong> (81.786.121). Calçados = CNAE 1531901/1532700/1533500/1539400/1540800; Vestuário = CNAE 14 (confecção). A coluna "contaminação" estima a fração do CNAE municipal que <em>não</em> é Dass (1 − maior estabelecimento ÷ total, RAIS 2023) — é o erro máximo provável da série naquela praça.</p>
+            <p>Para a Dass, os gráficos CAGED têm <strong>Company</strong> (Vulcabras / Grupo Dass / comparação), <strong>Segment</strong> (Calçados / Vestuário / Ambos) e <strong>Region</strong> (All / Northeast / RS). Mesma metodologia da Vulcabras (município × CNAE anonimizado; âncora RAIS 31/12/2019; empregos = base + saldo acumulado). Fonte das empresas via cadastro RFB/CNPJ: <strong>Dass Nordeste S.A.</strong> (CNPJ 01.287.588) e a irmã <strong>Dass Sul Ltda</strong> (81.786.121). Calçados = CNAE 1531901/1532700/1533500/1539400/1540800; Vestuário = CNAE 14 (confecção). A coluna "contaminação" estima a fração do CNAE municipal que <em>não</em> é Dass (1 − maior estabelecimento ÷ total, RAIS 2023) — é o erro máximo provável da série naquela praça.</p>
             <table class="methodology-table">
                 <thead>
                     <tr><th>Município</th><th>UF / Região</th><th>Segmento</th><th>Base RAIS 2019</th><th>Contaminação (risco)</th></tr>
@@ -4712,15 +4712,47 @@ function renderMethodologyPage() {
                     <tr><td><strong>Santo Antônio de Jesus</strong></td><td>BA / Nordeste</td><td>Calçados</td><td>497</td><td><span class="methodology-tag">~0% — estab único</span></td></tr>
                     <tr><td><strong>Vitória da Conquista</strong></td><td>BA / Nordeste</td><td>Calçados</td><td>1.817</td><td><span class="methodology-tag">~0,2% (4.174/4.182)</span></td></tr>
                     <tr><td><strong>Itapipoca</strong></td><td>CE / Nordeste</td><td>Calçados</td><td>2.527</td><td><span class="methodology-tag warn">~8,5% (4.421/4.833)</span></td></tr>
-                    <tr><td><strong>Ivoti</strong></td><td>RS / só em "Todas"</td><td>Calçados</td><td>760</td><td><span class="methodology-tag bad">~41% — cluster Vale dos Sinos (29 estabs)</span></td></tr>
-                    <tr><td><strong>Venâncio Aires</strong></td><td>RS / só em "Todas"</td><td>Calçados</td><td>119</td><td><span class="methodology-tag bad">alta — cluster RS; base pequena</span></td></tr>
+                    <tr><td><strong>Ivoti</strong></td><td>RS / só em "All" (filtro RS)</td><td>Calçados</td><td>760</td><td><span class="methodology-tag bad">~41% — cluster Vale dos Sinos (29 estabs)</span></td></tr>
+                    <tr><td><strong>Venâncio Aires</strong></td><td>RS / só em "All" (filtro RS)</td><td>Calçados</td><td>119</td><td><span class="methodology-tag bad">alta — cluster RS; base pequena</span></td></tr>
                     <tr><td><strong>Iguaí</strong></td><td>BA / Nordeste</td><td>Vestuário</td><td>~1 → 525 (2023)</td><td><span class="methodology-tag">~0% — estab único</span></td></tr>
                     <tr><td><strong>Vitória da Conquista</strong></td><td>BA / Nordeste</td><td>Vestuário</td><td>2.378</td><td><span class="methodology-tag warn">~15% (2.662/3.121) — polo de confecção</span></td></tr>
                     <tr><td><strong>Ibicuí</strong></td><td>BA / Nordeste</td><td>Vestuário</td><td>0 (planta 2025)</td><td><span class="methodology-tag warn">série começa no ramp-up de 2026</span></td></tr>
-                    <tr><td><strong>Saudades</strong></td><td>SC / só em "Todas"</td><td>Vestuário (Dass Sul)</td><td>835</td><td><span class="methodology-tag warn">~7% (827/885)</span></td></tr>
+                    <tr><td><strong>Saudades</strong></td><td>SC / só em "All"</td><td>Vestuário (Dass Sul)</td><td>835</td><td><span class="methodology-tag warn">~7% (827/885)</span></td></tr>
                 </tbody>
             </table>
-            <p style="margin-top:10px;"><strong>Risco de contaminação — leia assim:</strong> nas praças baianas a Dass é praticamente o único empregador do CNAE, então o risco é desprezível. As exceções a vigiar: <strong>Itapipoca</strong> (~8,5%) e <strong>VdC-vestuário</strong> (~15%, polo de confecção). As plantas do <strong>RS (Ivoti, Venâncio Aires)</strong> ficam no Vale dos Sinos — dezenas de calçadistas no mesmo município —, então a série lá é fortemente contaminada (Ivoti ~41%) e por isso só entra no filtro <strong>"Todas"</strong>, nunca em "Bahia"/"Nordeste". <strong>Excluído:</strong> Canindé/CE (2 fábricas ~50/50, não isolável) não está sequer sob o CNPJ da Dass Nordeste; Ibicuí/Iguaí são <em>confecção</em> (não calçado). Âncoras RAIS 2019: calçado Nordeste = 10.051 (Todas = 10.930); vestuário Nordeste = 2.379 (Todas = 3.214). Grosso via basedosdados (BigQuery); meses recentes via CAGEDMOV do FTP do MTE. "Headcount vs Volume" é Vulcabras-only.</p>
+            <p style="margin-top:10px;"><strong>Risco de contaminação — leia assim:</strong> nas praças baianas a Dass é praticamente o único empregador do CNAE, então o risco é desprezível. As exceções a vigiar: <strong>Itapipoca</strong> (~8,5%) e <strong>VdC-vestuário</strong> (~15%, polo de confecção). As plantas do <strong>RS (Ivoti, Venâncio Aires)</strong> ficam no Vale dos Sinos — dezenas de calçadistas no mesmo município —, então a série lá é fortemente contaminada (Ivoti ~41%) e por isso fica fora de <strong>Northeast</strong> — só aparece em <strong>All</strong> (e isolada no filtro <strong>RS</strong>, útil justamente para ver/segregar esse trecho). O mesmo vale para <strong>Saudades/SC</strong> (Dass Sul, vestuário): não é Nordeste nem RS, então só entra em All. <strong>Excluído:</strong> Canindé/CE (2 fábricas ~50/50, não isolável) não está sequer sob o CNPJ da Dass Nordeste; Ibicuí/Iguaí são <em>confecção</em> (não calçado). Âncoras RAIS 2019: calçado Nordeste = 10.051 (All = 10.930); vestuário Nordeste = 2.379 (All = 3.214). Grosso via basedosdados (BigQuery); meses recentes via CAGEDMOV do FTP do MTE. "Headcount vs Volume" é Vulcabras-only.</p>
+
+            <p style="margin-top:14px;"><strong>Contaminação no total (o número que importa).</strong> A série é <strong>município × CNAE, anonimizada</strong> — o CAGED público não traz CNPJ, então cada praça carrega quem mais estiver no mesmo CNAE. A contaminação é baixa <em>não</em> por filtro de empresa (impossível), e sim porque <strong>a Dass domina o CNAE</strong> nessas praças. Cruzando RFB/CNPJ (quem está na cidade) × RAIS estabelecimento (tamanhos; a maior fábrica = Dass), o headcount total fica assim:</p>
+            <table class="methodology-table">
+                <thead>
+                    <tr><th>Recorte</th><th>Total CNAE</th><th>Dass (proxy)</th><th>Não-Dass</th><th>Contaminação</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Calçado — Northeast</td><td>20.059</td><td>19.639</td><td>420</td><td><span class="methodology-tag">2,1%</span></td></tr>
+                    <tr><td>Calçado — All (+RS)</td><td>21.263</td><td>20.315</td><td>948</td><td><span class="methodology-tag">4,5%</span></td></tr>
+                    <tr><td>Vestuário — Northeast</td><td>3.647</td><td>3.188</td><td>459</td><td><span class="methodology-tag warn">12,6%</span></td></tr>
+                    <tr><td>Vestuário — All (+SC)</td><td>4.532</td><td>4.015</td><td>517</td><td><span class="methodology-tag warn">11,4%</span></td></tr>
+                    <tr><td><strong>Ambos — Northeast</strong></td><td><strong>23.706</strong></td><td><strong>22.827</strong></td><td><strong>879</strong></td><td><span class="methodology-tag"><strong>3,7%</strong></span></td></tr>
+                    <tr><td><strong>Ambos — All</strong></td><td><strong>25.795</strong></td><td><strong>24.330</strong></td><td><strong>1.465</strong></td><td><span class="methodology-tag"><strong>5,7%</strong></span></td></tr>
+                </tbody>
+            </table>
+            <p style="margin-top:10px;">No total a contaminação roda <strong>~4% a 6%</strong> — ou seja, <strong>~94–96% do headcount é Dass de fato</strong>. As exceções (onde NÃO é baixa) já estão isoladas pelos seletores: <strong>vestuário sozinho</strong> (~13%, puxado por Vitória da Conquista) e <strong>calçado no RS/Ivoti</strong> (~41%, cluster Vale dos Sinos — por isso o RS fica fora de Northeast e ganha filtro próprio).</p>
+
+            <p style="margin-top:14px;"><strong>Sanity check do FLUXO — CAGED × RAIS (calçado Northeast, 5 municípios BA+CE).</strong> Partindo da âncora RAIS 2019 (10.051) e rolando o saldo líquido do CAGED ano a ano, o roll-forward reencontra o estoque RAIS de cada fechamento dentro de ~0,6–2,4%, inclusive na virada (pico 2022, queda 2023–24). Saldos CAGED anuais usados: <strong>+1.285 / +6.255 / +3.730 / −1.743 / −1.357</strong>.</p>
+            <table class="methodology-table">
+                <thead>
+                    <tr><th>Ano</th><th>Estoque RAIS (real)</th><th>Roll-forward (base + ΣCAGED)</th><th>Erro</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>2019</td><td>10.051</td><td>10.051 (âncora)</td><td>—</td></tr>
+                    <tr><td>2020</td><td>11.475</td><td>11.336</td><td><span class="methodology-tag">−1,2%</span></td></tr>
+                    <tr><td>2021</td><td>17.708</td><td>17.591</td><td><span class="methodology-tag">−0,7%</span></td></tr>
+                    <tr><td>2022</td><td>21.441</td><td>21.321</td><td><span class="methodology-tag">−0,6%</span></td></tr>
+                    <tr><td>2023</td><td>20.059</td><td>19.578</td><td><span class="methodology-tag">−2,4%</span></td></tr>
+                    <tr><td>2024</td><td>18.559</td><td>18.221</td><td><span class="methodology-tag">−1,8%</span></td></tr>
+                </tbody>
+            </table>
+            <p style="margin-top:10px;">O viés é levemente para baixo porque o CAGEDMOV "no prazo" perde declarações tardias que a RAIS captura no fechamento. Essa deriva (~1–2%) é da mesma ordem da contaminação (~2%) e é <strong>maçã-com-maçã</strong> (roll-forward e estoque RAIS são ambos município × CNAE) — então este teste isola só a qualidade do <em>fluxo mensal</em>, não a contaminação, que está medida na tabela acima.</p>
         </section>
 
         <section class="methodology-card" style="margin-top:18px;">
