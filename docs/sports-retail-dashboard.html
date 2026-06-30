@@ -3675,7 +3675,7 @@ function renderCagedChurnChart() {
                     if (ctx.measureText(text).width > props.width + 14) ctx.font = '800 10px Verdana';
                     const bw = ctx.measureText(text).width + 14;
                     const bh = 22;
-                    const x = Math.max(4, Math.min(props.x - bw / 2, chart.chartArea.right - bw));
+                    const x = Math.max(4, Math.min(props.x - bw / 2, chart.width - bw - 4));
                     const barTop = Math.max(chart.chartArea.top, Math.min(props.y, props.base));
                     const barBottom = Math.min(chart.chartArea.bottom, Math.max(props.y, props.base));
                     const barHeight = Math.max(0, barBottom - barTop);
@@ -3695,7 +3695,7 @@ function renderCagedChurnChart() {
                     ctx.font = '800 11px Verdana';
                     const bw = ctx.measureText(text).width + 14;
                     const bh = 22;
-                    const x = Math.min(chart.chartArea.right + 6, chart.width - bw - 2);
+                    const x = chart.width - bw - 2;
                     const y = Math.max(chart.chartArea.top + 4, Math.min(point.y - bh / 2, chart.chartArea.bottom - bh - 4));
                     ctx.fillStyle = C.cereja;
                     roundedRect(ctx, x, y, bw, bh, 3);
@@ -3719,7 +3719,7 @@ function renderCagedChurnChart() {
             maintainAspectRatio:false,
             animation:false,
             interaction:{ mode:'index', intersect:false },
-            layout:{ padding:{ left:18, right:52, top:14, bottom:0 } },
+            layout:{ padding:{ left:18, right:60, top:14, bottom:0 } },
             plugins:{ legend:{ display:false }, tooltip:{
                 backgroundColor:'rgba(2,28,69,0.94)',
                 padding:12,
