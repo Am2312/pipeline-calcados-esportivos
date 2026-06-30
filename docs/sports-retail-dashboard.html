@@ -3654,7 +3654,9 @@ function renderCagedChurnChart() {
             }
             if (chart.isDatasetVisible(1) && rows.length) {
                 const y = chart.scales.y.getPixelForValue(avg);
-                const lineEnd = chart.chartArea.right;
+                ctx.font = '800 11px Verdana';
+                const pillBw = ctx.measureText(cagedPctNumber(avg, 0)).width + 14;
+                const lineEnd = chart.width - pillBw;
                 ctx.strokeStyle = C.cereja;
                 ctx.lineWidth = 2.25;
                 ctx.setLineDash([6, 5]);
