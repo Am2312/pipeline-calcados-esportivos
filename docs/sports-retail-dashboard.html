@@ -3643,6 +3643,25 @@ function renderCagedChurnChart() {
             ctx.save();
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+            const placedRects = [];
+            const avoidOverlap = (x, y, w, h, top, bottom) => {
+                let ny = y;
+                for (let guard = 0; guard < 60; guard++) {
+                    let hit = null;
+                    for (const r of placedRects) {
+                        if (x < r.x + r.w && x + w > r.x && ny < r.y + r.h && ny + h > r.y) { hit = r; break; }
+                    }
+                    if (!hit) break;
+                    const up = hit.y - h - 2;
+                    const down = hit.y + hit.h + 2;
+                    const upOk = up >= top;
+                    const downOk = down + h <= bottom;
+                    if (upOk && (!downOk || Math.abs(up - y) <= Math.abs(down - y))) ny = up;
+                    else if (downOk) ny = down;
+                    else break;
+                }
+                return Math.max(top, Math.min(ny, bottom - h));
+            };
             const zeroY = chart.scales.y.getPixelForValue(0);
             if (zeroY >= chart.chartArea.top && zeroY <= chart.chartArea.bottom) {
                 ctx.strokeStyle = '#CFD8E3';
@@ -3688,6 +3707,7 @@ function renderCagedChurnChart() {
                     roundedRect(ctx, x, y, bw, bh, 3);
                     ctx.fillStyle = '#FFFFFF';
                     ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
+                    placedRects.push({ x, y, w: bw, h: bh });
                 });
             }
             if (chart.isDatasetVisible(1) && rows.length) {
@@ -3699,7 +3719,8 @@ function renderCagedChurnChart() {
                     const bw = ctx.measureText(text).width + 14;
                     const bh = 22;
                     const x = chart.chartArea.right - bw;
-                    const y = Math.max(chart.chartArea.top + 4, Math.min(point.y - bh / 2, chart.chartArea.bottom - bh - 4));
+                    const y0 = Math.max(chart.chartArea.top + 4, Math.min(point.y - bh / 2, chart.chartArea.bottom - bh - 4));
+                    const y = avoidOverlap(x, y0, bw, bh, chart.chartArea.top + 4, chart.chartArea.bottom - 4);
                     ctx.fillStyle = C.cereja;
                     roundedRect(ctx, x, y, bw, bh, 3);
                     ctx.fillStyle = '#FFFFFF';
