@@ -326,6 +326,7 @@ const CAGED_COMPANIES = {
 };
 let cagedCompany = 'vulcabras';  // 'vulcabras' | 'dass' | 'compare'
 let cagedRegion = 'all';         // 'all' | 'bahia' | 'nordeste'  (contexto de render, setado por card)
+let cagedSegment = 'footwear';   // 'footwear' | 'apparel' | 'both' (só Dass; Vulcabras é sempre footwear)
 // estoque RAIS 31/12/2019 por município (para reancorar a base quando filtra por região)
 const CAGED_MUNI_BASE = {
     'Horizonte/CE': 8415, 'Itapetinga/BA': 4690,
@@ -342,8 +343,20 @@ function cagedActiveData() { const c = CAGED_COMPANIES[cagedCompany] || CAGED_CO
 function cagedActiveBase() {
     const company = CAGED_COMPANIES[cagedCompany] || CAGED_COMPANIES.vulcabras;
     const region = cagedRegion || 'all';
-    if (region === 'all') return company.base;
+    const segment = cagedSegment || 'footwear';
     const d = (company.data && company.data()) || {};
+    if (Array.isArray(d.municipalities)) {
+        // formato Dass (segmentado): soma base2019 por segmento + região
+        let sum = 0;
+        d.municipalities.forEach(mu => {
+            if (segment !== 'both' && mu.segment !== segment) return;
+            if (!cagedRegionMatch(mu.scope, region)) return;
+            sum += Number(mu.base2019 || 0);
+        });
+        return sum;
+    }
+    // formato antigo (Vulcabras)
+    if (region === 'all') return company.base;
     const munis = (d.filters && d.filters.municipalities) ? Object.values(d.filters.municipalities) : [];
     let sum = 0, any = false;
     munis.forEach(scope => { if (cagedRegionMatch(scope, region) && CAGED_MUNI_BASE[scope] != null) { sum += CAGED_MUNI_BASE[scope]; any = true; } });
@@ -373,6 +386,18 @@ function cagedRegionSelectHtml(id) {
         + `</select>`);
 }
 function setCagedChartRegion(id, v) { const s = CAGED_CHART_STATES[id]; if (!s || !['all', 'bahia', 'nordeste'].includes(v)) return; s.region = v; renderCagedCard(); }
+function cagedChartSegment(id) { const s = CAGED_CHART_STATES[id]; return (s && s.segment) || 'footwear'; }
+function cagedSegmentSelectHtml(id) {
+    if (cagedChartCompany(id) !== 'dass') return '';  // só a Dass tem confecção rastreável
+    const cur = cagedChartSegment(id);
+    const opts = [['footwear', 'Calçados'], ['apparel', 'Vestuário'], ['both', 'Ambos']];
+    return selectBlock('Segment', `<select class="df-input" onchange="setCagedChartSegment('${id}', this.value)" style="width:130px;">`
+        + opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('')
+        + `</select>`);
+}
+function setCagedChartSegment(id, v) { const s = CAGED_CHART_STATES[id]; if (!s || !['footwear', 'apparel', 'both'].includes(v)) return; s.segment = v; renderCagedCard(); }
+// segmento efetivo de um gráfico (forçado footwear quando não é Dass)
+function cagedEffSegment(id) { return cagedChartCompany(id) === 'dass' ? cagedChartSegment(id) : 'footwear'; }
 // --- modo comparação Vulcabras × Grupo Dass: gráficos de linha idênticos ao "SSS Comparison" do varejo-alimentar-dashboard ---
 function withCagedCompany(c, fn) { const prev = cagedCompany; cagedCompany = c; try { return fn(); } finally { cagedCompany = prev; } }
 function cagedCompareSeries(getter) {
@@ -2624,21 +2649,19 @@ function cagedSourceRows() {
     const _d = cagedActiveData();
     const rows = (_d && _d.rows) ? _d.rows : [];
     const region = cagedRegion || 'all';
-    if (region === 'all') {
-        return rows.filter(row => row.scope === 'Total').map(row => ({
-            key: periodKey(row.year, row.month),
-            year: Number(row.year),
-            month: Number(row.month),
-            label: monthLabel(Number(row.year), Number(row.month)),
-            admissions: Number(row.admissions || 0),
-            separations: Number(row.separations || 0),
-            net: Number(row.net || 0),
-        })).sort((a, b) => a.key.localeCompare(b.key));
-    }
-    // soma os municípios do estado escolhido, por período (Total recomputado)
+    const segment = cagedSegment || 'footwear';
+    const isSeg = Array.isArray(_d.municipalities);  // formato Dass (segmentado)
+    // Recomputa o Total por período somando os municípios do segmento + região escolhidos.
     const byPeriod = new Map();
     rows.forEach(row => {
-        if (row.scope === 'Total' || !cagedRegionMatch(row.scope, region)) return;
+        if (isSeg) {
+            if (segment !== 'both' && row.segment !== segment) return;
+            if (!cagedRegionMatch(row.scope, region)) return;
+        } else if (region === 'all') {
+            if (row.scope !== 'Total') return;            // Vulcabras: usa o Total pré-computado
+        } else {
+            if (row.scope === 'Total' || !cagedRegionMatch(row.scope, region)) return;
+        }
         const k = periodKey(row.year, row.month);
         let t = byPeriod.get(k);
         if (!t) { t = { key: k, year: Number(row.year), month: Number(row.month), label: monthLabel(Number(row.year), Number(row.month)), admissions: 0, separations: 0, net: 0 }; byPeriod.set(k, t); }
@@ -2738,6 +2761,7 @@ function cagedControlsHtml() {
     const baseDisabled = cagedState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('netadds')}
+        ${cagedSegmentSelectHtml('netadds')}
         ${cagedRegionSelectHtml('netadds')}
         ${selectBlock('Grain', `<select id="caged-grain-select" class="df-input" onchange="setCagedGrain()"><option value="monthly" ${cagedState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-base-select" class="df-input" onchange="setCagedBase()" ${baseDisabled}><option value="spot" ${cagedState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
@@ -2917,6 +2941,7 @@ function cagedJobsControlsHtml() {
     const fixas = (window.regDashBoxes ? window.regDashBoxes('caged-jobs', cagedJobsState) : '');
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('jobs')}
+        ${cagedSegmentSelectHtml('jobs')}
         ${cagedRegionSelectHtml('jobs')}
         ${fixas}
         ${selectBlock('From', cagedJobsPeriodSelect('caged-jobs-from-select', cagedJobsState.from, 'setCagedJobsRange()'))}
@@ -3013,6 +3038,7 @@ function cagedJobsTableControlsHtml() {
     ensureCagedJobsTableRange();
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('table')}
+        ${cagedSegmentSelectHtml('table')}
         ${cagedRegionSelectHtml('table')}
         ${selectBlock('Grain', `<select id="caged-jobs-table-grain-select" class="df-input" onchange="setCagedJobsTableGrain()" style="width:126px;"><option value="monthly" ${cagedJobsTableState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedJobsTableState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedJobsTableState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('From', cagedJobsTablePeriodSelect('caged-jobs-table-from-select', cagedJobsTableState.from, 'setCagedJobsTableRange()'))}
@@ -3527,6 +3553,7 @@ function cagedChurnControlsHtml() {
     const baseDisabled = cagedChurnState.grain === 'annual' ? 'disabled' : '';
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('churn')}
+        ${cagedSegmentSelectHtml('churn')}
         ${cagedRegionSelectHtml('churn')}
         ${selectBlock('Grain', `<select id="caged-churn-grain-select" class="df-input" onchange="setCagedChurnGrain()" style="width:126px;"><option value="monthly" ${cagedChurnState.grain === 'monthly' ? 'selected' : ''}>Monthly</option><option value="quarterly" ${cagedChurnState.grain === 'quarterly' ? 'selected' : ''}>Quarterly</option><option value="annual" ${cagedChurnState.grain === 'annual' ? 'selected' : ''}>Annual</option></select>`)}
         ${selectBlock('Base', `<select id="caged-churn-base-select" class="df-input" onchange="setCagedChurnBase()" ${baseDisabled} style="width:126px;"><option value="spot" ${cagedChurnState.base === 'spot' ? 'selected' : ''}>Spot</option><option value="ltm" ${cagedChurnState.base === 'ltm' ? 'selected' : ''}>LTM</option></select>`)}
@@ -3890,6 +3917,7 @@ function cagedMonthlyComparisonControlsHtml() {
     const toSelect = `<select id="caged-monthly-to-year-select" class="df-input" onchange="setCagedMonthlyComparisonRange()" style="width:126px;">${years.map(year => `<option value="${year}" ${year === cagedMonthlyComparisonState.toYear ? 'selected' : ''}>${year}</option>`).join('') || yearOptions}</select>`;
     return `<div class="imports-controls" style="display:flex;align-items:flex-end;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-left:auto;">
         ${cagedCompanySelectHtml('comparison')}
+        ${cagedSegmentSelectHtml('comparison')}
         ${cagedRegionSelectHtml('comparison')}
         ${selectBlock('Grain', grainSelect)}
         ${selectBlock(cagedMonthlyComparisonState.grain === 'quarterly' ? 'Quarter' : 'Month', periodSelect)}
@@ -4249,7 +4277,7 @@ function renderCagedCard() {
     ensureCagedRange();
     ensureCagedMonthlyComparisonState();
     content.innerHTML = `
-        ${(cagedCompany = cagedChartCompany('netadds'), cagedRegion = cagedChartRegion('netadds'), '')}<section id="caged-data-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('netadds'), cagedRegion = cagedChartRegion('netadds'), cagedSegment = cagedEffSegment('netadds'), '')}<section id="caged-data-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedTitle()}</h3>
@@ -4260,7 +4288,7 @@ function renderCagedCard() {
             ${cagedLegendHtml()}
             <div style="position:relative;height:560px;"><canvas id="caged-main-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('comparison'), cagedRegion = cagedChartRegion('comparison'), '')}<section id="caged-monthly-comparison-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('comparison'), cagedRegion = cagedChartRegion('comparison'), cagedSegment = cagedEffSegment('comparison'), '')}<section id="caged-monthly-comparison-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedMonthlyComparisonTitle()}</h3>
@@ -4274,7 +4302,7 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:420px;"><canvas id="caged-monthly-comparison-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('jobs'), cagedRegion = cagedChartRegion('jobs'), '')}<section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('jobs'), cagedRegion = cagedChartRegion('jobs'), cagedSegment = cagedEffSegment('jobs'), '')}<section id="caged-jobs-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Estimated Formal Jobs - ${cagedScopeLabel()}</h3>
@@ -4285,7 +4313,7 @@ function renderCagedCard() {
             ${cagedJobsLegendHtml()}
             <div style="position:relative;height:560px;"><canvas id="caged-jobs-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('table'), cagedRegion = cagedChartRegion('table'), '')}<section id="caged-jobs-table-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('table'), cagedRegion = cagedChartRegion('table'), cagedSegment = cagedEffSegment('table'), '')}<section id="caged-jobs-table-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Formal Jobs Breakdown</h3>
@@ -4295,7 +4323,7 @@ function renderCagedCard() {
             </div>
             ${renderCagedJobsTable()}
         </section>
-        ${(cagedCompany = 'vulcabras', cagedRegion = cagedChartRegion('volume'), '')}<section id="caged-volume-yoy-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = 'vulcabras', cagedRegion = cagedChartRegion('volume'), cagedSegment = 'footwear', '')}<section id="caged-volume-yoy-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">Factory Headcount Growth vs Volume Growth</h3>
@@ -4309,7 +4337,7 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:400px;margin-top:-6px;margin-left:-8px;margin-right:-36px;width:calc(100% + 44px);"><canvas id="caged-volume-yoy-chart"></canvas></div>
         </section>
-        ${(cagedCompany = cagedChartCompany('churn'), cagedRegion = cagedChartRegion('churn'), '')}<section id="caged-churn-card" style="${cardStyle('margin-bottom:24px;')}">
+        ${(cagedCompany = cagedChartCompany('churn'), cagedRegion = cagedChartRegion('churn'), cagedSegment = cagedEffSegment('churn'), '')}<section id="caged-churn-card" style="${cardStyle('margin-bottom:24px;')}">
             <div class="imports-card-head" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;width:100%;margin-bottom:12px;">
                 <div style="align-self:flex-start;">
                     <h3 style="color:${C.azulEscuro};font-size:15px;font-weight:700;letter-spacing:0.04em;margin:0 0 4px 0;">${cagedChurnTitle()}</h3>
@@ -4326,13 +4354,13 @@ function renderCagedCard() {
             ])}
             <div style="position:relative;height:400px;"><canvas id="caged-churn-chart"></canvas></div>
         </section>`;
-    // Cada gráfico renderiza com a SUA empresa e região (caixas Company/Region independentes por card).
-    cagedCompany = cagedChartCompany('jobs'); cagedRegion = cagedChartRegion('jobs'); renderCagedJobsChart();
-    cagedCompany = cagedChartCompany('netadds'); cagedRegion = cagedChartRegion('netadds'); renderCagedChart();
-    cagedCompany = cagedChartCompany('comparison'); cagedRegion = cagedChartRegion('comparison'); renderCagedMonthlyComparisonChart();
+    // Cada gráfico renderiza com a SUA empresa/segmento/região (caixas independentes por card).
+    cagedCompany = cagedChartCompany('jobs'); cagedRegion = cagedChartRegion('jobs'); cagedSegment = cagedEffSegment('jobs'); renderCagedJobsChart();
+    cagedCompany = cagedChartCompany('netadds'); cagedRegion = cagedChartRegion('netadds'); cagedSegment = cagedEffSegment('netadds'); renderCagedChart();
+    cagedCompany = cagedChartCompany('comparison'); cagedRegion = cagedChartRegion('comparison'); cagedSegment = cagedEffSegment('comparison'); renderCagedMonthlyComparisonChart();
     // "Headcount vs Volume" usa volume de produção da Vulcabras — sempre Vulcabras, sempre visível.
-    cagedCompany = 'vulcabras'; cagedRegion = cagedChartRegion('volume'); renderCagedVolumeYoyChart();
-    cagedCompany = cagedChartCompany('churn'); cagedRegion = cagedChartRegion('churn'); renderCagedChurnChart();
+    cagedCompany = 'vulcabras'; cagedRegion = cagedChartRegion('volume'); cagedSegment = 'footwear'; renderCagedVolumeYoyChart();
+    cagedCompany = cagedChartCompany('churn'); cagedRegion = cagedChartRegion('churn'); cagedSegment = cagedEffSegment('churn'); renderCagedChurnChart();
 }
 
 function vivaraCagedRows(scope='Core') {
@@ -4672,24 +4700,27 @@ function renderMethodologyPage() {
         </section>
 
         <section class="methodology-card" style="margin-top:18px;">
-            <h3>GRUPO DASS — MESMA METODOLOGIA (SELETOR "COMPANY")</h3>
-            <p>Os gráficos CAGED têm um seletor <strong>Company</strong> (Vulcabras / Grupo Dass). A série da <strong>Dass Nordeste Calçados e Artigos Esportivos S.A</strong> usa exatamente o mesmo recorte (CAGEDMOV no prazo, CNAEs 1531901/1532700/1533500/1539400/1540800, âncora RAIS 31/12/2019, empregos = base + saldo acumulado). Como a base é anonimizada, fizemos a mesma pesquisa de contaminação por estabelecimento (RAIS) e mantivemos só os municípios em que a Dass domina o CNAE de calçados.</p>
+            <h3>GRUPO DASS — SELETORES COMPANY / SEGMENT / REGION</h3>
+            <p>Para a Dass, os gráficos CAGED têm <strong>Company</strong> (Vulcabras / Grupo Dass / comparação), <strong>Segment</strong> (Calçados / Vestuário / Ambos) e <strong>Region</strong> (Todas / Bahia / Nordeste). Mesma metodologia da Vulcabras (município × CNAE anonimizado; âncora RAIS 31/12/2019; empregos = base + saldo acumulado). Fonte das empresas via cadastro RFB/CNPJ: <strong>Dass Nordeste S.A.</strong> (CNPJ 01.287.588) e a irmã <strong>Dass Sul Ltda</strong> (81.786.121). Calçados = CNAE 1531901/1532700/1533500/1539400/1540800; Vestuário = CNAE 14 (confecção). A coluna "contaminação" estima a fração do CNAE municipal que <em>não</em> é Dass (1 − maior estabelecimento ÷ total, RAIS 2023) — é o erro máximo provável da série naquela praça.</p>
             <table class="methodology-table">
                 <thead>
-                    <tr><th>Município</th><th>Uso na análise</th><th>RAIS 2019 / leitura de contaminação</th></tr>
+                    <tr><th>Município</th><th>UF / Região</th><th>Segmento</th><th>Base RAIS 2019</th><th>Contaminação (risco)</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td><strong>Santo Estêvão/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>1 único estabelecimento de calçado (6.423 vínculos em 2023) — é a Dass.</td></tr>
-                    <tr><td><strong>Itaberaba/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>1 único estabelecimento (3.389 em 2023).</td></tr>
-                    <tr><td><strong>Vitória da Conquista/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>Dass = 4.174; demais estabelecimentos pulverizados (6, 2, …). 2 plantas Dass na cidade.</td></tr>
-                    <tr><td><strong>Santo Antônio de Jesus/BA</strong></td><td><span class="methodology-tag">Limpo</span></td><td>1 único estabelecimento (1.232 em 2023).</td></tr>
-                    <tr><td><strong>Itapipoca/CE</strong></td><td><span class="methodology-tag warn">Limpo c/ ressalva</span></td><td>Dass = 4.421 + outra fábrica de 356 (~7% de contaminação, mesmo patamar de Itapetinga/Vulcabras).</td></tr>
-                    <tr><td>Canindé/CE</td><td><span class="methodology-tag bad">Excluído</span></td><td>Duas fábricas grandes (482 e 402) — não dá para isolar a Dass.</td></tr>
-                    <tr><td>Ibicuí/BA</td><td><span class="methodology-tag bad">Excluído</span></td><td>Planta Dass só inaugurada em 2025; o estabelecimento de 2023 é outra empresa.</td></tr>
-                    <tr><td>Iguaí/BA</td><td><span class="methodology-tag bad">Excluído</span></td><td>Sem emprego de calçado em 2023 (planta Dass posterior).</td></tr>
+                    <tr><td><strong>Santo Estêvão</strong></td><td>BA / Nordeste</td><td>Calçados</td><td>3.469</td><td><span class="methodology-tag">~0% — estab único</span></td></tr>
+                    <tr><td><strong>Itaberaba</strong></td><td>BA / Nordeste</td><td>Calçados</td><td>1.741</td><td><span class="methodology-tag">~0% — estab único</span></td></tr>
+                    <tr><td><strong>Santo Antônio de Jesus</strong></td><td>BA / Nordeste</td><td>Calçados</td><td>497</td><td><span class="methodology-tag">~0% — estab único</span></td></tr>
+                    <tr><td><strong>Vitória da Conquista</strong></td><td>BA / Nordeste</td><td>Calçados</td><td>1.817</td><td><span class="methodology-tag">~0,2% (4.174/4.182)</span></td></tr>
+                    <tr><td><strong>Itapipoca</strong></td><td>CE / Nordeste</td><td>Calçados</td><td>2.527</td><td><span class="methodology-tag warn">~8,5% (4.421/4.833)</span></td></tr>
+                    <tr><td><strong>Ivoti</strong></td><td>RS / só em "Todas"</td><td>Calçados</td><td>760</td><td><span class="methodology-tag bad">~41% — cluster Vale dos Sinos (29 estabs)</span></td></tr>
+                    <tr><td><strong>Venâncio Aires</strong></td><td>RS / só em "Todas"</td><td>Calçados</td><td>119</td><td><span class="methodology-tag bad">alta — cluster RS; base pequena</span></td></tr>
+                    <tr><td><strong>Iguaí</strong></td><td>BA / Nordeste</td><td>Vestuário</td><td>~1 → 525 (2023)</td><td><span class="methodology-tag">~0% — estab único</span></td></tr>
+                    <tr><td><strong>Vitória da Conquista</strong></td><td>BA / Nordeste</td><td>Vestuário</td><td>2.378</td><td><span class="methodology-tag warn">~15% (2.662/3.121) — polo de confecção</span></td></tr>
+                    <tr><td><strong>Ibicuí</strong></td><td>BA / Nordeste</td><td>Vestuário</td><td>0 (planta 2025)</td><td><span class="methodology-tag warn">série começa no ramp-up de 2026</span></td></tr>
+                    <tr><td><strong>Saudades</strong></td><td>SC / só em "Todas"</td><td>Vestuário (Dass Sul)</td><td>835</td><td><span class="methodology-tag warn">~7% (827/885)</span></td></tr>
                 </tbody>
             </table>
-            <p style="margin-top:10px;">Âncora total RAIS 31/12/2019 dos 5 municípios limpos = <strong>10.051</strong> vínculos (vs. 13.105 da Vulcabras). Fonte do grosso: basedosdados (BigQuery); os meses mais recentes, não cobertos pelo basedosdados, vêm direto do microdado CAGEDMOV do FTP do MTE. O card "Headcount vs Volume" não aparece para a Dass por não haver série de volume de produção da companhia.</p>
+            <p style="margin-top:10px;"><strong>Risco de contaminação — leia assim:</strong> nas praças baianas a Dass é praticamente o único empregador do CNAE, então o risco é desprezível. As exceções a vigiar: <strong>Itapipoca</strong> (~8,5%) e <strong>VdC-vestuário</strong> (~15%, polo de confecção). As plantas do <strong>RS (Ivoti, Venâncio Aires)</strong> ficam no Vale dos Sinos — dezenas de calçadistas no mesmo município —, então a série lá é fortemente contaminada (Ivoti ~41%) e por isso só entra no filtro <strong>"Todas"</strong>, nunca em "Bahia"/"Nordeste". <strong>Excluído:</strong> Canindé/CE (2 fábricas ~50/50, não isolável) não está sequer sob o CNPJ da Dass Nordeste; Ibicuí/Iguaí são <em>confecção</em> (não calçado). Âncoras RAIS 2019: calçado Nordeste = 10.051 (Todas = 10.930); vestuário Nordeste = 2.379 (Todas = 3.214). Grosso via basedosdados (BigQuery); meses recentes via CAGEDMOV do FTP do MTE. "Headcount vs Volume" é Vulcabras-only.</p>
         </section>
 
         <section class="methodology-card" style="margin-top:18px;">
