@@ -386,7 +386,7 @@ function setCagedChartSegment(id, v) { const s = CAGED_CHART_STATES[id]; if (!s 
 // segmento efetivo de um gráfico (forçado footwear quando não é Dass)
 function cagedEffSegment(id) { return cagedChartCompany(id) === 'dass' ? 'both' : 'footwear'; }
 // --- modo comparação Vulcabras × Grupo Dass: gráficos de linha idênticos ao "SSS Comparison" do varejo-alimentar-dashboard ---
-function withCagedCompany(c, fn) { const prev = cagedCompany; cagedCompany = c; try { return fn(); } finally { cagedCompany = prev; } }
+function withCagedCompany(c, fn) { const prev = cagedCompany, prevSeg = cagedSegment; cagedCompany = c; cagedSegment = c === 'dass' ? 'both' : 'footwear'; try { return fn(); } finally { cagedCompany = prev; cagedSegment = prevSeg; } }
 function cagedCompareSeries(getter) {
     const vu = withCagedCompany('vulcabras', getter) || [];
     const da = withCagedCompany('dass', getter) || [];
