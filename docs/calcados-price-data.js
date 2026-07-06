@@ -864,7 +864,16 @@ const RAW_OLYMPIKUS = [
 {w:'2026-06-28',cat:'Treino e Academia',p_list:284.63,p_sale:232.13,n:28},
 {w:'2026-06-28',cat:'Trilha',p_list:599.99,p_sale:519.99,n:5},
 {w:'2026-06-28',cat:'Tênis',p_list:223.5,p_sale:190.25,n:52},
-{w:'2026-06-28',cat:'Vôlei',p_list:509.99,p_sale:459.7,n:5}
+{w:'2026-06-28',cat:'Vôlei',p_list:509.99,p_sale:459.7,n:5},
+{w:'2026-07-05',cat:'Calçados',p_list:214.99,p_sale:193.56,n:2},
+{w:'2026-07-05',cat:'Caminhada',p_list:240.75,p_sale:225.01,n:202},
+{w:'2026-07-05',cat:'Casual',p_list:254.91,p_sale:229.94,n:83},
+{w:'2026-07-05',cat:'Chinelo',p_list:142.24,p_sale:142.24,n:40},
+{w:'2026-07-05',cat:'Corrida',p_list:527.72,p_sale:469.44,n:186},
+{w:'2026-07-05',cat:'Treino e Academia',p_list:285.24,p_sale:231.18,n:30},
+{w:'2026-07-05',cat:'Trilha',p_list:599.99,p_sale:519.99,n:5},
+{w:'2026-07-05',cat:'Tênis',p_list:222.37,p_sale:186.22,n:56},
+{w:'2026-07-05',cat:'Vôlei',p_list:509.99,p_sale:474.85,n:5}
 ];
 
 // Mizuno website — {w, cat, p_list, p_sale, n}
@@ -1766,7 +1775,16 @@ const RAW_MIZUNO = [
 {w:'2026-06-28',cat:'Tennis',p_list:943.22,p_sale:756.1,n:33},
 {w:'2026-06-28',cat:'Treino',p_list:599.99,p_sale:599.99,n:1},
 {w:'2026-06-28',cat:'Trilha',p_list:1020.62,p_sale:779.86,n:32},
-{w:'2026-06-28',cat:'Vôlei',p_list:785.88,p_sale:659.26,n:18}
+{w:'2026-06-28',cat:'Vôlei',p_list:785.88,p_sale:659.26,n:18},
+{w:'2026-07-05',cat:'Calçados',p_list:399.99,p_sale:249.99,n:1},
+{w:'2026-07-05',cat:'Casual',p_list:1065.78,p_sale:926.01,n:260},
+{w:'2026-07-05',cat:'Chinelos',p_list:153.8,p_sale:153.8,n:21},
+{w:'2026-07-05',cat:'Chuteiras',p_list:848.62,p_sale:738.69,n:190},
+{w:'2026-07-05',cat:'Corrida',p_list:784.85,p_sale:625.81,n:405},
+{w:'2026-07-05',cat:'Tennis',p_list:950.66,p_sale:763.77,n:33},
+{w:'2026-07-05',cat:'Treino',p_list:578.56,p_sale:578.56,n:1},
+{w:'2026-07-05',cat:'Trilha',p_list:1012.89,p_sale:765.47,n:31},
+{w:'2026-07-05',cat:'Vôlei',p_list:785.76,p_sale:666.25,n:18}
 ];
 
 // Centauro (Nike, Adidas, Asics) — {w, brand, cat, p_list, p_sale, n}
@@ -8872,7 +8890,41 @@ const RAW_DIRECT = [
 {w:'2026-06-28',brand:'ua',cat:'Sandálias',p_sale:145.9,p_list:164.42,n:104},
 {w:'2026-06-28',brand:'ua',cat:'Treino',p_sale:515.7,p_list:640.12,n:372},
 {w:'2026-06-28',brand:'ua',cat:'Trilha',p_sale:514.09,p_list:754.04,n:26},
-{w:'2026-06-28',brand:'ua',cat:'Vôlei',p_sale:999.99,p_list:999.99,n:16}
+{w:'2026-06-28',brand:'ua',cat:'Vôlei',p_sale:999.99,p_list:999.99,n:16},
+{w:'2026-07-05',brand:'adidas',cat:'Basquete',p_sale:768.92,p_list:942.07,n:119},
+{w:'2026-07-05',brand:'adidas',cat:'Casual',p_sale:572.96,p_list:636.1,n:2058},
+{w:'2026-07-05',brand:'adidas',cat:'Corrida',p_sale:754.53,p_list:811.68,n:755},
+{w:'2026-07-05',brand:'adidas',cat:'Futebol',p_sale:950.33,p_list:1000.94,n:11},
+{w:'2026-07-05',brand:'adidas',cat:'Outros',p_sale:744.21,p_list:764.33,n:26},
+{w:'2026-07-05',brand:'adidas',cat:'Skate',p_sale:582.23,p_list:700.63,n:50},
+{w:'2026-07-05',brand:'adidas',cat:'Treino',p_sale:739.41,p_list:787.95,n:121},
+{w:'2026-07-05',brand:'adidas',cat:'Trilha',p_sale:760.88,p_list:803,n:42},
+{w:'2026-07-05',brand:'adidas',cat:'Tênis',p_sale:671.97,p_list:751.21,n:66},
+{w:'2026-07-05',brand:'adidas',cat:'Vôlei',p_sale:628.12,p_list:768.12,n:16},
+{w:'2026-07-05',brand:'asics',cat:'Casual',p_sale:689.74,p_list:835.77,n:404},
+{w:'2026-07-05',brand:'asics',cat:'Corrida',p_sale:806.87,p_list:943.62,n:462},
+{w:'2026-07-05',brand:'asics',cat:'Infantil',p_sale:271.59,p_list:386.69,n:34},
+{w:'2026-07-05',brand:'asics',cat:'Outros',p_sale:123.82,p_list:141.99,n:10},
+{w:'2026-07-05',brand:'asics',cat:'Skate',p_sale:537.03,p_list:674.62,n:17},
+{w:'2026-07-05',brand:'asics',cat:'Trilha',p_sale:1348.56,p_list:1999.99,n:1},
+{w:'2026-07-05',brand:'asics',cat:'Tênis',p_sale:733.57,p_list:853.63,n:138},
+{w:'2026-07-05',brand:'asics',cat:'Vôlei',p_sale:1018.85,p_list:1126.68,n:18},
+{w:'2026-07-05',brand:'nike',cat:'Basquete',p_sale:712.32,p_list:834.81,n:98},
+{w:'2026-07-05',brand:'nike',cat:'Casual',p_sale:732.88,p_list:861.61,n:1591},
+{w:'2026-07-05',brand:'nike',cat:'Corrida',p_sale:867.84,p_list:993.49,n:530},
+{w:'2026-07-05',brand:'nike',cat:'Futebol',p_sale:661.53,p_list:895.51,n:432},
+{w:'2026-07-05',brand:'nike',cat:'Skate',p_sale:478.1,p_list:654.26,n:71},
+{w:'2026-07-05',brand:'nike',cat:'Treino',p_sale:706.48,p_list:828.77,n:139},
+{w:'2026-07-05',brand:'nike',cat:'Tênis',p_sale:764.56,p_list:938.57,n:50},
+{w:'2026-07-05',brand:'ua',cat:'Basquete',p_sale:687.36,p_list:969.32,n:366},
+{w:'2026-07-05',brand:'ua',cat:'Casual',p_sale:624.26,p_list:856.15,n:542},
+{w:'2026-07-05',brand:'ua',cat:'Corrida',p_sale:546.45,p_list:679.94,n:1234},
+{w:'2026-07-05',brand:'ua',cat:'Futebol',p_sale:1058.19,p_list:1446.66,n:240},
+{w:'2026-07-05',brand:'ua',cat:'Outros',p_sale:838.65,p_list:931.98,n:105},
+{w:'2026-07-05',brand:'ua',cat:'Sandálias',p_sale:148.86,p_list:164.02,n:90},
+{w:'2026-07-05',brand:'ua',cat:'Treino',p_sale:528.55,p_list:640.9,n:362},
+{w:'2026-07-05',brand:'ua',cat:'Trilha',p_sale:502.03,p_list:765.3,n:19},
+{w:'2026-07-05',brand:'ua',cat:'Vôlei',p_sale:999.99,p_list:999.99,n:16}
 ];
 
 // Netshoes retailer — {w, brand, cat, p_list, p_sale, n}

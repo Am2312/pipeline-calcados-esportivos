@@ -4045,7 +4045,16 @@ const RAW_DISC_OLYMPIKUS = [
 {w:'2026-06-28',cat:'Treino e Academia',pct:0.4643,n:28},
 {w:'2026-06-28',cat:'Trilha',pct:0.8,n:5},
 {w:'2026-06-28',cat:'Tênis',pct:0.4615,n:52},
-{w:'2026-06-28',cat:'Vôlei',pct:1,n:5}
+{w:'2026-06-28',cat:'Vôlei',pct:1,n:5},
+{w:'2026-07-05',cat:'Calçados',pct:0.5,n:2},
+{w:'2026-07-05',cat:'Caminhada',pct:0.2624,n:202},
+{w:'2026-07-05',cat:'Casual',pct:0.4458,n:83},
+{w:'2026-07-05',cat:'Chinelo',pct:0,n:40},
+{w:'2026-07-05',cat:'Corrida',pct:0.5054,n:186},
+{w:'2026-07-05',cat:'Treino e Academia',pct:0.5,n:30},
+{w:'2026-07-05',cat:'Trilha',pct:0.8,n:5},
+{w:'2026-07-05',cat:'Tênis',pct:0.5,n:56},
+{w:'2026-07-05',cat:'Vôlei',pct:1,n:5}
 ];
 const RAW_DISC_MIZUNO = [
 {w:'2024-04-14',cat:'Casual',pct:0.2553,n:94},
@@ -4945,7 +4954,16 @@ const RAW_DISC_MIZUNO = [
 {w:'2026-06-28',cat:'Tennis',pct:0.697,n:33},
 {w:'2026-06-28',cat:'Treino',pct:0,n:1},
 {w:'2026-06-28',cat:'Trilha',pct:0.9375,n:32},
-{w:'2026-06-28',cat:'Vôlei',pct:0.7222,n:18}
+{w:'2026-06-28',cat:'Vôlei',pct:0.7222,n:18},
+{w:'2026-07-05',cat:'Calçados',pct:1,n:1},
+{w:'2026-07-05',cat:'Casual',pct:0.5038,n:260},
+{w:'2026-07-05',cat:'Chinelos',pct:0,n:21},
+{w:'2026-07-05',cat:'Chuteiras',pct:0.6105,n:190},
+{w:'2026-07-05',cat:'Corrida',pct:0.5556,n:405},
+{w:'2026-07-05',cat:'Tennis',pct:0.697,n:33},
+{w:'2026-07-05',cat:'Treino',pct:0,n:1},
+{w:'2026-07-05',cat:'Trilha',pct:0.9677,n:31},
+{w:'2026-07-05',cat:'Vôlei',pct:0.6667,n:18}
 ];
 const RAW_DISC_DIRECT = [
 {w:'2026-05-17',brand:'adidas',cat:'Basquete',pct:0.3486,n:109},
@@ -6017,7 +6035,41 @@ const RAW_DISC_DIRECT = [
 {w:'2026-06-28',brand:'ua',cat:'Sandálias',pct:0.5192,n:104},
 {w:'2026-06-28',brand:'ua',cat:'Treino',pct:0.5833,n:372},
 {w:'2026-06-28',brand:'ua',cat:'Trilha',pct:0.6538,n:26},
-{w:'2026-06-28',brand:'ua',cat:'Vôlei',pct:0,n:16}
+{w:'2026-06-28',brand:'ua',cat:'Vôlei',pct:0,n:16},
+{w:'2026-07-05',brand:'adidas',cat:'Basquete',pct:0.4454,n:119},
+{w:'2026-07-05',brand:'adidas',cat:'Casual',pct:0.2974,n:2058},
+{w:'2026-07-05',brand:'adidas',cat:'Corrida',pct:0.2424,n:755},
+{w:'2026-07-05',brand:'adidas',cat:'Futebol',pct:0.1818,n:11},
+{w:'2026-07-05',brand:'adidas',cat:'Outros',pct:0.1923,n:26},
+{w:'2026-07-05',brand:'adidas',cat:'Skate',pct:0.48,n:50},
+{w:'2026-07-05',brand:'adidas',cat:'Treino',pct:0.2231,n:121},
+{w:'2026-07-05',brand:'adidas',cat:'Trilha',pct:0.119,n:42},
+{w:'2026-07-05',brand:'adidas',cat:'Tênis',pct:0.2727,n:66},
+{w:'2026-07-05',brand:'adidas',cat:'Vôlei',pct:0.4375,n:16},
+{w:'2026-07-05',brand:'asics',cat:'Casual',pct:0.849,n:404},
+{w:'2026-07-05',brand:'asics',cat:'Corrida',pct:0.7576,n:462},
+{w:'2026-07-05',brand:'asics',cat:'Infantil',pct:1,n:34},
+{w:'2026-07-05',brand:'asics',cat:'Outros',pct:0.9,n:10},
+{w:'2026-07-05',brand:'asics',cat:'Skate',pct:0.4706,n:17},
+{w:'2026-07-05',brand:'asics',cat:'Trilha',pct:1,n:1},
+{w:'2026-07-05',brand:'asics',cat:'Tênis',pct:0.8116,n:138},
+{w:'2026-07-05',brand:'asics',cat:'Vôlei',pct:0.6667,n:18},
+{w:'2026-07-05',brand:'nike',cat:'Basquete',pct:0.5612,n:98},
+{w:'2026-07-05',brand:'nike',cat:'Casual',pct:0.6669,n:1591},
+{w:'2026-07-05',brand:'nike',cat:'Corrida',pct:0.5321,n:530},
+{w:'2026-07-05',brand:'nike',cat:'Futebol',pct:0.7755,n:432},
+{w:'2026-07-05',brand:'nike',cat:'Skate',pct:0.9296,n:71},
+{w:'2026-07-05',brand:'nike',cat:'Treino',pct:0.6906,n:139},
+{w:'2026-07-05',brand:'nike',cat:'Tênis',pct:0.84,n:50},
+{w:'2026-07-05',brand:'ua',cat:'Basquete',pct:0.7978,n:366},
+{w:'2026-07-05',brand:'ua',cat:'Casual',pct:0.7897,n:542},
+{w:'2026-07-05',brand:'ua',cat:'Corrida',pct:0.5916,n:1234},
+{w:'2026-07-05',brand:'ua',cat:'Futebol',pct:0.8125,n:240},
+{w:'2026-07-05',brand:'ua',cat:'Outros',pct:0.3714,n:105},
+{w:'2026-07-05',brand:'ua',cat:'Sandálias',pct:0.3,n:90},
+{w:'2026-07-05',brand:'ua',cat:'Treino',pct:0.511,n:362},
+{w:'2026-07-05',brand:'ua',cat:'Trilha',pct:0.7368,n:19},
+{w:'2026-07-05',brand:'ua',cat:'Vôlei',pct:0,n:16}
 ];
 const RAW_DISC_NETSHOES = [
 {w:'2026-05-17',brand:'361 Sport',cat:'Corrida',pct:0,n:3},
@@ -14944,7 +14996,16 @@ const RAW_AVGDISC_OLYMPIKUS = [
 {w:'2026-06-28',cat:'Treino e Academia',avg_disc_promo:0.4189,avg_disc_all:0.1945,n_disc:13,n:28},
 {w:'2026-06-28',cat:'Trilha',avg_disc_promo:0.1667,avg_disc_all:0.1333,n_disc:4,n:5},
 {w:'2026-06-28',cat:'Tênis',avg_disc_promo:0.3315,avg_disc_all:0.153,n_disc:24,n:52},
-{w:'2026-06-28',cat:'Vôlei',avg_disc_promo:0.2466,avg_disc_all:0.2466,n_disc:5,n:5}
+{w:'2026-06-28',cat:'Vôlei',avg_disc_promo:0.2466,avg_disc_all:0.2466,n_disc:5,n:5},
+{w:'2026-07-05',cat:'Calçados',avg_disc_promo:0.3,avg_disc_all:0.15,n_disc:1,n:2},
+{w:'2026-07-05',cat:'Caminhada',avg_disc_promo:0.2655,avg_disc_all:0.0697,n_disc:53,n:202},
+{w:'2026-07-05',cat:'Casual',avg_disc_promo:0.2392,avg_disc_all:0.1066,n_disc:37,n:83},
+{w:'2026-07-05',cat:'Chinelo',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:40},
+{w:'2026-07-05',cat:'Corrida',avg_disc_promo:0.2193,avg_disc_all:0.1108,n_disc:94,n:186},
+{w:'2026-07-05',cat:'Treino e Academia',avg_disc_promo:0.409,avg_disc_all:0.2045,n_disc:15,n:30},
+{w:'2026-07-05',cat:'Trilha',avg_disc_promo:0.1667,avg_disc_all:0.1333,n_disc:4,n:5},
+{w:'2026-07-05',cat:'Tênis',avg_disc_promo:0.3271,avg_disc_all:0.1636,n_disc:28,n:56},
+{w:'2026-07-05',cat:'Vôlei',avg_disc_promo:0.2466,avg_disc_all:0.2466,n_disc:5,n:5}
 ];
 // RAW_AVGDISC_MIZUNO
 const RAW_AVGDISC_MIZUNO = [
@@ -15845,7 +15906,16 @@ const RAW_AVGDISC_MIZUNO = [
 {w:'2026-06-28',cat:'Tennis',avg_disc_promo:0.2762,avg_disc_all:0.1925,n_disc:23,n:33},
 {w:'2026-06-28',cat:'Treino',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:1},
 {w:'2026-06-28',cat:'Trilha',avg_disc_promo:0.2603,avg_disc_all:0.244,n_disc:30,n:32},
-{w:'2026-06-28',cat:'Vôlei',avg_disc_promo:0.2408,avg_disc_all:0.1739,n_disc:13,n:18}
+{w:'2026-06-28',cat:'Vôlei',avg_disc_promo:0.2408,avg_disc_all:0.1739,n_disc:13,n:18},
+{w:'2026-07-05',cat:'Calçados',avg_disc_promo:0.375,avg_disc_all:0.375,n_disc:1,n:1},
+{w:'2026-07-05',cat:'Casual',avg_disc_promo:0.2575,avg_disc_all:0.1298,n_disc:131,n:260},
+{w:'2026-07-05',cat:'Chinelos',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:21},
+{w:'2026-07-05',cat:'Chuteiras',avg_disc_promo:0.2944,avg_disc_all:0.1798,n_disc:116,n:190},
+{w:'2026-07-05',cat:'Corrida',avg_disc_promo:0.3267,avg_disc_all:0.1815,n_disc:225,n:405},
+{w:'2026-07-05',cat:'Tennis',avg_disc_promo:0.2762,avg_disc_all:0.1925,n_disc:23,n:33},
+{w:'2026-07-05',cat:'Treino',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:1},
+{w:'2026-07-05',cat:'Trilha',avg_disc_promo:0.2603,avg_disc_all:0.2519,n_disc:30,n:31},
+{w:'2026-07-05',cat:'Vôlei',avg_disc_promo:0.24,avg_disc_all:0.16,n_disc:12,n:18}
 ];
 const RAW_AVGDISC_DIRECT = [
 {w:'2026-05-17',brand:'adidas',cat:'Basquete',avg_disc_promo:0.3382,avg_disc_all:0.1179,n_disc:38,n:109},
@@ -16917,7 +16987,41 @@ const RAW_AVGDISC_DIRECT = [
 {w:'2026-06-28',brand:'ua',cat:'Sandálias',avg_disc_promo:0.3525,avg_disc_all:0.183,n_disc:54,n:104},
 {w:'2026-06-28',brand:'ua',cat:'Treino',avg_disc_promo:0.338,avg_disc_all:0.1972,n_disc:217,n:372},
 {w:'2026-06-28',brand:'ua',cat:'Trilha',avg_disc_promo:0.3911,avg_disc_all:0.2557,n_disc:17,n:26},
-{w:'2026-06-28',brand:'ua',cat:'Vôlei',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:16}
+{w:'2026-06-28',brand:'ua',cat:'Vôlei',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:16},
+{w:'2026-07-05',brand:'adidas',cat:'Basquete',avg_disc_promo:0.4434,avg_disc_all:0.1975,n_disc:53,n:119},
+{w:'2026-07-05',brand:'adidas',cat:'Casual',avg_disc_promo:0.3989,avg_disc_all:0.1186,n_disc:612,n:2058},
+{w:'2026-07-05',brand:'adidas',cat:'Corrida',avg_disc_promo:0.3956,avg_disc_all:0.0959,n_disc:183,n:755},
+{w:'2026-07-05',brand:'adidas',cat:'Futebol',avg_disc_promo:0.4,avg_disc_all:0.0727,n_disc:2,n:11},
+{w:'2026-07-05',brand:'adidas',cat:'Outros',avg_disc_promo:0.26,avg_disc_all:0.05,n_disc:5,n:26},
+{w:'2026-07-05',brand:'adidas',cat:'Skate',avg_disc_promo:0.4021,avg_disc_all:0.193,n_disc:24,n:50},
+{w:'2026-07-05',brand:'adidas',cat:'Treino',avg_disc_promo:0.3741,avg_disc_all:0.0835,n_disc:27,n:121},
+{w:'2026-07-05',brand:'adidas',cat:'Trilha',avg_disc_promo:0.45,avg_disc_all:0.0536,n_disc:5,n:42},
+{w:'2026-07-05',brand:'adidas',cat:'Tênis',avg_disc_promo:0.4111,avg_disc_all:0.1121,n_disc:18,n:66},
+{w:'2026-07-05',brand:'adidas',cat:'Vôlei',avg_disc_promo:0.4071,avg_disc_all:0.1781,n_disc:7,n:16},
+{w:'2026-07-05',brand:'asics',cat:'Casual',avg_disc_promo:0.2785,avg_disc_all:0.2364,n_disc:343,n:404},
+{w:'2026-07-05',brand:'asics',cat:'Corrida',avg_disc_promo:0.2739,avg_disc_all:0.2075,n_disc:350,n:462},
+{w:'2026-07-05',brand:'asics',cat:'Infantil',avg_disc_promo:0.3282,avg_disc_all:0.3282,n_disc:34,n:34},
+{w:'2026-07-05',brand:'asics',cat:'Outros',avg_disc_promo:0.222,avg_disc_all:0.1998,n_disc:9,n:10},
+{w:'2026-07-05',brand:'asics',cat:'Skate',avg_disc_promo:0.4496,avg_disc_all:0.2116,n_disc:8,n:17},
+{w:'2026-07-05',brand:'asics',cat:'Trilha',avg_disc_promo:0.39,avg_disc_all:0.39,n_disc:1,n:1},
+{w:'2026-07-05',brand:'asics',cat:'Tênis',avg_disc_promo:0.2401,avg_disc_all:0.1949,n_disc:112,n:138},
+{w:'2026-07-05',brand:'asics',cat:'Vôlei',avg_disc_promo:0.2167,avg_disc_all:0.1444,n_disc:12,n:18},
+{w:'2026-07-05',brand:'nike',cat:'Basquete',avg_disc_promo:0.3022,avg_disc_all:0.1696,n_disc:55,n:98},
+{w:'2026-07-05',brand:'nike',cat:'Casual',avg_disc_promo:0.2832,avg_disc_all:0.1889,n_disc:1061,n:1591},
+{w:'2026-07-05',brand:'nike',cat:'Corrida',avg_disc_promo:0.2797,avg_disc_all:0.1488,n_disc:282,n:530},
+{w:'2026-07-05',brand:'nike',cat:'Futebol',avg_disc_promo:0.3699,avg_disc_all:0.2869,n_disc:335,n:432},
+{w:'2026-07-05',brand:'nike',cat:'Skate',avg_disc_promo:0.3782,avg_disc_all:0.3516,n_disc:66,n:71},
+{w:'2026-07-05',brand:'nike',cat:'Treino',avg_disc_promo:0.2664,avg_disc_all:0.184,n_disc:96,n:139},
+{w:'2026-07-05',brand:'nike',cat:'Tênis',avg_disc_promo:0.2661,avg_disc_all:0.2235,n_disc:42,n:50},
+{w:'2026-07-05',brand:'ua',cat:'Basquete',avg_disc_promo:0.3684,avg_disc_all:0.2939,n_disc:292,n:366},
+{w:'2026-07-05',brand:'ua',cat:'Casual',avg_disc_promo:0.3451,avg_disc_all:0.2725,n_disc:428,n:542},
+{w:'2026-07-05',brand:'ua',cat:'Corrida',avg_disc_promo:0.3115,avg_disc_all:0.1843,n_disc:730,n:1234},
+{w:'2026-07-05',brand:'ua',cat:'Futebol',avg_disc_promo:0.38,avg_disc_all:0.3087,n_disc:195,n:240},
+{w:'2026-07-05',brand:'ua',cat:'Outros',avg_disc_promo:0.2272,avg_disc_all:0.0844,n_disc:39,n:105},
+{w:'2026-07-05',brand:'ua',cat:'Sandálias',avg_disc_promo:0.3837,avg_disc_all:0.1151,n_disc:27,n:90},
+{w:'2026-07-05',brand:'ua',cat:'Treino',avg_disc_promo:0.3076,avg_disc_all:0.1572,n_disc:185,n:362},
+{w:'2026-07-05',brand:'ua',cat:'Trilha',avg_disc_promo:0.3526,avg_disc_all:0.2598,n_disc:14,n:19},
+{w:'2026-07-05',brand:'ua',cat:'Vôlei',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:16}
 ];
 const RAW_AVGDISC_NETSHOES = [
 {w:'2026-05-17',brand:'361 Sport',cat:'Corrida',avg_disc_promo:null,avg_disc_all:0,n_disc:0,n:3},
