@@ -43,6 +43,13 @@ HEADERS_UA = {
 
 session = cf_requests.Session()
 
+# Optional proxy for anti-bot-protected sites (Netshoes uses Akamai Bot Manager).
+# Set NETSHOES_PROXY to a residential / web-unlocker endpoint, e.g.
+#   NETSHOES_PROXY="http://user:pass@host:port"
+# When unset, requests go direct (will hit the Akamai challenge from datacenter IPs).
+NS_PROXY = os.environ.get("NETSHOES_PROXY", "").strip()
+NS_PROXIES = {"http": NS_PROXY, "https": NS_PROXY} if NS_PROXY else None
+
 # ── Adidas: todos os esportes ─────────────────────────────────────────────────
 
 ADIDAS_SPORTS = [
@@ -516,13 +523,30 @@ def get_ns_state(html):
 
 def scrape_netshoes():
     print("\n[NETSHOES] Coletando netshoes.com.br/tenis...")
+    if NS_PROXIES:
+        print(f"  Usando proxy NETSHOES_PROXY ({NS_PROXY.split('@')[-1]})")
+    else:
+        print("  AVISO: sem NETSHOES_PROXY — requisição direta será barrada pelo Akamai fora de IP residencial")
     rows = []
     seen = set()
 
-    r0 = session.get(NS_URL, headers=HEADERS_NS, impersonate="chrome124", timeout=30)
+    # Warm-up na home para receber os cookies do Akamai (bm_*, _abck) antes da categoria
+    try:
+        session.get("https://www.netshoes.com.br/", headers=HEADERS_NS,
+                    impersonate="chrome124", proxies=NS_PROXIES, timeout=30)
+        time.sleep(1.0)
+    except Exception as e:
+        print(f"  AVISO: warm-up da home falhou: {e}")
+
+    r0 = session.get(NS_URL, headers=HEADERS_NS, impersonate="chrome124",
+                     proxies=NS_PROXIES, timeout=30)
     state0 = get_ns_state(r0.text)
     if not state0:
-        print("  ERRO: __INITIAL_STATE__ não encontrado na página 1")
+        # Página de desafio do Akamai Bot Manager (sec-cpt / behavioral-content) tem ~2 KB
+        blocked = ("sec-cpt" in r0.text) or ("behavioral-content" in r0.text) or (r0.status_code == 403)
+        motivo = "bloqueio Akamai Bot Manager" if blocked else "estrutura da página mudou"
+        print(f"  ERRO: __INITIAL_STATE__ não encontrado na página 1 "
+              f"(HTTP {r0.status_code}, {len(r0.text)} bytes — {motivo})")
         return rows
 
     sp0 = state0['SearchPage']
@@ -567,7 +591,7 @@ def scrape_netshoes():
     for page_num in range(2, total_pages + 1):
         time.sleep(0.5)
         try:
-            r = session.get(f"{NS_URL}?page={page_num}", headers=HEADERS_NS, impersonate="chrome124", timeout=30)
+            r = session.get(f"{NS_URL}?page={page_num}", headers=HEADERS_NS, impersonate="chrome124", proxies=NS_PROXIES, timeout=30)
             if r.status_code != 200:
                 print(f"  ERRO página {page_num}: HTTP {r.status_code}")
                 break
@@ -658,3 +682,15 @@ if __name__ == "__main__":
     load_netshoes_to_bq(ns_rows)
 
     print("\nPIPELINE CONCLUIDO.")
+
+    # Alerta em Netshoes vazio. Para não deixar o workflow vermelho todo dia
+    # enquanto não houver proxy, só falhamos (exit 1) quando um NETSHOES_PROXY
+    # ESTÁ configurado e mesmo assim veio 0 linhas (= regressão real a investigar).
+    # Sem proxy, apenas avisa alto. (O brand-direct já foi carregado acima.)
+    if not ns_rows:
+        if NS_PROXIES:
+            print("\n[ALERTA] Netshoes retornou 0 linhas COM proxy configurado — "
+                  "regressão real (scrape_netshoes quebrou). Investigar.")
+            sys.exit(1)
+        print("\n[ALERTA] Netshoes retornou 0 linhas — bloqueio Akamai. "
+              "Configure NETSHOES_PROXY (proxy residencial/unblocker) para restaurar a coleta.")
