@@ -493,9 +493,15 @@ def load_to_bq(rows):
     print(f"\n[BQ] {len(rows)} linhas carregadas na particao {TODAY_STR}")
     print(f"     Tabela: {BQ_TABLE}")
 
-# ── Netshoes: __INITIAL_STATE__ (React/Redux) ────────────────────────────────
+# ── Netshoes: API JSON de listagem (/api/lst/<lista>) ────────────────────────
+# A pagina HTML /tenis passou a exigir o desafio sec-cpt do Akamai (2026-06-29).
+# Mas o endpoint XHR /api/lst/<lista>?page=N NAO e desafiado e devolve os mesmos
+# campos (parentSkus com listPrice/salePrice/brand/etc.). curl_cffi passa na
+# checagem de rede do Akamai; basta aquecer os cookies na home antes.
 
-NS_URL = "https://www.netshoes.com.br/tenis"
+NS_LIST = "tenis"
+NS_HOME = "https://www.netshoes.com.br/"
+NS_API  = f"https://www.netshoes.com.br/api/lst/{NS_LIST}"
 HEADERS_NS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
@@ -503,30 +509,34 @@ HEADERS_NS = {
     "Accept-Encoding": "gzip, deflate, br",
     "Referer": "https://www.netshoes.com.br",
 }
+HEADERS_NS_API = {
+    "User-Agent": HEADERS_NS["User-Agent"],
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "pt-BR,pt;q=0.9",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": f"https://www.netshoes.com.br/{NS_LIST}",
+}
 
-def get_ns_state(html):
-    idx = html.find("__INITIAL_STATE__=")
-    if idx < 0:
+def _ns_get_page(page_num):
+    """GET /api/lst/tenis?page=N -> dict JSON (ou None em bloqueio/erro)."""
+    r = session.get(f"{NS_API}?page={page_num}", headers=HEADERS_NS_API,
+                    impersonate="chrome124", proxies=NS_PROXIES, timeout=30)
+    ct = r.headers.get("content-type", "")
+    if r.status_code != 200 or "json" not in ct:
+        blocked = ("sec-cpt" in r.text) or ("behavioral-content" in r.text) or (r.status_code == 403)
+        motivo = "bloqueio Akamai" if blocked else f"resposta inesperada (HTTP {r.status_code}, {ct})"
+        print(f"  ERRO pagina {page_num}: {motivo}")
         return None
-    text = html[idx + len("__INITIAL_STATE__="):]
-    depth = 0
-    for i, c in enumerate(text):
-        if c == '{': depth += 1
-        elif c == '}':
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[:i+1])
-                except:
-                    return None
-    return None
+    try:
+        return r.json()
+    except Exception as e:
+        print(f"  ERRO pagina {page_num}: JSON invalido: {e}")
+        return None
 
 def scrape_netshoes():
-    print("\n[NETSHOES] Coletando netshoes.com.br/tenis...")
+    print("\n[NETSHOES] Coletando via API /api/lst/tenis...")
     if NS_PROXIES:
         print(f"  Usando proxy NETSHOES_PROXY ({NS_PROXY.split('@')[-1]})")
-    else:
-        print("  AVISO: sem NETSHOES_PROXY — requisição direta será barrada pelo Akamai fora de IP residencial")
     rows = []
     seen = set()
 
@@ -538,20 +548,12 @@ def scrape_netshoes():
     except Exception as e:
         print(f"  AVISO: warm-up da home falhou: {e}")
 
-    r0 = session.get(NS_URL, headers=HEADERS_NS, impersonate="chrome124",
-                     proxies=NS_PROXIES, timeout=30)
-    state0 = get_ns_state(r0.text)
-    if not state0:
-        # Página de desafio do Akamai Bot Manager (sec-cpt / behavioral-content) tem ~2 KB
-        blocked = ("sec-cpt" in r0.text) or ("behavioral-content" in r0.text) or (r0.status_code == 403)
-        motivo = "bloqueio Akamai Bot Manager" if blocked else "estrutura da página mudou"
-        print(f"  ERRO: __INITIAL_STATE__ não encontrado na página 1 "
-              f"(HTTP {r0.status_code}, {len(r0.text)} bytes — {motivo})")
+    d0 = _ns_get_page(1)
+    if not d0:
         return rows
-
-    sp0 = state0['SearchPage']
-    total = sp0.get('total', 0)
-    total_pages = sp0.get('totalPages', 1)
+    total = d0.get('total', 0)
+    total_pages = d0.get('totalPages', 1)
+    page1_skus = d0.get('parentSkus', [])
     print(f"  Total: {total} produtos | {total_pages} páginas")
 
     def process_skus(skus):
@@ -585,25 +587,18 @@ def scrape_netshoes():
                 "product_url": f"https://www.netshoes.com.br{item.get('productSlug', '')}",
             })
 
-    process_skus(sp0.get('parentSkus', []))
+    process_skus(page1_skus)
     print(f"  Página 1/{total_pages} — {len(seen)} SKUs")
 
     for page_num in range(2, total_pages + 1):
-        time.sleep(0.5)
-        try:
-            r = session.get(f"{NS_URL}?page={page_num}", headers=HEADERS_NS, impersonate="chrome124", proxies=NS_PROXIES, timeout=30)
-            if r.status_code != 200:
-                print(f"  ERRO página {page_num}: HTTP {r.status_code}")
-                break
-            state = get_ns_state(r.text)
-            if not state:
-                print(f"  ERRO página {page_num}: sem __INITIAL_STATE__")
-                break
-            process_skus(state['SearchPage'].get('parentSkus', []))
-        except Exception as e:
-            print(f"  ERRO página {page_num}: {e}")
+        time.sleep(0.4)
+        d = _ns_get_page(page_num)
+        if not d:
             break
-
+        ps = d.get('parentSkus', [])
+        if not ps:
+            break
+        process_skus(ps)
         if page_num % 50 == 0:
             print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs")
 
@@ -688,9 +683,7 @@ if __name__ == "__main__":
     # ESTÁ configurado e mesmo assim veio 0 linhas (= regressão real a investigar).
     # Sem proxy, apenas avisa alto. (O brand-direct já foi carregado acima.)
     if not ns_rows:
-        if NS_PROXIES:
-            print("\n[ALERTA] Netshoes retornou 0 linhas COM proxy configurado — "
-                  "regressão real (scrape_netshoes quebrou). Investigar.")
-            sys.exit(1)
-        print("\n[ALERTA] Netshoes retornou 0 linhas — bloqueio Akamai. "
-              "Configure NETSHOES_PROXY (proxy residencial/unblocker) para restaurar a coleta.")
+        print("\n[ALERTA] Netshoes retornou 0 linhas — a API /api/lst pode ter mudado "
+              "ou o Akamai bloqueou o IP. Investigar scrape_netshoes(). "
+              "(Se for bloqueio de IP em runner datacenter, defina NETSHOES_PROXY.)")
+        sys.exit(1)
