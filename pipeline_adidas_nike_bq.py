@@ -26,11 +26,25 @@ HEADERS_ADIDAS = {
     "Accept-Encoding": "gzip, deflate, br",
     "Referer": "https://www.adidas.com.br/calcados",
 }
+# NOTE (2026-07-27): a Nike apertou o Akamai em ~2026-07-24 e passou a NEGAR
+# (edge-deny "Access Denied") requests cujo fingerprint de header não bate com
+# um Chrome real. O UA de iPhone Safari + impersonate="chrome124" (TLS de Chrome)
+# virou mismatch e tomava 403 → coleta parava em silêncio. Solução: fingerprint
+# de Chrome desktop consistente (UA Chrome + sec-ch-ua + sec-fetch + impersonate
+# chrome124). Ver [[netshoes-akamai-scrape-fix]] para o caso análogo.
 HEADERS_NIKE = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
-    "Accept-Language": "pt-BR,pt;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "none",
+    "sec-fetch-user": "?1",
+    "upgrade-insecure-requests": "1",
     "Referer": "https://www.nike.com.br/",
 }
 HEADERS_UA = {
@@ -152,21 +166,51 @@ def fetch_nike_page(build_id, page_num):
     if page_num > 1:
         params = f"page={page_num}&{params}"
     url = f"{base}?{params}"
-    h_json = {**HEADERS_NIKE, "Accept": "application/json", "x-nextjs-data": "1"}
-    r = session.get(url, headers=h_json, impersonate="chrome124", timeout=30)
-    if r.status_code != 200:
-        return None, None
-    try:
-        body = r.json()
-    except Exception:
-        return None, None
-    page_data = body.get("pageProps", {}).get("data", {})
-    return page_data.get("products", []), page_data.get("pagination", {})
+    h_json = {
+        **HEADERS_NIKE,
+        "Accept": "application/json",
+        "x-nextjs-data": "1",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "Referer": f"https://www.nike.com.br/{NIKE_NAV_PATH}",
+    }
+    # Retry com backoff: o Akamai da Nike derruba conexões (curl 7 / reset) quando
+    # as páginas vêm muito rápido. Sem isso, um único reset aborta a coleta inteira.
+    last_err = None
+    for attempt in range(4):
+        try:
+            r = session.get(url, headers=h_json, impersonate="chrome124", timeout=30)
+        except Exception as e:
+            last_err = f"conexão: {e}"
+            time.sleep(2.0 * (attempt + 1))
+            continue
+        if r.status_code == 200:
+            try:
+                body = r.json()
+            except Exception:
+                return None, None
+            page_data = body.get("pageProps", {}).get("data", {})
+            return page_data.get("products", []), page_data.get("pagination", {})
+        blocked = ("Access Denied" in r.text) or (r.status_code == 403)
+        last_err = "bloqueio Akamai (Access Denied)" if blocked else f"HTTP {r.status_code}"
+        time.sleep(2.0 * (attempt + 1))
+    print(f"  ERRO página {page_num}: {last_err} (após retries)")
+    return None, None
 
 def scrape_nike_direct():
     print("\n[NIKE DIRECT] Coletando nike.com.br (todos os calcados)...")
     rows = []
     seen = set()
+
+    # Aquece os cookies do Akamai (bm_*, _abck) com um GET na home antes dos
+    # /_next/data — reduz a chance de edge-deny em runner de datacenter.
+    try:
+        session.get("https://www.nike.com.br/", headers=HEADERS_NIKE,
+                    impersonate="chrome124", timeout=30)
+        time.sleep(1.0)
+    except Exception as e:
+        print(f"  AVISO: warm-up da home falhou: {e}")
 
     build_id = get_nike_build_id()
     print(f"  buildId: {build_id}")
@@ -217,17 +261,32 @@ def scrape_nike_direct():
     process_products(products_p1)
     print(f"  Página 1/{total_pages} — {len(seen)} SKUs até agora")
 
+    # Tolera falhas isoladas de página (reset transitório / throttle) pulando a
+    # página em vez de abortar tudo. Só para de vez se muitas páginas seguidas
+    # falharem (= IP bloqueado / site fora), evitando truncar em silêncio.
+    consec_fail = 0
+    failed_pages = []
+    MAX_CONSEC_FAIL = 8
     for page_num in range(2, total_pages + 1):
         time.sleep(1.0)
         products, _ = fetch_nike_page(build_id, page_num)
         if products is None:
-            print(f"  ERRO na página {page_num}, parando")
-            break
+            consec_fail += 1
+            failed_pages.append(page_num)
+            if consec_fail >= MAX_CONSEC_FAIL:
+                print(f"  ABORTANDO: {consec_fail} páginas seguidas falharam "
+                      f"(provável bloqueio de IP). Coletado até aqui: {len(seen)} SKUs.")
+                break
+            continue
+        consec_fail = 0
         process_products(products)
         if page_num % 10 == 0:
             print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs até agora")
 
-    print(f"  Total Nike: {len(rows)} SKUs únicos")
+    if failed_pages:
+        print(f"  AVISO: {len(failed_pages)} página(s) falharam e foram puladas: {failed_pages}")
+    print(f"  Total Nike: {len(rows)} SKUs únicos "
+          f"({len(seen)} de ~{total_pages*30} esperados)")
     return rows
 
 # ── Asics: VTEX Intelligent Search ───────────────────────────────────────────
