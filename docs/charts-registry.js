@@ -177,7 +177,8 @@ window.ecomDashControlBar = function (key) {
       var opts = c.options.map(function (o) { return '<option value="' + o.v + '"' + (o.sel ? ' selected' : '') + '>' + o.t + '</option>'; }).join('');
       inner = '<select class="control-select" id="' + c.id + '" onchange="' + c.onchange + '"' + w + '>' + opts + '</select>';
     }
-    return '<div class="control-block"' + blockAttrs + '><div class="control-label">' + c.label + '</div>' + inner + '</div>';
+    var labelText = c.label || (c.kind === 'series' ? 'Series' : '');
+    return '<div class="control-block"' + blockAttrs + '><div class="control-label">' + labelText + '</div>' + inner + '</div>';
   }).join('');
 };
 // markup estilo APRESENTAÇÃO (<label> + <select id>); MESMOS ids do dashboard → o
