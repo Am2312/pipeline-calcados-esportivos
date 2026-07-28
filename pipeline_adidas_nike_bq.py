@@ -64,6 +64,17 @@ session = cf_requests.Session()
 NS_PROXY = os.environ.get("NETSHOES_PROXY", "").strip()
 NS_PROXIES = {"http": NS_PROXY, "https": NS_PROXY} if NS_PROXY else None
 
+# Nike: em ~2026-07-24 o Akamai passou a NEGAR (edge-deny "Access Denied") as
+# rotas de produto (/_next/data) vindas de IP de DATACENTER. Comprovado em
+# 2026-07-28 pela sonda nike_probe.py rodando no runner: 403 em TODAS as
+# variações (6 impersonations, com/sem warm-up, referers). Do IP datacenter
+# NÃO há truque de header que passe. A coleta só funciona saindo por um IP
+# residencial → configure NIKE_PROXY (residential proxy / web-unlocker), mesmo
+# formato do NETSHOES_PROXY: "http://user:pass@host:port". Sem ele, a coleta
+# da Nike vem vazia no runner (avisa alto no fim). Ver [[netshoes-akamai-scrape-fix]].
+NIKE_PROXY = os.environ.get("NIKE_PROXY", "").strip()
+NIKE_PROXIES = {"http": NIKE_PROXY, "https": NIKE_PROXY} if NIKE_PROXY else None
+
 # ── Adidas: todos os esportes ─────────────────────────────────────────────────
 
 ADIDAS_SPORTS = [
@@ -150,7 +161,8 @@ NIKE_NAV_PATH = "nav/tipodeproduto/calcados"
 
 def get_nike_build_id():
     """Fetches buildId from Nike 404 page (not blocked by Akamai unlike nav pages)."""
-    r = session.get(NIKE_BUILDID_URL, headers=HEADERS_NIKE, impersonate="chrome124", timeout=30)
+    r = session.get(NIKE_BUILDID_URL, headers=HEADERS_NIKE, impersonate="chrome124",
+                    proxies=NIKE_PROXIES, timeout=30)
     nd = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.DOTALL)
     if not nd:
         raise RuntimeError("__NEXT_DATA__ não encontrado — Nike mudou estrutura novamente")
@@ -180,7 +192,8 @@ def fetch_nike_page(build_id, page_num):
     last_err = None
     for attempt in range(4):
         try:
-            r = session.get(url, headers=h_json, impersonate="chrome124", timeout=30)
+            r = session.get(url, headers=h_json, impersonate="chrome124",
+                             proxies=NIKE_PROXIES, timeout=30)
         except Exception as e:
             last_err = f"conexão: {e}"
             time.sleep(2.0 * (attempt + 1))
@@ -205,9 +218,11 @@ def scrape_nike_direct():
 
     # Aquece os cookies do Akamai (bm_*, _abck) com um GET na home antes dos
     # /_next/data — reduz a chance de edge-deny em runner de datacenter.
+    if NIKE_PROXIES:
+        print(f"  Usando proxy NIKE_PROXY ({NIKE_PROXY.split('@')[-1]})")
     try:
         session.get("https://www.nike.com.br/", headers=HEADERS_NIKE,
-                    impersonate="chrome124", timeout=30)
+                    impersonate="chrome124", proxies=NIKE_PROXIES, timeout=30)
         time.sleep(1.0)
     except Exception as e:
         print(f"  AVISO: warm-up da home falhou: {e}")
@@ -737,12 +752,26 @@ if __name__ == "__main__":
 
     print("\nPIPELINE CONCLUIDO.")
 
-    # Alerta em Netshoes vazio. Para não deixar o workflow vermelho todo dia
-    # enquanto não houver proxy, só falhamos (exit 1) quando um NETSHOES_PROXY
-    # ESTÁ configurado e mesmo assim veio 0 linhas (= regressão real a investigar).
-    # Sem proxy, apenas avisa alto. (O brand-direct já foi carregado acima.)
+    # ── Alertas de coleta vazia (mesma lógica p/ Nike e Netshoes) ──────────────
+    # Sem proxy configurado: só avisa alto (não deixa o workflow vermelho todo dia
+    # à toa). Com proxy configurado e mesmo assim 0 linhas: exit 1 (regressão real).
+    fail = False
+
+    if not nike_rows:
+        print("\n[ALERTA] Nike retornou 0 linhas. Do runner (IP datacenter) o Akamai "
+              "NEGA as rotas de produto — a coleta só passa por IP residencial. "
+              "Defina o secret NIKE_PROXY (residential proxy / web-unlocker). "
+              "Ver comentário em NIKE_PROXY / [[netshoes-akamai-scrape-fix]].")
+        if NIKE_PROXIES:
+            print("  → NIKE_PROXY ESTÁ configurado e ainda assim veio 0 — regressão a investigar.")
+            fail = True
+
     if not ns_rows:
         print("\n[ALERTA] Netshoes retornou 0 linhas — a API /api/lst pode ter mudado "
               "ou o Akamai bloqueou o IP. Investigar scrape_netshoes(). "
               "(Se for bloqueio de IP em runner datacenter, defina NETSHOES_PROXY.)")
+        if NS_PROXIES:
+            fail = True
+
+    if fail:
         sys.exit(1)
