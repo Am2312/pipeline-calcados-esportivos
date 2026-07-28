@@ -23,6 +23,29 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      # A Nike (Akamai) NEGA IP de datacenter nas rotas de produto. Saímos por
+      # Cloudflare WARP (grátis, sem conta) em modo proxy SOCKS5 :40000, que dá
+      # um IP aceito pelo Akamai. Só o scraper da Nike usa esse proxy (NIKE_PROXY);
+      # o resto (Adidas/UA/Asics/Netshoes/BQ) vai direto. Ver nike-akamai-datacenter-block.
+      - name: Instalar Cloudflare WARP
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+
+      - name: Conectar WARP (proxy SOCKS5 :40000)
+        run: |
+          sudo systemctl start warp-svc || (sudo warp-svc >/tmp/warpsvc.log 2>&1 &)
+          sleep 6
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register || true
+          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy || true
+          warp-cli --accept-tos connect || true
+          sleep 6
+          warp-cli --accept-tos status || true
+          # Confirma que o SOCKS5 do WARP está de pé (warp=on). Falha o job se não subiu.
+          curl -s --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -q 'warp=on'
+
       - name: Configurar credenciais GCP
         run: |
           echo '${{ secrets.GCP_CREDENTIALS }}' > /tmp/gcp_creds.json
@@ -32,4 +55,5 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_creds.json
           PYTHONIOENCODING: utf-8
+          NIKE_PROXY: socks5h://127.0.0.1:40000   # Nike sai pelo WARP; resto vai direto
         run: python pipeline_adidas_nike_bq.py
