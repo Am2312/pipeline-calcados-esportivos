@@ -8,6 +8,7 @@ import sys
 import json
 import os
 import re
+import subprocess
 import time
 from datetime import date
 from curl_cffi import requests as cf_requests
@@ -74,6 +75,14 @@ NS_PROXIES = {"http": NS_PROXY, "https": NS_PROXY} if NS_PROXY else None
 # da Nike vem vazia no runner (avisa alto no fim). Ver [[netshoes-akamai-scrape-fix]].
 NIKE_PROXY = os.environ.get("NIKE_PROXY", "").strip()
 NIKE_PROXIES = {"http": NIKE_PROXY, "https": NIKE_PROXY} if NIKE_PROXY else None
+
+# O IP de saída do WARP grátis é sorteado a cada conexão e o Akamai da Nike
+# aceita alguns e nega outros — desde 2026-07-28 a coleta passava só ~3 de 7 dias
+# ("ERRO página 1: bloqueio Akamai" com o proxy de pé). NIKE_PROXY_RESET_CMD é o
+# comando que troca esse IP (no workflow: warp_rotate.sh); quando a Nike é negada,
+# o scraper roda esse comando e tenta de novo, até NIKE_MAX_EGRESS_TRIES vezes.
+NIKE_RESET_CMD = os.environ.get("NIKE_PROXY_RESET_CMD", "").strip()
+NIKE_MAX_EGRESS_TRIES = int(os.environ.get("NIKE_MAX_EGRESS_TRIES", "6"))
 
 # ── Adidas: todos os esportes ─────────────────────────────────────────────────
 
@@ -172,6 +181,43 @@ def get_nike_build_id():
         raise RuntimeError("buildId não encontrado")
     return build_id
 
+def rotate_nike_egress():
+    """Troca o IP de saída do proxy da Nike rodando NIKE_PROXY_RESET_CMD.
+
+    Retorna True quando o proxy voltou de pé com (presumivelmente) outro IP.
+    """
+    if not NIKE_RESET_CMD:
+        return False
+    print("  Nike negada — rotacionando IP de saída do proxy...")
+    try:
+        p = subprocess.run(NIKE_RESET_CMD, shell=True, capture_output=True,
+                           text=True, timeout=240)
+    except Exception as e:
+        print(f"  AVISO: rotação do proxy falhou: {e}")
+        return False
+    for line in (p.stdout or "").strip().splitlines():
+        print(line)
+    if p.returncode != 0:
+        err = (p.stderr or "").strip().replace("\n", " ")[:300]
+        print(f"  AVISO: rotação retornou {p.returncode}: {err}")
+        return False
+    # Os cookies do Akamai (bm_*, _abck) foram emitidos para o IP antigo; manter
+    # os cookies velhos com IP novo é justamente um sinal de bot. Descarta.
+    try:
+        session.cookies.clear()
+    except Exception:
+        pass
+    return True
+
+def nike_warm_up():
+    """Aquece os cookies do Akamai (bm_*, _abck) com um GET na home."""
+    try:
+        session.get("https://www.nike.com.br/", headers=HEADERS_NIKE,
+                    impersonate="chrome124", proxies=NIKE_PROXIES, timeout=30)
+        time.sleep(1.0)
+    except Exception as e:
+        print(f"  AVISO: warm-up da home falhou: {e}")
+
 def fetch_nike_page(build_id, page_num):
     base = f"https://www.nike.com.br/_next/data/{build_id}/{NIKE_NAV_PATH}.json"
     params = "scoringProfile=scoreByRanking"
@@ -216,24 +262,37 @@ def scrape_nike_direct():
     rows = []
     seen = set()
 
-    # Aquece os cookies do Akamai (bm_*, _abck) com um GET na home antes dos
-    # /_next/data — reduz a chance de edge-deny em runner de datacenter.
     if NIKE_PROXIES:
         print(f"  Usando proxy NIKE_PROXY ({NIKE_PROXY.split('@')[-1]})")
-    try:
-        session.get("https://www.nike.com.br/", headers=HEADERS_NIKE,
-                    impersonate="chrome124", proxies=NIKE_PROXIES, timeout=30)
-        time.sleep(1.0)
-    except Exception as e:
-        print(f"  AVISO: warm-up da home falhou: {e}")
 
-    build_id = get_nike_build_id()
-    print(f"  buildId: {build_id}")
+    # O IP de saída do WARP é sorteado: uns passam no Akamai, outros tomam
+    # "Access Denied" na página 1. Tenta, e a cada negativa sorteia outro IP
+    # (NIKE_PROXY_RESET_CMD) em vez de desistir do dia inteiro.
+    max_tries = NIKE_MAX_EGRESS_TRIES if NIKE_RESET_CMD else 1
+    build_id = products_p1 = pagination = None
+    for attempt in range(1, max_tries + 1):
+        if attempt > 1:
+            print(f"  Tentativa {attempt}/{max_tries} com novo IP de saída...")
+        nike_warm_up()
+        try:
+            build_id = get_nike_build_id()
+        except Exception as e:
+            print(f"  ERRO: buildId falhou: {e}")
+            build_id = None
+        if build_id:
+            print(f"  buildId: {build_id}")
+            products_p1, pagination = fetch_nike_page(build_id, 1)
+            if products_p1 is not None:
+                break
+            print("  ERRO: página 1 falhou")
+        if attempt == max_tries or not rotate_nike_egress():
+            break
 
-    products_p1, pagination = fetch_nike_page(build_id, 1)
     if products_p1 is None:
-        print("  ERRO: página 1 falhou")
+        print(f"  ERRO: página 1 falhou em {attempt} tentativa(s) de IP de saída — "
+              "Nike vazia hoje.")
         return rows
+    egress_tries_used = attempt
 
     last_url = pagination.get("last", "")
     last_page_m = re.search(r'page=(\d+)', last_url)
@@ -279,24 +338,39 @@ def scrape_nike_direct():
     # Tolera falhas isoladas de página (reset transitório / throttle) pulando a
     # página em vez de abortar tudo. Só para de vez se muitas páginas seguidas
     # falharem (= IP bloqueado / site fora), evitando truncar em silêncio.
+    # Se o IP for bloqueado NO MEIO da coleta (o Akamai às vezes vira a chave
+    # depois de N páginas), rotaciona o IP de saída e retoma na mesma página em
+    # vez de abortar com metade dos SKUs.
     consec_fail = 0
     failed_pages = []
     MAX_CONSEC_FAIL = 8
-    for page_num in range(2, total_pages + 1):
+    rotations_left = max(0, NIKE_MAX_EGRESS_TRIES - egress_tries_used) if NIKE_RESET_CMD else 0
+    page_num = 2
+    while page_num <= total_pages:
         time.sleep(1.0)
         products, _ = fetch_nike_page(build_id, page_num)
         if products is None:
             consec_fail += 1
-            failed_pages.append(page_num)
+            if consec_fail >= MAX_CONSEC_FAIL and rotations_left > 0:
+                print(f"  {consec_fail} páginas seguidas falharam — trocando IP de "
+                      f"saída e retomando na página {page_num}.")
+                rotations_left -= 1
+                if rotate_nike_egress():
+                    nike_warm_up()
+                    consec_fail = 0
+                    continue
             if consec_fail >= MAX_CONSEC_FAIL:
                 print(f"  ABORTANDO: {consec_fail} páginas seguidas falharam "
                       f"(provável bloqueio de IP). Coletado até aqui: {len(seen)} SKUs.")
                 break
+            failed_pages.append(page_num)
+            page_num += 1
             continue
         consec_fail = 0
         process_products(products)
         if page_num % 10 == 0:
             print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs até agora")
+        page_num += 1
 
     if failed_pages:
         print(f"  AVISO: {len(failed_pages)} página(s) falharam e foram puladas: {failed_pages}")
@@ -763,7 +837,11 @@ if __name__ == "__main__":
               "Defina o secret NIKE_PROXY (residential proxy / web-unlocker). "
               "Ver comentário em NIKE_PROXY / [[netshoes-akamai-scrape-fix]].")
         if NIKE_PROXIES:
-            print("  → NIKE_PROXY ESTÁ configurado e ainda assim veio 0 — regressão a investigar.")
+            print(f"  → NIKE_PROXY ESTÁ configurado e mesmo trocando o IP de saída "
+                  f"{NIKE_MAX_EGRESS_TRIES}x (NIKE_PROXY_RESET_CMD="
+                  f"{NIKE_RESET_CMD or 'NÃO SETADO'}) o Akamai negou. Se persistir por "
+                  f"vários dias, o WARP inteiro caiu na blocklist → usar proxy "
+                  f"residencial/web-unlocker no NIKE_PROXY.")
             fail = True
 
     if not ns_rows:

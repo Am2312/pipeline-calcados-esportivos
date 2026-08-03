@@ -1,0 +1,2 @@
+# Scripts de shell rodam no runner Linux: precisam ficar com LF (CRLF quebra o bash).
+*.sh text eol=lf
