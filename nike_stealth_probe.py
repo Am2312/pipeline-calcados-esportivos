@@ -1,28 +1,40 @@
-"""Sonda TEMPORÁRIA #9: navegação SPA (clique) a partir da home rendeirizada.
+"""Sonda TEMPORÁRIA #10: fetch da listagem DE DENTRO da sessão do camoufox.
 
-Sonda #8 (run 30824174849) achou a fresta: no camoufox a HOME carrega inteira
-(1,65 MB, __NEXT_DATA__ 48 KB, HTTP 200) — é só a rota de LISTAGEM que devolve
-o stub de 2.367 b quando entramos direto por URL (page.goto).
+Sonda #9 (run 30824986173) mostrou o caminho: no camoufox a home carrega (200) e
+o próprio app fez `200 /_next/data/v12-32-0/index.json`. Ou seja, com os cookies
+do Akamai validados pela home, a rota /_next/data responde — o que morre é a
+requisição de fora (curl) ou o goto direto na listagem.
 
-Hipótese: com a sessão/cookies do Akamai já validados pela home, a navegação
-client-side do Next (clique num link da categoria → fetch em /_next/data)
-passa. É exatamente o que o site faz num usuário real.
-
-Loga também toda resposta de /_next/data para ver o status real.
-Remover depois de decidir.
+Testa então o que o pipeline faria: abrir a home uma vez no camoufox e buscar as
+páginas da listagem por fetch DENTRO da página (mesma origem, mesmos cookies).
+Sucesso = pageProps.data.products com 30 itens.
 """
 import os
-import re
 
 HOME = "https://www.nike.com.br/"
-CAT_PATH = "/nav/tipodeproduto/calcados"
+NAV = "nav/tipodeproduto/calcados"
 PROXY = os.environ.get("PROBE_PROXY", "").strip()
 
-COUNT = """() => ({
-  html: document.documentElement.outerHTML.length,
-  links: document.querySelectorAll('a[href*="/produto/"]').length,
-  url: location.pathname + location.search,
-})"""
+FETCH = """async ({buildId, nav, page}) => {
+  let url = `/_next/data/${buildId}/${nav}.json?scoringProfile=scoreByRanking`;
+  if (page > 1) url = `/_next/data/${buildId}/${nav}.json?page=${page}&scoringProfile=scoreByRanking`;
+  const r = await fetch(url, {headers: {'x-nextjs-data': '1'}, credentials: 'include'});
+  const txt = await r.text();
+  let prods = -1, last = null;
+  try {
+    const d = JSON.parse(txt);
+    const p = d?.pageProps?.data?.products;
+    prods = Array.isArray(p) ? p.length : -2;
+    last = d?.pageProps?.data?.pagination?.last || null;
+  } catch (e) {}
+  return {status: r.status, len: txt.length, prods, last, deny: txt.includes('Access Denied')};
+}"""
+
+BUILD = """() => {
+  const nd = document.getElementById('__NEXT_DATA__');
+  if (!nd) return null;
+  try { return JSON.parse(nd.textContent).buildId; } catch (e) { return null; }
+}"""
 
 
 def main():
@@ -34,51 +46,21 @@ def main():
 
     with Camoufox(**kw) as b:
         page = b.new_page()
-        seen = []
-
-        def on_resp(r):
-            if "_next/data" in r.url or "/api/" in r.url:
-                seen.append(f"{r.status} {r.url[:120]}")
-        page.on("response", on_resp)
-
         r = page.goto(HOME, wait_until="networkidle", timeout=90000)
         page.wait_for_timeout(8000)
-        print(f"home: HTTP {r.status if r else '?'} | {page.evaluate(COUNT)}",
-              flush=True)
+        build_id = page.evaluate(BUILD)
+        print(f"home: HTTP {r.status if r else '?'} | buildId={build_id}", flush=True)
+        if not build_id:
+            print("❌ sem buildId — home não renderizou")
+            return
 
-        # 1) clique num link da categoria (navegação SPA do Next)
-        clicked = False
-        for sel in (f'a[href="{CAT_PATH}"]', f'a[href*="{CAT_PATH}"]',
-                    'a[href*="tipodeproduto/calcados"]'):
-            try:
-                el = page.query_selector(sel)
-                if el:
-                    el.scroll_into_view_if_needed()
-                    el.click(timeout=15000)
-                    clicked = True
-                    print(f"cliquei em {sel}", flush=True)
-                    break
-            except Exception as e:
-                print(f"clique em {sel} falhou: {str(e)[:100]}")
-        if not clicked:
-            hrefs = page.eval_on_selector_all(
-                "a", "els => els.map(e => e.getAttribute('href')).filter(h => h && h.includes('calcado')).slice(0,10)")
-            print(f"nenhum link clicável; candidatos: {hrefs}")
-
-        page.wait_for_timeout(12000)
-        info = page.evaluate(COUNT)
-        ok = "✅" if info["links"] > 5 else "❌"
-        print(f"{ok} pos-clique: {info}", flush=True)
-
-        # 2) se o clique levou à listagem, tenta paginar por clique também
-        if info["links"] > 5:
-            html = page.content()
-            m = re.findall(r'/produto/[^"\']+', html)[:3]
-            print(f"  exemplos de produto: {m}")
-
-        print("\nrespostas de _next/data / api:")
-        for s in seen[-15:]:
-            print(f"  {s}")
+        for pg in (1, 2, 3):
+            res = page.evaluate(FETCH, {"buildId": build_id, "nav": NAV, "page": pg})
+            ok = "✅" if res["prods"] > 0 else "❌"
+            print(f"{ok} fetch interno p{pg}: HTTP {res['status']}"
+                  f"{' DENY' if res['deny'] else ''} | {res['len']}b | "
+                  f"produtos={res['prods']} | last={res['last']}", flush=True)
+            page.wait_for_timeout(1500)
 
 
 try:
