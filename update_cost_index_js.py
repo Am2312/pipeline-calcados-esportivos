@@ -12,6 +12,12 @@ Este script recalcula a serie inteira direto dos tickers Bloomberg, entao rodar 
 novo CORRIGE a cauda automaticamente. Rode semanalmente (ou depois de ~quarta,
 quando o print da sexta anterior ja aterrissou).
 
+A grade vai ate a ultima sexta corrida. A semana corrente costuma sair com os 4
+indices ocidentais forward-filled, mas com VINYHUDO (spot de EVA na China) e
+USDBRL proprios -- ou seja, carrega informacao real, e e a convencao da serie. O
+script imprime exatamente quais componentes vieram carregados; a proxima rodada
+revisa a semana. Use --through-published se quiser uma cauda 100% publicada.
+
 Receita (validada: reproduz 622 das 637 semanas do arquivo antigo com erro <1e-9;
 as 15 diferencas sao justamente as semanas defasadas + 4 buracos de 2021):
   grade      = sextas, week_start = segunda da mesma semana
@@ -88,13 +94,26 @@ ff AS (
     LAST_VALUE(matsstfb     IGNORE NULLS) OVER w AS matsstfb,
     LAST_VALUE(vinyhudo_cny IGNORE NULLS) OVER w AS vinyhudo_cny,
     LAST_VALUE(usdcny       IGNORE NULLS) OVER w AS usdcny,
-    LAST_VALUE(usdbrl       IGNORE NULLS) OVER w AS usdbrl
+    LAST_VALUE(usdbrl       IGNORE NULLS) OVER w AS usdbrl,
+    -- data do print de origem de cada serie, p/ expor o que veio forward-filled
+    LAST_VALUE(IF(merspvho     IS NULL, NULL, date) IGNORE NULLS) OVER w AS asof_merspvho,
+    LAST_VALUE(IF(finsesea     IS NULL, NULL, date) IGNORE NULLS) OVER w AS asof_finsesea,
+    LAST_VALUE(IF(finsbrot     IS NULL, NULL, date) IGNORE NULLS) OVER w AS asof_finsbrot,
+    LAST_VALUE(IF(matsstfb     IS NULL, NULL, date) IGNORE NULLS) OVER w AS asof_matsstfb,
+    LAST_VALUE(IF(vinyhudo_cny IS NULL, NULL, date) IGNORE NULLS) OVER w AS asof_vinyhudo,
+    LAST_VALUE(IF(usdbrl       IS NULL, NULL, date) IGNORE NULLS) OVER w AS asof_usdbrl
   FROM cal
   WINDOW w AS (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 )
 SELECT
   FORMAT_DATE('%Y-%m-%d', ff.date) AS week_date,
   FORMAT_DATE('%Y-%m-%d', DATE_SUB(ff.date, INTERVAL 4 DAY)) AS week_start,
+  FORMAT_DATE('%Y-%m-%d', asof_merspvho) AS asof_merspvho,
+  FORMAT_DATE('%Y-%m-%d', asof_finsesea) AS asof_finsesea,
+  FORMAT_DATE('%Y-%m-%d', asof_finsbrot) AS asof_finsbrot,
+  FORMAT_DATE('%Y-%m-%d', asof_matsstfb) AS asof_matsstfb,
+  FORMAT_DATE('%Y-%m-%d', asof_vinyhudo) AS asof_vinyhudo,
+  FORMAT_DATE('%Y-%m-%d', asof_usdbrl)   AS asof_usdbrl,
   usdbrl, usdcny,
   merspvho / 1015.0 AS pvc_usd,
   (merspvho * usdbrl) / 2001.377 AS pvc_brl,
@@ -121,11 +140,13 @@ def last_complete_friday(today=None):
 
 
 def last_published_friday(client):
-    """Ultima sexta em que os 4 indices semanais JA tem print no warehouse.
+    """Ultima sexta em que os 4 indices semanais ocidentais JA tem print.
 
-    Esses indices chegam ~7 dias depois da data do print. Cortar a grade aqui
-    evita que o arquivo termine numa linha forward-filled (que pareceria uma
-    semana nova de custo quando na verdade so o FX e o VINYHUDO se moveram).
+    Usada so com --through-published. O DEFAULT e ir ate a ultima sexta corrida
+    (last_complete_friday): a semana corrente carrega informacao real -- VINYHUDO
+    (spot de EVA na China) e o USDBRL sao diarios e ja se moveram -- e essa sempre
+    foi a convencao da serie. O que o script imprime abaixo deixa explicito quais
+    componentes vieram forward-filled, e rodar de novo revisa a cauda.
     """
     sql = """
     SELECT MIN(max_date) AS grid_end FROM (
@@ -160,12 +181,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
                     help="mostra o diff e nao escreve o arquivo")
+    ap.add_argument("--through-published", action="store_true",
+                    help="corta a grade na ultima sexta em que os 4 indices semanais "
+                         "ocidentais ja tem print (cauda sem nenhum forward-fill)")
     args = ap.parse_args()
 
     client = bigquery.Client(project=PROJECT)
-    grid_end = last_published_friday(client)
-    print("ultima sexta com print dos 4 indices semanais: %s (hoje: %s, ultima sexta: %s)"
-          % (grid_end, date.today(), last_complete_friday()))
+    if args.through_published:
+        grid_end = last_published_friday(client)
+    else:
+        grid_end = last_complete_friday()
+    print("grid_end: %s (hoje: %s, ultima sexta corrida: %s, ultima sexta publicada: %s)"
+          % (grid_end, date.today(), last_complete_friday(), last_published_friday(client)))
     old = read_existing()
     new_tail = fetch(client, grid_end)
 
@@ -202,6 +229,21 @@ def main():
     print("grade: %s -> %s (%d semanas, %d preservadas antes de %s)"
           % (rows[0]["week_date"], rows[-1]["week_date"], len(rows), len(kept), GRID_START))
     print("semanas novas: %s" % (added or "nenhuma"))
+
+    # transparencia: o que na ultima semana veio forward-filled
+    last = new_tail[-1]
+    stale = [(name, last["asof_" + name]) for name in
+             ("merspvho", "finsesea", "finsbrot", "matsstfb", "vinyhudo", "usdbrl")
+             if last["asof_" + name] != last["week_date"]]
+    if stale:
+        print("ATENCAO - na semana %s estes componentes vieram forward-filled:"
+              % last["week_date"])
+        for name, asof in stale:
+            print("    %-9s as-of %s" % (name, asof))
+        print("    rodar de novo depois que os prints chegarem revisa essa semana.")
+    else:
+        print("semana %s: todos os componentes com print proprio." % last["week_date"])
+
     print("valores corrigidos: %d" % len(changed))
     for wd, f, a, b in changed:
         sa = "None" if a is None else "%.6f" % a
