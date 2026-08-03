@@ -826,23 +826,27 @@ if __name__ == "__main__":
 
     print("\nPIPELINE CONCLUIDO.")
 
-    # ── Alertas de coleta vazia (mesma lógica p/ Nike e Netshoes) ──────────────
-    # Sem proxy configurado: só avisa alto (não deixa o workflow vermelho todo dia
-    # à toa). Com proxy configurado e mesmo assim 0 linhas: exit 1 (regressão real).
+    # ── Alertas de coleta vazia ────────────────────────────────────────────────
     fail = False
 
+    # Nike: em 2026-08-03 ficou provado que o bloqueio NÃO é mais de IP — é o
+    # sensor do Akamai Bot Manager (POST em gtm-server.nike.com.br). Testes:
+    # curl_cffi via WARP (8 IPs, colos SJC/IAD) => 403; curl_cffi do IP
+    # RESIDENCIAL => 403; Playwright headless (runner e residencial) => 403;
+    # Playwright + WARP => 403; /api/lst|search|catalog => 404 (não existem);
+    # /busca => 403. Só um Chrome real com perfil estabelecido carrega a página
+    # (2,5 MB, 30 produtos em __NEXT_DATA__). Ou seja: enquanto não houver
+    # unlocker/anti-detect, Nike vem 0 e isso NÃO é regressão do pipeline — não
+    # derruba a run (o resto carrega certo), só emite warning bem visível.
     if not nike_rows:
-        print("\n[ALERTA] Nike retornou 0 linhas. Do runner (IP datacenter) o Akamai "
-              "NEGA as rotas de produto — a coleta só passa por IP residencial. "
-              "Defina o secret NIKE_PROXY (residential proxy / web-unlocker). "
-              "Ver comentário em NIKE_PROXY / [[netshoes-akamai-scrape-fix]].")
-        if NIKE_PROXIES:
-            print(f"  → NIKE_PROXY ESTÁ configurado e mesmo trocando o IP de saída "
-                  f"{NIKE_MAX_EGRESS_TRIES}x (NIKE_PROXY_RESET_CMD="
-                  f"{NIKE_RESET_CMD or 'NÃO SETADO'}) o Akamai negou. Se persistir por "
-                  f"vários dias, o WARP inteiro caiu na blocklist → usar proxy "
-                  f"residencial/web-unlocker no NIKE_PROXY.")
-            fail = True
+        print("\n[ALERTA] Nike retornou 0 linhas — o Akamai da Nike passou a exigir "
+              "o sensor JS (Bot Manager) na rota de produto. Nem WARP, nem IP "
+              "residencial, nem Playwright headless passam. Caminhos: (a) browser "
+              "anti-detect (camoufox/patchright), (b) web-unlocker pago no "
+              "NIKE_PROXY, (c) coletar num Chrome real com perfil. "
+              "Ver [[nike-akamai-datacenter-block]].")
+        print("::warning title=Nike sem dados::Nike coletou 0 SKUs (bloqueio de "
+              "sensor Akamai). As outras marcas carregaram normalmente.")
 
     if not ns_rows:
         print("\n[ALERTA] Netshoes retornou 0 linhas — a API /api/lst pode ter mudado "
