@@ -16,7 +16,24 @@ jobs:
       - run: pip install -r requirements.txt playwright
       - run: python -m playwright install --with-deps chromium
 
-      - name: Sonda navegador real (Playwright) na Nike
+      - name: Instalar Cloudflare WARP
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+
+      - name: Conectar WARP (proxy SOCKS5 :40000)
+        run: |
+          sudo systemctl start warp-svc || (sudo warp-svc >/tmp/warpsvc.log 2>&1 &)
+          sleep 6
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register || true
+          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy || true
+          warp-cli --accept-tos connect || true
+          sleep 6
+          curl -s --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|loc|warp)='
+
+      - name: Sonda navegador real + WARP na Nike
         env:
           PYTHONIOENCODING: utf-8
         run: python nike_playwright_probe.py
