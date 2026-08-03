@@ -1,3 +1,6 @@
 curl_cffi>=0.7
 google-cloud-bigquery>=3.0
 google-auth>=2.0
+# Nike: browser anti-detect (Firefox patchado) usado p/ passar no sensor do
+# Akamai Bot Manager. Precisa também de `python -m camoufox fetch` e xvfb.
+camoufox[geoip]>=0.4

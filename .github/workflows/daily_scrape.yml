@@ -23,29 +23,16 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      # A Nike (Akamai) NEGA IP de datacenter nas rotas de produto. Saímos por
-      # Cloudflare WARP (grátis, sem conta) em modo proxy SOCKS5 :40000, que dá
-      # um IP aceito pelo Akamai. Só o scraper da Nike usa esse proxy (NIKE_PROXY);
-      # o resto (Adidas/UA/Asics/Netshoes/BQ) vai direto. Ver nike-akamai-datacenter-block.
-      - name: Instalar Cloudflare WARP
+      # A Nike (Akamai Bot Manager) exige sensor JS desde 02/08/2026: requisição
+      # crua toma 403 em qualquer IP. O motor da Nike usa camoufox (Firefox
+      # anti-detect) em display virtual: abre a home (que passa e valida os
+      # cookies) e busca a listagem por fetch same-origin. Ver
+      # nike-akamai-datacenter-block / commit da sonda 30825731327.
+      - name: Instalar camoufox (browser da coleta Nike)
         run: |
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          python -m camoufox fetch
           sudo apt-get update
-          sudo apt-get install -y cloudflare-warp
-
-      - name: Conectar WARP (proxy SOCKS5 :40000)
-        run: |
-          sudo systemctl start warp-svc || (sudo warp-svc >/tmp/warpsvc.log 2>&1 &)
-          sleep 6
-          warp-cli --accept-tos registration new || warp-cli --accept-tos register || true
-          warp-cli --accept-tos mode proxy || warp-cli --accept-tos set-mode proxy || true
-          warp-cli --accept-tos connect || true
-          sleep 6
-          warp-cli --accept-tos status || true
-          # Confirma que o SOCKS5 do WARP está de pé (warp=on). Falha o job se não subiu.
-          curl -s --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -q 'warp=on'
-          curl -s --socks5-hostname 127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|loc|warp)='
+          sudo apt-get install -y xvfb
 
       - name: Configurar credenciais GCP
         run: |
@@ -56,10 +43,9 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_creds.json
           PYTHONIOENCODING: utf-8
-          NIKE_PROXY: socks5h://127.0.0.1:40000   # Nike sai pelo WARP; resto vai direto
-          # O IP do WARP é sorteado e o Akamai da Nike só aceita parte deles: se
-          # a Nike for negada, o pipeline roda este comando (nova registration =
-          # novo IP de saída) e tenta de novo, até NIKE_MAX_EGRESS_TRIES vezes.
-          NIKE_PROXY_RESET_CMD: bash warp_rotate.sh 127.0.0.1:40000
-          NIKE_MAX_EGRESS_TRIES: '6'
+          NIKE_ENGINE: camoufox
+          # Se a Nike voltar a bloquear por IP (e não só por sensor), basta
+          # reinstalar o Cloudflare WARP em modo proxy SOCKS5 e setar
+          # NIKE_PROXY=socks5h://127.0.0.1:40000 (+ NIKE_PROXY_RESET_CMD=
+          # "bash warp_rotate.sh 127.0.0.1:40000" para rotacionar o IP de saída).
         run: python pipeline_adidas_nike_bq.py

@@ -84,6 +84,16 @@ NIKE_PROXIES = {"http": NIKE_PROXY, "https": NIKE_PROXY} if NIKE_PROXY else None
 NIKE_RESET_CMD = os.environ.get("NIKE_PROXY_RESET_CMD", "").strip()
 NIKE_MAX_EGRESS_TRIES = int(os.environ.get("NIKE_MAX_EGRESS_TRIES", "6"))
 
+# Motor de coleta da Nike. Desde 2026-08-02 a Nike exige o sensor do Akamai Bot
+# Manager: requisição "crua" (curl_cffi) toma 403 em QUALQUER IP (testado até no
+# IP residencial), e abrir a listagem direto por URL devolve um stub de 2,4 KB
+# mesmo num browser. O que funciona (provado na run 30825731327): abrir a HOME
+# num browser anti-detect (camoufox), que passa e valida os cookies do Akamai, e
+# então buscar as páginas da listagem por fetch same-origin DENTRO da página —
+# 200 com 30 produtos por página. Ver [[nike-akamai-datacenter-block]].
+#   NIKE_ENGINE=camoufox (default) | curl (motor antigo, hoje sempre 403)
+NIKE_ENGINE = os.environ.get("NIKE_ENGINE", "camoufox").strip().lower()
+
 # ── Adidas: todos os esportes ─────────────────────────────────────────────────
 
 ADIDAS_SPORTS = [
@@ -257,8 +267,187 @@ def fetch_nike_page(build_id, page_num):
     print(f"  ERRO página {page_num}: {last_err} (após retries)")
     return None, None
 
+def nike_row(item):
+    """Converte um produto do JSON da Nike (pageProps.data.products) em linha do BQ.
+
+    Usado pelos dois motores (camoufox e curl) — o shape do JSON é o mesmo.
+    Retorna (sku, row); sku None quando o item não tem id.
+    """
+    sku = item.get("id")
+    if not sku:
+        return None, None
+    details = item.get("details", {}) or {}
+    price = item.get("price")
+    old_price = item.get("oldPrice")
+    list_price = old_price if old_price else price
+    sale_price = price
+    disc = (round((list_price - sale_price) / list_price, 4)
+            if list_price and sale_price is not None and list_price > sale_price else 0.0)
+    try:
+        rating = float(details.get("rate") or 0)
+    except Exception:
+        rating = None
+    return sku, {
+        "date": TODAY_STR,
+        "source": "nike_direct",
+        "brand_name": "Nike",
+        "sport": details.get("modality"),
+        "division": details.get("group"),
+        "grandparent_id": details.get("originalId"),
+        "parent_id": sku,
+        "parent_name": item.get("name"),
+        "parent_url": f"https://www.nike.com.br{item.get('url', '')}",
+        "child_list_price": list_price,
+        "child_sale_price": sale_price,
+        "child_pct_discount": disc,
+        "child_is_available": 1 if item.get("status") == "available" else 0,
+        "rating": rating if rating and rating > 0 else None,
+        "rating_count": int(details.get("reviews") or 0) or None,
+    }
+
+# ── Nike via camoufox: home valida o sensor, fetch same-origin traz as páginas ──
+
+NIKE_JS_BUILD_ID = """() => {
+  const nd = document.getElementById('__NEXT_DATA__');
+  if (!nd) return null;
+  try { return JSON.parse(nd.textContent).buildId; } catch (e) { return null; }
+}"""
+
+# Roda DENTRO da página da Nike: mesma origem, mesmos cookies do Akamai que a
+# home acabou de validar. É isso que faz a listagem responder 200 (a mesma URL
+# pedida de fora, por curl, toma 403).
+NIKE_JS_FETCH_PAGE = """async ({buildId, nav, page}) => {
+  const qs = page > 1
+    ? `page=${page}&scoringProfile=scoreByRanking`
+    : 'scoringProfile=scoreByRanking';
+  const r = await fetch(`/_next/data/${buildId}/${nav}.json?${qs}`,
+                        {headers: {'x-nextjs-data': '1'}, credentials: 'include'});
+  if (r.status !== 200) return {status: r.status, products: null, last: null};
+  let body;
+  try { body = await r.json(); } catch (e) { return {status: 0, products: null, last: null}; }
+  const data = (body && body.pageProps && body.pageProps.data) || {};
+  return {
+    status: 200,
+    products: data.products || [],
+    last: (data.pagination && data.pagination.last) || null,
+  };
+}"""
+
+
+def scrape_nike_camoufox():
+    """Coleta a Nike com camoufox (browser anti-detect) + fetch same-origin."""
+    print("\n[NIKE DIRECT] Coletando nike.com.br via camoufox (sensor Akamai)...")
+    rows, seen = [], set()
+    try:
+        from camoufox.sync_api import Camoufox
+    except Exception as e:
+        print(f"  ERRO: camoufox indisponível ({e}). "
+              f"Instale 'camoufox[geoip]' + 'python -m camoufox fetch' ou use "
+              f"NIKE_ENGINE=curl.")
+        return rows
+
+    kw = {"headless": "virtual", "locale": "pt-BR", "os": "windows", "humanize": True}
+    if NIKE_PROXY:
+        # O hook segue disponível caso a Nike volte a bloquear por IP.
+        kw["proxy"] = {"server": NIKE_PROXY}
+        print(f"  Usando proxy NIKE_PROXY ({NIKE_PROXY.split('@')[-1]})")
+
+    def fetch_page(page, page_num):
+        try:
+            res = page.evaluate(NIKE_JS_FETCH_PAGE,
+                                {"buildId": page._nike_build_id,
+                                 "nav": NIKE_NAV_PATH, "page": page_num})
+        except Exception as e:
+            print(f"  ERRO página {page_num}: {type(e).__name__}: {str(e)[:120]}")
+            return None, None
+        if res.get("products") is None:
+            print(f"  ERRO página {page_num}: HTTP {res.get('status')}")
+            return None, None
+        return res["products"], res.get("last")
+
+    try:
+        with Camoufox(**kw) as browser:
+            page = browser.new_page()
+            page.goto("https://www.nike.com.br/", wait_until="networkidle", timeout=90000)
+            page.wait_for_timeout(6000)
+            build_id = page.evaluate(NIKE_JS_BUILD_ID)
+            if not build_id:
+                print("  ERRO: home não renderizou (sem buildId) — Nike vazia hoje.")
+                return rows
+            page._nike_build_id = build_id
+            print(f"  buildId: {build_id}")
+
+            products, last = fetch_page(page, 1)
+            if products is None:
+                print("  ERRO: página 1 falhou — Nike vazia hoje.")
+                return rows
+            m = re.search(r'page=(\d+)', last or "")
+            total_pages = int(m.group(1)) if m else 1
+
+            def process(items):
+                for item in items:
+                    sku, row = nike_row(item)
+                    if not sku or sku in seen:
+                        continue
+                    seen.add(sku)
+                    rows.append(row)
+
+            process(products)
+            print(f"  Página 1/{total_pages} — {len(seen)} SKUs até agora")
+
+            # Tolera falha isolada de página; se muitas seguidas falharem, recarrega
+            # a home (revalida o sensor) e retoma na mesma página em vez de abortar.
+            consec_fail, failed_pages, reloads_left = 0, [], 2
+            MAX_CONSEC_FAIL = 5
+            page_num = 2
+            while page_num <= total_pages:
+                page.wait_for_timeout(700)
+                products, _ = fetch_page(page, page_num)
+                if products is None:
+                    consec_fail += 1
+                    if consec_fail >= MAX_CONSEC_FAIL and reloads_left > 0:
+                        print(f"  {consec_fail} páginas seguidas falharam — recarregando "
+                              f"a home p/ revalidar o sensor e retomando na {page_num}.")
+                        reloads_left -= 1
+                        try:
+                            page.goto("https://www.nike.com.br/",
+                                      wait_until="networkidle", timeout=90000)
+                            page.wait_for_timeout(5000)
+                            consec_fail = 0
+                            continue
+                        except Exception as e:
+                            print(f"  AVISO: reload da home falhou: {str(e)[:100]}")
+                    if consec_fail >= MAX_CONSEC_FAIL:
+                        print(f"  ABORTANDO: {consec_fail} páginas seguidas falharam. "
+                              f"Coletado até aqui: {len(seen)} SKUs.")
+                        break
+                    failed_pages.append(page_num)
+                    page_num += 1
+                    continue
+                consec_fail = 0
+                process(products)
+                if page_num % 10 == 0:
+                    print(f"  Página {page_num}/{total_pages} — {len(seen)} SKUs até agora")
+                page_num += 1
+
+            if failed_pages:
+                print(f"  AVISO: {len(failed_pages)} página(s) puladas: {failed_pages}")
+    except Exception as e:
+        print(f"  ERRO no camoufox: {type(e).__name__}: {str(e)[:200]}")
+
+    print(f"  Total Nike: {len(rows)} SKUs únicos")
+    return rows
+
+
 def scrape_nike_direct():
-    print("\n[NIKE DIRECT] Coletando nike.com.br (todos os calcados)...")
+    """Despacha o motor da Nike (camoufox por default; curl é o legado)."""
+    if NIKE_ENGINE == "camoufox":
+        return scrape_nike_camoufox()
+    return scrape_nike_curl()
+
+
+def scrape_nike_curl():
+    print("\n[NIKE DIRECT] Coletando nike.com.br (motor curl legado)...")
     rows = []
     seen = set()
 
@@ -300,37 +489,11 @@ def scrape_nike_direct():
 
     def process_products(products):
         for item in products:
-            sku = item.get("id")
+            sku, row = nike_row(item)
             if not sku or sku in seen:
                 continue
             seen.add(sku)
-            details = item.get("details", {})
-            price = item.get("price")
-            old_price = item.get("oldPrice")
-            list_price = old_price if old_price else price
-            sale_price = price
-            disc = round((list_price - sale_price) / list_price, 4) if list_price and list_price > sale_price else 0.0
-            try:
-                rating = float(details.get("rate") or 0)
-            except Exception:
-                rating = None
-            rows.append({
-                "date": TODAY_STR,
-                "source": "nike_direct",
-                "brand_name": "Nike",
-                "sport": details.get("modality"),
-                "division": details.get("group"),
-                "grandparent_id": details.get("originalId"),
-                "parent_id": sku,
-                "parent_name": item.get("name"),
-                "parent_url": f"https://www.nike.com.br{item.get('url', '')}",
-                "child_list_price": list_price,
-                "child_sale_price": sale_price,
-                "child_pct_discount": disc,
-                "child_is_available": 1 if item.get("status") == "available" else 0,
-                "rating": rating if rating and rating > 0 else None,
-                "rating_count": int(details.get("reviews") or 0) or None,
-            })
+            rows.append(row)
 
     process_products(products_p1)
     print(f"  Página 1/{total_pages} — {len(seen)} SKUs até agora")
@@ -829,24 +992,23 @@ if __name__ == "__main__":
     # ── Alertas de coleta vazia ────────────────────────────────────────────────
     fail = False
 
-    # Nike: em 2026-08-03 ficou provado que o bloqueio NÃO é mais de IP — é o
-    # sensor do Akamai Bot Manager (POST em gtm-server.nike.com.br). Testes:
-    # curl_cffi via WARP (8 IPs, colos SJC/IAD) => 403; curl_cffi do IP
-    # RESIDENCIAL => 403; Playwright headless (runner e residencial) => 403;
-    # Playwright + WARP => 403; /api/lst|search|catalog => 404 (não existem);
-    # /busca => 403. Só um Chrome real com perfil estabelecido carrega a página
-    # (2,5 MB, 30 produtos em __NEXT_DATA__). Ou seja: enquanto não houver
-    # unlocker/anti-detect, Nike vem 0 e isso NÃO é regressão do pipeline — não
-    # derruba a run (o resto carrega certo), só emite warning bem visível.
+    # Nike: desde 2026-08-02 o Akamai exige o sensor JS. O motor camoufox
+    # (home valida cookies → fetch same-origin) contorna isso. Se vier 0 com o
+    # camoufox, é regressão real (Akamai apertou de novo ou o browser não subiu)
+    # → derruba a run. Com o motor curl legado é esperado 0: só avisa.
     if not nike_rows:
-        print("\n[ALERTA] Nike retornou 0 linhas — o Akamai da Nike passou a exigir "
-              "o sensor JS (Bot Manager) na rota de produto. Nem WARP, nem IP "
-              "residencial, nem Playwright headless passam. Caminhos: (a) browser "
-              "anti-detect (camoufox/patchright), (b) web-unlocker pago no "
-              "NIKE_PROXY, (c) coletar num Chrome real com perfil. "
-              "Ver [[nike-akamai-datacenter-block]].")
-        print("::warning title=Nike sem dados::Nike coletou 0 SKUs (bloqueio de "
-              "sensor Akamai). As outras marcas carregaram normalmente.")
+        print(f"\n[ALERTA] Nike retornou 0 linhas (NIKE_ENGINE={NIKE_ENGINE}).")
+        if NIKE_ENGINE == "camoufox":
+            print("  → O motor camoufox parou de passar no sensor do Akamai. "
+                  "Checar: 'python -m camoufox fetch' rodou? xvfb instalado? "
+                  "A home renderizou (buildId)? Alternativas: web-unlocker pago "
+                  "no NIKE_PROXY. Ver [[nike-akamai-datacenter-block]].")
+            fail = True
+        else:
+            print("  → Motor curl legado: 403 é esperado desde 02/08/2026 "
+                  "(sensor Akamai). Use NIKE_ENGINE=camoufox.")
+            print("::warning title=Nike sem dados::Motor curl não passa mais no "
+                  "Akamai; rode com NIKE_ENGINE=camoufox.")
 
     if not ns_rows:
         print("\n[ALERTA] Netshoes retornou 0 linhas — a API /api/lst pode ter mudado "
