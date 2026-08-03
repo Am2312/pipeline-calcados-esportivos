@@ -102,6 +102,27 @@ ADIDAS_SPORTS = [
     "volei", "trail_running", "futebol", "padel",
 ]
 
+def get_json_retry(url, headers, impersonate, label, tries=4, timeout=20):
+    """GET com retry+backoff que devolve o JSON, ou None se esgotar as tentativas.
+
+    Adidas/UA/Asics faziam `break` no primeiro status != 200, sem retry: um 429/400
+    isolado truncava a marca no dia (em 2026-08-03 a Adidas veio 759 em vez de
+    3.252 porque o site foi raspado duas vezes em 2h e devolveu erro no meio).
+    """
+    last = None
+    for attempt in range(tries):
+        try:
+            r = session.get(url, headers=headers, impersonate=impersonate, timeout=timeout)
+            if r.status_code == 200:
+                return r.json()
+            last = f"HTTP {r.status_code}"
+        except Exception as e:
+            last = f"{type(e).__name__}: {str(e)[:80]}"
+        if attempt < tries - 1:
+            time.sleep(2.0 * (attempt + 1))
+    print(f"  ERRO {label}: {last} (após {tries} tentativas)")
+    return None
+
 def parse_discount(s):
     try:
         return float(s.replace("%", "").strip()) / 100
@@ -121,10 +142,11 @@ def scrape_adidas():
         while True:
             url = f"https://www.adidas.com.br/api/search/tf/taxonomy?query=tenis&sport_pt_br={sport}&start={start}"
             try:
-                r = session.get(url, headers=HEADERS_ADIDAS, impersonate="chrome124", timeout=20)
-                if r.status_code != 200:
+                body = get_json_retry(url, HEADERS_ADIDAS, "chrome124",
+                                      f"Adidas {sport} start={start}")
+                if body is None:
                     break
-                il = r.json().get('itemList', {})
+                il = body.get('itemList', {})
                 items = il.get('items', [])
                 if total is None:
                     total = il.get('count', 0)
@@ -583,15 +605,16 @@ def scrape_asics():
 
     for page_num in range(1, total_pages + 1):
         url = f"{ASICS_SEARCH_URL}?facets=categoria%2Fcalcados&count=48&page={page_num}"
+        body = get_json_retry(url, HEADERS_ASICS, "safari17_0", f"Asics página {page_num}")
+        if body is None:
+            # Pula a página em vez de abortar a marca: um erro isolado não deve
+            # truncar o dia (a partição é reescrita inteira no load).
+            continue
         try:
-            r = session.get(url, headers=HEADERS_ASICS, impersonate="safari17_0", timeout=20)
-            if r.status_code != 200:
-                print(f"  ERRO página {page_num}: HTTP {r.status_code}")
-                break
-            products = r.json().get("products", [])
+            products = body.get("products", [])
         except Exception as e:
             print(f"  ERRO página {page_num}: {e}")
-            break
+            continue
 
         for item in products:
             pid = item.get("productId")
@@ -668,15 +691,16 @@ def scrape_ua_direct():
 
     for page_num in range(1, total_pages + 1):
         url = f"{UA_SEARCH_URL}?facets=categoria%2Fcalcados&count=48&page={page_num}"
+        body = get_json_retry(url, HEADERS_UA, "safari17_0", f"UA página {page_num}")
+        if body is None:
+            # Pula a página em vez de abortar a marca (o HTTP 400 recorrente na
+            # página 51 vinha derrubando o resto da coleta).
+            continue
         try:
-            r = session.get(url, headers=HEADERS_UA, impersonate="safari17_0", timeout=20)
-            if r.status_code != 200:
-                print(f"  ERRO página {page_num}: HTTP {r.status_code}")
-                break
-            products = r.json().get("products", [])
+            products = body.get("products", [])
         except Exception as e:
             print(f"  ERRO página {page_num}: {e}")
-            break
+            continue
 
         for item in products:
             pid = item.get("productId")
