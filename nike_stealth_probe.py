@@ -1,25 +1,22 @@
-"""Sonda TEMPORÁRIA #7: browser anti-detect passa no sensor do Akamai da Nike?
+"""Sonda TEMPORÁRIA #8: camoufox resolve o sensor do Akamai se der tempo?
 
-Contexto (ver [[nike-akamai-datacenter-block]]): desde 02/08/2026 a Nike exige o
-sensor do Akamai Bot Manager. Já falharam: curl_cffi (WARP e IP residencial),
-Playwright headless e headed com perfil limpo, com e sem WARP. Só o Chrome real
-com perfil estabelecido carrega a página.
+Sonda #7: patchright => 403 DENY; camoufox => HTTP 200 com o bootstrap de
+2.367 b (mesma página que o curl_cffi recebe), sem __NEXT_DATA__ em 8 s. Isso
+é a cara de "o desafio do Akamai foi entregue mas não foi resolvido/recarregado".
 
-Aqui testamos browsers com patches anti-detecção:
-  A) patchright (fork do Playwright sem os vazamentos de CDP), sem proxy
-  B) patchright + WARP
-  C) camoufox (Firefox patchado, fingerprint rotativo), sem proxy
-  D) camoufox + WARP
-
-Critério de sucesso: HTML grande e produtos em __NEXT_DATA__
-(props.pageProps.data.products, 30 por página).
+Testa três caminhos com camoufox:
+  A) esperar networkidle + 20 s e ver se hidrata sozinho
+  B) esperar, recarregar uma vez (padrão do Akamai: 1ª resposta é o desafio,
+     2ª já vem a página) e ler
+  C) caminho humano: home -> espera -> navega pra categoria
+Sucesso = produtos em __NEXT_DATA__ ou cards de produto no DOM.
 Remover depois de decidir.
 """
 import os
 
+HOME = "https://www.nike.com.br/"
 URL = "https://www.nike.com.br/nav/tipodeproduto/calcados"
-PROXY = {"server": "socks5://127.0.0.1:40000"}
-USE_WARP = os.environ.get("PROBE_WARP", "1") == "1"
+PROXY = os.environ.get("PROBE_PROXY", "").strip()
 
 READ = """() => {
   const nd = document.getElementById('__NEXT_DATA__');
@@ -31,69 +28,70 @@ READ = """() => {
       prods = Array.isArray(p) ? p.length : -2;
     } catch (e) {}
   }
-  return {html: document.documentElement.outerHTML.length, nd: ndl, prods};
+  return {
+    html: document.documentElement.outerHTML.length,
+    nd: ndl,
+    prods,
+    cards: document.querySelectorAll('a[href*="/produto/"]').length,
+    cookies: document.cookie.split(';').map(c => c.trim().split('=')[0]).filter(Boolean).join(','),
+  };
 }"""
 
 
-def report(label, page, resp):
-    try:
-        info = page.evaluate(READ)
-        deny = " DENY" if "Access Denied" in page.content() else ""
-        ok = "✅" if info["prods"] > 0 else "❌"
-        print(f"{ok} {label}: HTTP {resp.status if resp else '?'}{deny} | "
-              f"html={info['html']}b | __NEXT_DATA__={info['nd']}b | "
-              f"produtos={info['prods']}", flush=True)
-    except Exception as e:
-        print(f"❌ {label}: erro ao ler página: {str(e)[:150]}")
+def show(label, page):
+    i = page.evaluate(READ)
+    ok = "✅" if (i["prods"] > 0 or i["cards"] > 5) else "❌"
+    print(f"{ok} {label}: html={i['html']}b | __NEXT_DATA__={i['nd']}b | "
+          f"produtos={i['prods']} | links de produto={i['cards']}", flush=True)
+    print(f"     cookies: {i['cookies'][:200]}", flush=True)
+    return i
 
 
-def run_patchright(label, proxy):
-    try:
-        from patchright.sync_api import sync_playwright
-    except Exception as e:
-        print(f"❌ {label}: patchright indisponível: {str(e)[:120]}")
-        return
-    kw = {"headless": True, "channel": "chrome"}
-    if proxy:
-        kw["proxy"] = proxy
-    try:
-        with sync_playwright() as pw:
-            b = pw.chromium.launch(**kw)
-            try:
-                ctx = b.new_context(locale="pt-BR", timezone_id="America/Sao_Paulo",
-                                    viewport={"width": 1366, "height": 900})
-                page = ctx.new_page()
-                r = page.goto(URL, wait_until="domcontentloaded", timeout=90000)
-                page.wait_for_timeout(8000)
-                report(label, page, r)
-            finally:
-                b.close()
-    except Exception as e:
-        print(f"❌ {label}: EXC {type(e).__name__}: {str(e)[:180]}")
+def make(pw_kwargs=None):
+    from camoufox.sync_api import Camoufox
+    kw = {"headless": "virtual", "locale": "pt-BR", "os": "windows",
+          "humanize": True}
+    if PROXY:
+        kw["proxy"] = {"server": PROXY}
+    kw.update(pw_kwargs or {})
+    return Camoufox(**kw)
 
 
-def run_camoufox(label, proxy):
-    try:
-        from camoufox.sync_api import Camoufox
-    except Exception as e:
-        print(f"❌ {label}: camoufox indisponível: {str(e)[:120]}")
-        return
-    kw = {"headless": "virtual", "locale": "pt-BR", "os": "windows"}
-    if proxy:
-        kw["proxy"] = {"server": proxy["server"]}
-    try:
-        with Camoufox(**kw) as b:
-            page = b.new_page()
-            r = page.goto(URL, wait_until="domcontentloaded", timeout=90000)
-            page.wait_for_timeout(8000)
-            report(label, page, r)
-    except Exception as e:
-        print(f"❌ {label}: EXC {type(e).__name__}: {str(e)[:180]}")
+# A) só esperar
+try:
+    with make() as b:
+        page = b.new_page()
+        r = page.goto(URL, wait_until="networkidle", timeout=90000)
+        print(f"A) goto: HTTP {r.status if r else '?'}")
+        page.wait_for_timeout(20000)
+        show("A) networkidle + 20s", page)
+except Exception as e:
+    print(f"❌ A) EXC {type(e).__name__}: {str(e)[:200]}")
 
+# B) esperar e recarregar
+try:
+    with make() as b:
+        page = b.new_page()
+        page.goto(URL, wait_until="domcontentloaded", timeout=90000)
+        page.wait_for_timeout(12000)
+        r2 = page.reload(wait_until="networkidle", timeout=90000)
+        print(f"B) reload: HTTP {r2.status if r2 else '?'}")
+        page.wait_for_timeout(10000)
+        show("B) reload apos desafio", page)
+except Exception as e:
+    print(f"❌ B) EXC {type(e).__name__}: {str(e)[:200]}")
 
-run_patchright("A) patchright direto", None)
-if USE_WARP:
-    run_patchright("B) patchright + WARP", PROXY)
-run_camoufox("C) camoufox direto", None)
-if USE_WARP:
-    run_camoufox("D) camoufox + WARP", PROXY)
+# C) caminho humano: home -> categoria
+try:
+    with make() as b:
+        page = b.new_page()
+        rh = page.goto(HOME, wait_until="domcontentloaded", timeout=90000)
+        print(f"C) home: HTTP {rh.status if rh else '?'}")
+        page.wait_for_timeout(15000)
+        show("C1) home apos 15s", page)
+        rc = page.goto(URL, wait_until="networkidle", timeout=90000)
+        print(f"C) categoria: HTTP {rc.status if rc else '?'}")
+        page.wait_for_timeout(12000)
+        show("C2) categoria vinda da home", page)
+except Exception as e:
+    print(f"❌ C) EXC {type(e).__name__}: {str(e)[:200]}")
