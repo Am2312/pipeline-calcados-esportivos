@@ -1,77 +1,89 @@
-"""Sonda TEMPORÁRIA: por que o WARP só passa em ~metade dos dias na Nike?
+"""Sonda TEMPORÁRIA: existe rota de listagem da Nike que o Akamai NÃO nega?
 
-A sonda #1 (run 30817431191) mostrou que a rotação TROCA o IP (5 IPs distintos)
-mas TODOS eram IPv6 (2a09:bac5.../2a09:bac1..., colo=SJC) e TODOS tomaram
-Access Denied. Hipótese: o Akamai da Nike nega a faixa IPv6 do WARP; nos dias
-que passou, a saída foi IPv4. Esta sonda compara, pelo MESMO túnel WARP:
+O que já sabemos (sondas #1 e #2, runs 30817431191 / 30818154840):
+  - a rotação do WARP troca o IP de verdade (6 IPs, colos SJC e IAD) e TODOS
+    tomaram Access Denied em /_next/data → não é sorteio de IP;
+  - forçar IPv4 no cliente não muda nada (com socks5h quem resolve é o WARP);
+  - MAS /api/products (usado p/ pegar o buildId) responde 200 do runner.
 
-  A) padrão (deixa o curl/WARP escolher a família)
-  B) forçando IPv4 (CurlOpt.IPRESOLVE=1)
-
-e, se B passar, repete B depois de rotacionar o IP para ver se é estável.
+Então o deny do Akamai é por ROTA (/_next/data/...), não por IP. Esta sonda
+varre rotas candidatas de listagem — direto (sem proxy) e via WARP — pra achar
+uma que devolva produtos, como o /api/lst resolveu na Netshoes.
 Remover depois de validar.
 """
+import json
 import os
-import subprocess
 import sys
 
 os.environ.setdefault("NIKE_PROXY", "socks5h://127.0.0.1:40000")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from curl_cffi import requests as cf_requests  # noqa: E402
-from curl_cffi.const import CurlOpt  # noqa: E402
-
 import pipeline_adidas_nike_bq as P  # noqa: E402
 
-CURL_IPRESOLVE_V4 = 1
-TRACE = ("curl -s --max-time 15 {flag} --socks5-hostname 127.0.0.1:40000 "
-         "https://www.cloudflare.com/cdn-cgi/trace")
+BID = None
+try:
+    BID = P.get_nike_build_id()
+    print(f"buildId: {BID}")
+except Exception as e:
+    print(f"buildId falhou: {e}")
+
+BASE = "https://www.nike.com.br"
+CANDIDATES = [
+    ("api/lst/tenis", f"{BASE}/api/lst/tenis?page=1"),
+    ("api/lst/calcados", f"{BASE}/api/lst/calcados?page=1"),
+    ("api/lst/nav", f"{BASE}/api/lst/nav/tipodeproduto/calcados?page=1"),
+    ("api/products?q", f"{BASE}/api/products?q=tenis"),
+    ("api/search", f"{BASE}/api/search?q=tenis"),
+    ("api/catalog", f"{BASE}/api/catalog/products?q=tenis"),
+    ("api/v1 products", f"{BASE}/api/v1/products?q=tenis"),
+    ("busca html", f"{BASE}/busca?q=tenis"),
+    ("categoria html", f"{BASE}/nav/tipodeproduto/calcados"),
+]
+if BID:
+    CANDIDATES += [
+        ("_next busca", f"{BASE}/_next/data/{BID}/busca.json?q=tenis"),
+        ("_next nav (controle)",
+         f"{BASE}/_next/data/{BID}/nav/tipodeproduto/calcados.json?scoringProfile=scoreByRanking"),
+    ]
 
 
-def trace(flag=""):
-    out = subprocess.run(TRACE.format(flag=flag), shell=True,
-                         capture_output=True, text=True).stdout
-    keep = [l.strip() for l in out.splitlines()
-            if l.startswith(("ip=", "loc=", "warp=", "colo="))]
-    return " ".join(keep) or "(sem resposta)"
-
-
-def try_nike(label, session):
-    P.session = session
+def sniff(text):
+    """Tenta descobrir se a resposta tem lista de produtos."""
     try:
-        session.cookies.clear()
+        body = json.loads(text)
     except Exception:
-        pass
-    P.nike_warm_up()
+        n = text.count('"price"') + text.count('data-product') + text.count('"oldPrice"')
+        return f"não-JSON (marcadores de produto: {n})"
+    def find_list(node, path="", depth=0):
+        if depth > 6:
+            return None
+        if isinstance(node, list) and node and isinstance(node[0], dict) \
+                and {"name", "price"} & set(node[0]):
+            return f"{path or 'raiz'}[{len(node)}] keys={sorted(node[0])[:8]}"
+        if isinstance(node, dict):
+            for k, v in node.items():
+                r = find_list(v, f"{path}.{k}" if path else k, depth + 1)
+                if r:
+                    return r
+        return None
+    return find_list(body) or f"JSON sem lista de produtos (keys={list(body)[:8]})"
+
+
+def probe(label, url, proxies, tag):
     try:
-        build_id = P.get_nike_build_id()
+        r = P.session.get(url, headers=P.HEADERS_NIKE, impersonate="chrome124",
+                          proxies=proxies, timeout=30)
     except Exception as e:
-        print(f"  buildId falhou: {e}")
-        return f"{label}: buildId FALHOU"
-    p1, _ = P.fetch_nike_page(build_id, 1)
-    verdict = f"OK ({len(p1)} produtos)" if p1 is not None else "BLOQUEADO"
-    print(f"\n>>> {label} | build {build_id} | página 1: {verdict}", flush=True)
-    return f"{label}: {verdict}"
+        print(f"  {tag:6s} {label:22s} EXC {e}")
+        return
+    blocked = "Access Denied" in r.text
+    status = f"{r.status_code}{' DENY' if blocked else ''}"
+    extra = "" if blocked or r.status_code >= 400 else f" | {sniff(r.text)}"
+    print(f"  {tag:6s} {label:22s} {status:9s} {len(r.text):8d}b{extra}", flush=True)
 
 
-results = []
-print(f"egress padrão : {trace()}")
-print(f"egress -4     : {trace('-4')}")
-print(f"egress -6     : {trace('-6')}")
-
-results.append(try_nike("A) padrão (família livre)", cf_requests.Session()))
-
-s4 = cf_requests.Session(curl_options={CurlOpt.IPRESOLVE: CURL_IPRESOLVE_V4})
-results.append(try_nike("B) forçando IPv4", s4))
-
-# Se o IPv4 passou, confirma que continua passando com outro IP de saída.
-if results[-1].endswith(")") and "OK" in results[-1]:
-    subprocess.run("bash warp_rotate.sh 127.0.0.1:40000", shell=True)
-    print(f"egress -4 pós-rotação: {trace('-4')}")
-    s4b = cf_requests.Session(curl_options={CurlOpt.IPRESOLVE: CURL_IPRESOLVE_V4})
-    results.append(try_nike("C) IPv4 após rotação", s4b))
-
-print("\n" + "=" * 60)
-print("RESUMO")
-for r in results:
-    print(f"  {r}")
+for label, url in CANDIDATES:
+    P.session.cookies.clear()
+    probe(label, url, None, "DIRETO")
+    P.session.cookies.clear()
+    probe(label, url, P.NIKE_PROXIES, "WARP")
